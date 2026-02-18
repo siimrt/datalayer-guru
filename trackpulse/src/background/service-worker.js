@@ -109,11 +109,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'TRACKPULSE_GET_PLAN': {
       // Wait for planManager to finish initializing, then return live state
       planManager.waitForInit().then((plan) => {
-        console.log('[TrackPulse] GET_PLAN responding with live plan:', plan);
+        const user = planManager.user;
+        console.log('[TrackPulse] GET_PLAN responding with live plan:', plan, 'user:', JSON.stringify(user));
         sendResponse({
           plan: planManager.getPlan(),
-          email: planManager.user?.email || null,
-          paid: !!planManager.user?.paid,
+          email: user?.email || null,
+          paid: !!user?.paid,
+          // Debug info for settings panel
+          debug: {
+            userPaid: user?.paid,
+            subscriptionStatus: user?.subscriptionStatus,
+            paidAt: user?.paidAt,
+            installedAt: user?.installedAt,
+            trialStartedAt: user?.trialStartedAt,
+          },
         });
       }).catch((err) => {
         console.error('[TrackPulse] GET_PLAN error, falling back to cache:', err);
@@ -122,6 +131,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             plan: data.tp_plan || 'free',
             email: data.tp_user_email || null,
             paid: data.tp_paid || false,
+            debug: { source: 'cache', error: err.message },
           });
         });
       });

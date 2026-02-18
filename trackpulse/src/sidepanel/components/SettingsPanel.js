@@ -80,6 +80,28 @@ export function renderSettingsPanel(container, state) {
       </div>
       ` : ''}
 
+      <!-- Debug Info -->
+      ${state.planDebug ? `
+      <div style="margin-bottom: 24px;">
+        <h3 style="color: #E8E8ED; font-size: 14px; margin-bottom: 12px;">ExtensionPay Debug</h3>
+        <div style="
+          background: #1A1A1E; border-radius: 8px; padding: 12px; border: 1px solid #2E2E34;
+          font-family: monospace; font-size: 11px; color: #9B9BAE; line-height: 1.8;
+        ">
+          <div>paid: <span style="color: ${state.planDebug.userPaid ? '#00B894' : '#FF6B6B'};">${String(state.planDebug.userPaid)}</span></div>
+          <div>subscriptionStatus: <span style="color: #5B9BD5;">${state.planDebug.subscriptionStatus || 'null'}</span></div>
+          <div>paidAt: <span style="color: #E8E8ED;">${state.planDebug.paidAt || 'null'}</span></div>
+          <div>resolvedPlan: <span style="color: #6C5CE7; font-weight: bold;">${plan}</span></div>
+          ${state.planDebug.source ? `<div>source: <span style="color: #FDCB6E;">${state.planDebug.source}</span></div>` : ''}
+          ${state.planDebug.error ? `<div>error: <span style="color: #FF6B6B;">${state.planDebug.error}</span></div>` : ''}
+        </div>
+        <button id="settings-force-refresh" style="
+          margin-top: 8px; background: #2E2E34; color: #9B9BAE; border: 1px solid #3E3E44;
+          padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
+        ">&#8635; Force Refresh Plan</button>
+      </div>
+      ` : ''}
+
       <!-- About -->
       <div>
         <h3 style="color: #E8E8ED; font-size: 14px; margin-bottom: 12px;">About</h3>
@@ -115,6 +137,20 @@ export function renderSettingsPanel(container, state) {
     });
     manageBtn.addEventListener('mouseenter', () => { manageBtn.style.borderColor = '#6C5CE7'; });
     manageBtn.addEventListener('mouseleave', () => { manageBtn.style.borderColor = '#2E2E34'; });
+  }
+
+  // Force refresh button
+  const refreshBtn = container.querySelector('#settings-force-refresh');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      refreshBtn.textContent = 'Refreshing...';
+      refreshBtn.disabled = true;
+      chrome.runtime.sendMessage({ type: 'TRACKPULSE_REFRESH_PLAN' }, (resp) => {
+        refreshBtn.textContent = 'Done! Plan: ' + (resp?.plan || 'unknown');
+        // Re-render after a short delay to show updated state
+        setTimeout(() => window.location.reload(), 1000);
+      });
+    });
   }
 
   // Load usage stats

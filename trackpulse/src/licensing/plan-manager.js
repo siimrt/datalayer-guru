@@ -80,8 +80,21 @@ class PlanManager {
       return;
     }
 
-    // ExtensionPay paid can be boolean or truthy
-    const isPaid = !!this.user.paid;
+    // Log ALL user properties for debugging
+    console.log('[TrackPulse] _resolvePlan user keys:', Object.keys(this.user));
+    console.log('[TrackPulse] user.paid:', this.user.paid, typeof this.user.paid);
+    console.log('[TrackPulse] user.subscriptionStatus:', this.user.subscriptionStatus);
+    console.log('[TrackPulse] user.paidAt:', this.user.paidAt);
+
+    // Multiple ways to detect paid status:
+    // 1. user.paid === true (standard ExtensionPay)
+    // 2. user.subscriptionStatus === 'active' (active subscription)
+    // 3. user.paidAt is truthy (has a payment date)
+    const isPaid = !!this.user.paid
+      || this.user.subscriptionStatus === 'active'
+      || !!this.user.paidAt;
+
+    console.log('[TrackPulse] isPaid resolved to:', isPaid);
 
     if (!isPaid) {
       this.currentPlan = 'free';
@@ -96,14 +109,13 @@ class PlanManager {
       || this.user.subscription_plan_id
       || '';
 
-    console.log('[TrackPulse] User paid=true, planId="' + planId + '"');
+    console.log('[TrackPulse] User isPaid=true, planId="' + planId + '"');
 
     if (planId && PLAN_ID_MAP[planId]) {
       this.currentPlan = PLAN_ID_MAP[planId];
     } else {
-      // Paid but unrecognized plan ID — default to 'starter' (lowest paid tier)
-      // This handles the case where ExtensionPay doesn't return a plan ID
-      // (e.g. single-plan setup, or free ExtensionPay tier)
+      // Paid but no plan ID — ExtensionPay is single-tier by default
+      // Default to 'starter' (lowest paid tier)
       this.currentPlan = 'starter';
     }
   }

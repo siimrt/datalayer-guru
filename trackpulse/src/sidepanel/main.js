@@ -38,6 +38,7 @@ const state = {
   planLoading: true,
   userEmail: null,
   capabilities: null,
+  planDebug: null,
 
   // V2 funnel mode
   funnelReport: null,
@@ -183,9 +184,10 @@ async function initPlan() {
     const response = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_GET_PLAN' });
     state.plan = response?.plan || 'free';
     state.userEmail = response?.email || null;
+    state.planDebug = response?.debug || null;
     state.planLoading = false;
     state.capabilities = resolvePlanCapabilities(state.plan);
-    console.log('[TrackPulse Sidepanel] Initial plan:', state.plan);
+    console.log('[TrackPulse Sidepanel] Initial plan:', state.plan, 'debug:', JSON.stringify(state.planDebug));
 
     // If we already have detection data, render with initial plan
     if (!state.loading) {
