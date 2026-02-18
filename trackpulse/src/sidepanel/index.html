@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TrackPulse</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body class="bg-tp-bg text-tp-text font-sans min-h-screen">
+  <div id="app">
+    <!-- Loading state -->
+    <div id="loading" class="flex flex-col items-center justify-center h-screen gap-3">
+      <div class="animate-pulse-custom">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect width="48" height="48" rx="12" fill="#6C5CE7" fill-opacity="0.15"/>
+          <path d="M8 24 L16 24 L20 14 L24 34 L28 18 L32 28 L36 24 L40 24" stroke="#6C5CE7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <p class="text-tp-text-secondary text-sm">Analyzing page...</p>
+    </div>
+
+    <!-- Main content (hidden until loaded) -->
+    <div id="main-content" class="hidden">
+      <!-- Header -->
+      <div id="header"></div>
+
+      <!-- Tab Navigation -->
+      <div id="tab-nav"></div>
+
+      <!-- Tab Content -->
+      <div id="tab-content" class="overflow-y-auto" style="height: calc(100vh - 120px);"></div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
