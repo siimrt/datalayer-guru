@@ -14,6 +14,8 @@ import { renderDataLayerLive, appendDataLayerEntry } from './components/DataLaye
 import { renderPixelStatus } from './components/PixelStatus.js';
 import { renderSettingsPanel } from './components/SettingsPanel.js';
 import { renderFunnelMode, FunnelSession } from './components/FunnelMode.js';
+import { renderPricingPage } from './components/PricingPage.js';
+import { setUpgradeHandler } from './components/Paywall.js';
 
 // ---- Application State ----
 
@@ -39,6 +41,9 @@ const state = {
   userEmail: null,
   capabilities: null,
   planDebug: null,
+
+  // V2 pricing/navigation
+  previousTab: 'events',
 
   // V2 funnel mode
   funnelReport: null,
@@ -74,10 +79,16 @@ const actions = {
     renderActiveTab();
   },
 
+  navigateToPricing() {
+    state.previousTab = state.activeTab;
+    state.activeTab = 'pricing';
+    render();
+  },
+
   async copyCode(code) {
     // Check plan access
     if (!state.capabilities?.canCopyEvents) {
-      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      actions.navigateToPricing();
       return;
     }
 
@@ -106,7 +117,7 @@ const actions = {
   pushToDataLayer(code) {
     // Check plan access
     if (!state.capabilities?.canPushEvents) {
-      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      actions.navigateToPricing();
       return;
     }
 
@@ -150,12 +161,12 @@ const actions = {
   },
 
   handleUpgrade() {
-    chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+    actions.navigateToPricing();
   },
 
   async exportPDF() {
     if (!state.capabilities?.canExportPDF) {
-      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      actions.navigateToPricing();
       return;
     }
 
@@ -175,6 +186,9 @@ const actions = {
     showToast(`Report saved: ${filename}`, 'success');
   },
 };
+
+// ---- Wire Paywall upgrade handler to pricing page ----
+setUpgradeHandler(() => actions.navigateToPricing());
 
 // ---- Plan Initialization ----
 
@@ -287,10 +301,21 @@ chrome.runtime.onMessage.addListener((msg) => {
 
     case 'TRACKPULSE_PLAN_CHANGED': {
       // Real-time plan upgrade detection
+      const oldPlan = state.plan;
       state.plan = msg.payload?.plan || state.plan;
       state.capabilities = resolvePlanCapabilities(state.plan);
       state.planLoading = false;
-      render(); // Re-render immediately to unlock features
+
+      // If on pricing page and plan upgraded, show success animation
+      if (state.activeTab === 'pricing' && state.plan !== 'free' && state.plan !== oldPlan) {
+        showUpgradeSuccess(state.plan);
+        setTimeout(() => {
+          state.activeTab = 'events';
+          render();
+        }, 1500);
+      } else {
+        render(); // Re-render immediately to unlock features
+      }
       break;
     }
   }
@@ -316,6 +341,18 @@ function render() {
   }
 
   hideLoading();
+
+  // Pricing page takes over the entire content area
+  if (state.activeTab === 'pricing') {
+    headerEl.innerHTML = '';
+    tabNavEl.innerHTML = '';
+    renderPricingPage(tabContentEl, state, () => {
+      state.activeTab = state.previousTab || 'events';
+      render();
+    });
+    return;
+  }
+
   renderHeader(headerEl, state, actions.refresh, actions.handleUpgrade);
   renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
   renderActiveTab();
@@ -339,7 +376,7 @@ function renderActiveTab() {
       renderFunnelMode(tabContentEl, funnelSession, state.capabilities, state.funnelReport);
       break;
     case 'settings':
-      renderSettingsPanel(tabContentEl, state);
+      renderSettingsPanel(tabContentEl, state, actions);
       break;
   }
 }
@@ -352,6 +389,31 @@ function showLoading() {
 function hideLoading() {
   loadingEl.classList.add('hidden');
   mainContentEl.classList.remove('hidden');
+}
+
+// ---- Upgrade Success Animation ----
+
+function showUpgradeSuccess(plan) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(108, 92, 231, 0.15);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+  `;
+  overlay.innerHTML = `
+    <div style="text-align: center; animation: slide-in 0.3s ease;">
+      <div style="font-size: 48px; margin-bottom: 12px;">&#127881;</div>
+      <div style="font-size: 18px; font-weight: 700; color: #E8E8ED;">
+        Welcome to ${plan.charAt(0).toUpperCase() + plan.slice(1)}!
+      </div>
+      <div style="font-size: 13px; color: #9B9BAE; margin-top: 8px;">
+        All features unlocked
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 1500);
 }
 
 // ---- Toast Notifications ----

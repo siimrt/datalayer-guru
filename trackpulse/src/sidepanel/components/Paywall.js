@@ -56,8 +56,20 @@ function getPaywallIcon(feature) {
   return PAYWALL_ICONS[feature] || '&#11088;';
 }
 
-function triggerUpgrade() {
+// Module-level upgrade handler — set from main.js to navigate to pricing page
+let _upgradeHandler = () => {
   chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+};
+
+/**
+ * Set the upgrade handler. Called once from main.js to route to the pricing page.
+ */
+export function setUpgradeHandler(handler) {
+  _upgradeHandler = handler;
+}
+
+function triggerUpgrade() {
+  _upgradeHandler();
 }
 
 /**

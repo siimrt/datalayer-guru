@@ -5,7 +5,7 @@
 import { renderPlanBadge } from './PlanBadge.js';
 import { PLAN_CONFIG } from '../../shared/plans.js';
 
-export function renderSettingsPanel(container, state) {
+export function renderSettingsPanel(container, state, actions) {
   const plan = state.plan || 'free';
   const email = state.userEmail;
   const capabilities = state.capabilities;
@@ -39,7 +39,7 @@ export function renderSettingsPanel(container, state) {
             padding: 10px 0; border-radius: 8px; width: 100%;
             font-size: 14px; font-weight: 600; cursor: pointer;
             transition: all 0.2s;
-          ">&#9889; Upgrade to Pro &mdash; $19/mo</button>
+          ">&#9889; View Plans &amp; Pricing</button>
           <div style="text-align: center; margin-top: 8px;">
             <span style="color: #5E5E72; font-size: 11px;">Cancel anytime &middot; 30-day guarantee</span>
           </div>
@@ -119,11 +119,11 @@ export function renderSettingsPanel(container, state) {
     renderPlanBadge(badgeContainer, plan);
   }
 
-  // Upgrade button
+  // Upgrade button — navigates to pricing page
   const upgradeBtn = container.querySelector('#settings-upgrade-btn');
   if (upgradeBtn) {
     upgradeBtn.addEventListener('click', () => {
-      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      if (actions?.navigateToPricing) actions.navigateToPricing();
     });
     upgradeBtn.addEventListener('mouseenter', () => { upgradeBtn.style.background = '#7d6ef0'; });
     upgradeBtn.addEventListener('mouseleave', () => { upgradeBtn.style.background = '#6C5CE7'; });

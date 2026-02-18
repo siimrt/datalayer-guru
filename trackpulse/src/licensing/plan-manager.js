@@ -195,8 +195,12 @@ class PlanManager {
   /**
    * Open the ExtensionPay payment page.
    */
-  openPaymentPage() {
-    extpay.openPaymentPage();
+  openPaymentPage(planNickname) {
+    if (planNickname) {
+      extpay.openPaymentPage(planNickname);
+    } else {
+      extpay.openPaymentPage();
+    }
   }
 
   /**

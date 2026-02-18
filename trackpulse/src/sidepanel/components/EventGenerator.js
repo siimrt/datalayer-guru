@@ -118,7 +118,7 @@ export function renderEventGenerator(container, state, actions) {
 
   // Render locked platform events
   lockedPlatformEvents.forEach((event) => {
-    const card = createLockedPlatformCard(event);
+    const card = createLockedPlatformCard(event, actions);
     cardsContainer.appendChild(card);
   });
 
@@ -126,7 +126,7 @@ export function renderEventGenerator(container, state, actions) {
   container.querySelectorAll('.tp-platform-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
       if (btn.dataset.locked === 'true') {
-        chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+        if (actions.navigateToPricing) actions.navigateToPricing();
       } else {
         actions.togglePlatform(btn.dataset.platform);
       }
@@ -231,7 +231,7 @@ function createEventCard(event, index, collapsed, capabilities, actions) {
   return card;
 }
 
-function createLockedPlatformCard(event) {
+function createLockedPlatformCard(event, actions) {
   const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
   const platformColor = PLATFORM_COLORS[event.platform] || '#6C5CE7';
 
@@ -250,7 +250,7 @@ function createLockedPlatformCard(event) {
   `;
 
   card.addEventListener('click', () => {
-    chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+    if (actions?.navigateToPricing) actions.navigateToPricing();
   });
 
   return card;

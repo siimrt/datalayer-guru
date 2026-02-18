@@ -139,7 +139,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     case 'TRACKPULSE_OPEN_PAYMENT': {
+      // Legacy fallback — opens default ExtensionPay page
       planManager.openPaymentPage();
+      sendResponse({ success: true });
+      break;
+    }
+
+    case 'TRACKPULSE_OPEN_STRIPE_CHECKOUT': {
+      // Open Stripe Checkout for a specific plan nickname
+      const planNickname = msg.payload?.planNickname;
+      if (planNickname) {
+        planManager.openPaymentPage(planNickname);
+      } else {
+        planManager.openPaymentPage();
+      }
       sendResponse({ success: true });
       break;
     }
