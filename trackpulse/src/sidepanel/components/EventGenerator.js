@@ -1,9 +1,11 @@
 /**
  * EventGenerator Component — Shows generated events grouped by platform.
+ * V2: Plan-gated features — blurred code on Free, locked Copy/Push buttons.
  */
 
 import { syntaxHighlight, escapeHtml } from '../../shared/utils.js';
 import { renderDataExtracted } from './DataExtracted.js';
+import { applyCodePaywall, renderLockedButton, renderCMSGateBanner } from './Paywall.js';
 
 const PLATFORM_LABELS = {
   ga4: 'GA4',
@@ -22,40 +24,62 @@ const PLATFORM_COLORS = {
 export function renderEventGenerator(container, state, actions) {
   const events = state.generatedEvents || {};
   const activePlatforms = state.activePlatforms || ['ga4', 'meta', 'tiktok', 'pinterest'];
+  const capabilities = state.capabilities;
+  const supportedPlatforms = capabilities?.supportedPlatforms || ['ga4'];
+  const detectedCMS = state.cms?.cms || 'unknown';
 
-  // Render platform toggles
+  // Check CMS support
+  const cmsSupported = !capabilities || capabilities.supportedCMS.includes(detectedCMS) || detectedCMS === 'unknown';
+
+  // Render platform toggles — show all platforms, mark unsupported ones
   const toggles = Object.keys(PLATFORM_LABELS)
-    .map(
-      (platform) => `
+    .map((platform) => {
+      const isActive = activePlatforms.includes(platform);
+      const isSupported = supportedPlatforms.includes(platform);
+      const isLocked = !isSupported;
+      return `
       <button
-        class="tp-platform-toggle ${activePlatforms.includes(platform) ? 'active' : ''}"
+        class="tp-platform-toggle ${isActive && isSupported ? 'active' : ''} ${isLocked ? 'locked' : ''}"
         data-platform="${platform}"
-        style="${activePlatforms.includes(platform) ? `border-color: ${PLATFORM_COLORS[platform]}40; color: ${PLATFORM_COLORS[platform]};` : ''}"
+        data-locked="${isLocked}"
+        style="${isActive && isSupported ? `border-color: ${PLATFORM_COLORS[platform]}40; color: ${PLATFORM_COLORS[platform]};` : ''}
+               ${isLocked ? 'opacity: 0.5; cursor: pointer;' : ''}"
+        title="${isLocked ? `${PLATFORM_LABELS[platform]} — requires upgrade` : PLATFORM_LABELS[platform]}"
       >
-        ${PLATFORM_LABELS[platform]}
+        ${isLocked ? '&#128274; ' : ''}${PLATFORM_LABELS[platform]}
       </button>
-    `
-    )
+    `;
+    })
     .join('');
 
-  // Render extracted data summary
+  // Render extracted data summary (always available)
   const dataSummary = renderDataExtracted(
     state.ecommerceData,
     state.pageType?.pageType
   );
 
-  // Collect all events for active platforms
+  // Collect all events for active + supported platforms
   const allEvents = [];
+  const lockedPlatformEvents = [];
+
   for (const platform of activePlatforms) {
     const platformEvents = events[platform] || [];
-    for (const event of platformEvents) {
-      allEvents.push(event);
+    if (supportedPlatforms.includes(platform)) {
+      for (const event of platformEvents) {
+        allEvents.push(event);
+      }
+    } else {
+      // Show locked cards for unsupported platforms
+      for (const event of platformEvents) {
+        lockedPlatformEvents.push(event);
+      }
     }
   }
 
-  // Render events
+  // Build events HTML
   let eventsHtml = '';
-  if (allEvents.length === 0) {
+
+  if (allEvents.length === 0 && lockedPlatformEvents.length === 0) {
     eventsHtml = `
       <div class="tp-empty">
         <div class="tp-empty-icon">&#128269;</div>
@@ -63,10 +87,6 @@ export function renderEventGenerator(container, state, actions) {
         <p class="text-[11px] mt-1">This may be a non-ecommerce page</p>
       </div>
     `;
-  } else {
-    eventsHtml = allEvents
-      .map((event, index) => renderEventCard(event, index, index > 0))
-      .join('');
   }
 
   container.innerHTML = `
@@ -74,81 +94,164 @@ export function renderEventGenerator(container, state, actions) {
       ${toggles}
     </div>
     ${dataSummary}
-    ${eventsHtml}
+    <div id="cms-gate-banner"></div>
+    <div id="event-cards-container">
+      ${eventsHtml}
+    </div>
     <div class="h-4"></div>
   `;
+
+  // Show CMS gate banner if needed
+  if (!cmsSupported) {
+    const bannerEl = container.querySelector('#cms-gate-banner');
+    renderCMSGateBanner(bannerEl, detectedCMS, capabilities.supportedCMS);
+  }
+
+  // Render event cards with plan gating (DOM-based for paywall overlay)
+  const cardsContainer = container.querySelector('#event-cards-container');
+
+  // Render supported platform events
+  allEvents.forEach((event, index) => {
+    const card = createEventCard(event, index, index > 0, capabilities, actions);
+    cardsContainer.appendChild(card);
+  });
+
+  // Render locked platform events
+  lockedPlatformEvents.forEach((event) => {
+    const card = createLockedPlatformCard(event);
+    cardsContainer.appendChild(card);
+  });
 
   // Bind platform toggles
   container.querySelectorAll('.tp-platform-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
-      actions.togglePlatform(btn.dataset.platform);
-    });
-  });
-
-  // Bind expand/collapse
-  container.querySelectorAll('.tp-event-header').forEach((header) => {
-    header.addEventListener('click', () => {
-      const body = header.nextElementSibling;
-      const chevron = header.querySelector('.tp-chevron');
-      if (body && body.classList.contains('tp-event-body')) {
-        const isHidden = body.style.display === 'none';
-        body.style.display = isHidden ? 'block' : 'none';
-        if (chevron) chevron.classList.toggle('open', isHidden);
+      if (btn.dataset.locked === 'true') {
+        chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      } else {
+        actions.togglePlatform(btn.dataset.platform);
       }
-    });
-  });
-
-  // Bind copy buttons
-  container.querySelectorAll('[data-action="copy"]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const code = btn.dataset.code;
-      actions.copyCode(code);
-    });
-  });
-
-  // Bind push buttons
-  container.querySelectorAll('[data-action="push"]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const code = btn.dataset.code;
-      actions.pushToDataLayer(code);
     });
   });
 }
 
-function renderEventCard(event, index, collapsed) {
+function createEventCard(event, index, collapsed, capabilities, actions) {
   const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
   const platformColor = PLATFORM_COLORS[event.platform] || '#6C5CE7';
   const highlighted = syntaxHighlight(event.code);
   const escapedCode = escapeHtml(event.code);
+  const isFree = capabilities?.plan === 'free';
 
-  return `
-    <div class="tp-event-card animate-slide-in">
-      <div class="tp-event-header">
-        <div class="flex items-center gap-2">
-          <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ${platformColor};">${platformLabel}</span>
-          <span class="text-[12px] font-medium text-tp-text">${event.eventName}</span>
-        </div>
-        <svg class="tp-chevron ${collapsed ? '' : 'open'}" width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+  // Create card element
+  const card = document.createElement('div');
+  card.className = 'tp-event-card animate-slide-in';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'tp-event-header';
+  header.innerHTML = `
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ${platformColor};">${platformLabel}</span>
+      <span class="text-[12px] font-medium text-tp-text">${event.eventName}</span>
+    </div>
+    <svg class="tp-chevron ${collapsed ? '' : 'open'}" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  `;
+  card.appendChild(header);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'tp-event-body';
+  body.style.display = collapsed ? 'none' : 'block';
+
+  // Code block
+  const codeBlock = document.createElement('div');
+  codeBlock.className = 'code-block';
+  codeBlock.innerHTML = highlighted;
+  body.appendChild(codeBlock);
+
+  // If FREE plan: apply blur paywall to code
+  if (isFree) {
+    applyCodePaywall(codeBlock, 'eventGeneration', 'starter');
+  }
+
+  // Action buttons
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'tp-event-actions';
+
+  // COPY button
+  if (capabilities?.canCopyEvents) {
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'tp-btn tp-btn-sm';
+    copyBtn.dataset.action = 'copy';
+    copyBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>
+      Copy
+    `;
+    copyBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      actions.copyCode(escapedCode);
+    });
+    actionsDiv.appendChild(copyBtn);
+  } else {
+    renderLockedButton(actionsDiv, 'Copy', 'eventCopy', 'starter');
+  }
+
+  // PUSH button (GA4 only)
+  if (event.platform === 'ga4') {
+    if (capabilities?.canPushEvents) {
+      const pushBtn = document.createElement('button');
+      pushBtn.className = 'tp-btn tp-btn-sm tp-btn-primary';
+      pushBtn.dataset.action = 'push';
+      pushBtn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Push to dataLayer
+      `;
+      pushBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        actions.pushToDataLayer(escapedCode);
+      });
+      actionsDiv.appendChild(pushBtn);
+    } else {
+      renderLockedButton(actionsDiv, 'Push', 'eventPush', 'pro');
+    }
+  }
+
+  body.appendChild(actionsDiv);
+  card.appendChild(body);
+
+  // Expand/collapse
+  header.addEventListener('click', () => {
+    const isHidden = body.style.display === 'none';
+    body.style.display = isHidden ? 'block' : 'none';
+    const chevron = header.querySelector('.tp-chevron');
+    if (chevron) chevron.classList.toggle('open', isHidden);
+  });
+
+  return card;
+}
+
+function createLockedPlatformCard(event) {
+  const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
+  const platformColor = PLATFORM_COLORS[event.platform] || '#6C5CE7';
+
+  const card = document.createElement('div');
+  card.className = 'tp-event-card animate-slide-in';
+  card.style.cursor = 'pointer';
+  card.style.opacity = '0.6';
+  card.innerHTML = `
+    <div class="tp-event-header" style="opacity: 0.7;">
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ${platformColor};">${platformLabel}</span>
+        <span class="text-[12px] font-medium text-tp-text">${event.eventName}</span>
       </div>
-      <div class="tp-event-body" style="display: ${collapsed ? 'none' : 'block'};">
-        <div class="code-block">${highlighted}</div>
-        <div class="tp-event-actions">
-          <button class="tp-btn tp-btn-sm" data-action="copy" data-code="${escapedCode}">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>
-            Copy
-          </button>
-          ${event.platform === 'ga4' ? `
-          <button class="tp-btn tp-btn-sm tp-btn-primary" data-action="push" data-code="${escapedCode}">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 8l4 4 6-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            Push to dataLayer
-          </button>
-          ` : ''}
-        </div>
-      </div>
+      <span style="font-size: 12px;">&#128274;</span>
     </div>
   `;
+
+  card.addEventListener('click', () => {
+    chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+  });
+
+  return card;
 }

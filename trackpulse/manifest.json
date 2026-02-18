@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TrackPulse",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Tracking inspector & event generator for ecommerce — Detect CMS, extract data, generate & audit GA4/Meta/TikTok events.",
   "permissions": [
     "activeTab",
@@ -9,7 +9,10 @@
     "sidePanel",
     "scripting"
   ],
-  "host_permissions": ["<all_urls>"],
+  "host_permissions": [
+    "<all_urls>",
+    "https://extensionpay.com/*"
+  ],
   "background": {
     "service_worker": "src/background/service-worker.js",
     "type": "module"
@@ -20,6 +23,11 @@
       "js": ["src/content/index.js"],
       "run_at": "document_idle",
       "all_frames": false
+    },
+    {
+      "matches": ["https://extensionpay.com/*"],
+      "js": ["src/licensing/extpay-content.js"],
+      "run_at": "document_start"
     }
   ],
   "side_panel": {

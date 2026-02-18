@@ -1,11 +1,20 @@
 /**
  * AuditPanel Component — Shows tracking audit results (expected vs actual events).
+ * V2: Gated for Free/Starter users — shows paywall overlay.
  */
 
 import { escapeHtml } from '../../shared/utils.js';
 import { PAGE_TYPE_LABELS, GA4_EVENT_MAP, META_EVENT_MAP, TIKTOK_EVENT_MAP } from '../../shared/constants.js';
+import { renderSectionPaywall } from './Paywall.js';
 
 export function renderAuditPanel(container, state, actions) {
+  // V2: Check if audit is accessible
+  if (state.capabilities && !state.capabilities.canAudit) {
+    renderSectionPaywall(container, 'auditDiff', 'pro');
+    return;
+  }
+
+  // Original V1 audit logic below
   const pageType = state.pageType?.pageType || 'unknown';
   const pageLabel = PAGE_TYPE_LABELS[pageType] || 'Unknown';
   const diff = state.audit?.diff || [];
@@ -80,13 +89,18 @@ export function renderAuditPanel(container, state, actions) {
     }
   }
 
-  // Copy audit report button
+  // Action buttons
   auditHtml += `
-    <div class="p-3">
-      <button class="tp-btn w-full justify-center" id="copy-audit">
+    <div class="p-3 flex gap-2">
+      <button class="tp-btn flex-1 justify-center" id="copy-audit">
         <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>
         Copy Audit Report
       </button>
+      ${state.capabilities?.canExportPDF ? `
+      <button class="tp-btn tp-btn-primary flex-1 justify-center" id="export-pdf">
+        &#128196; Export PDF
+      </button>
+      ` : ''}
     </div>
   `;
 
@@ -94,15 +108,21 @@ export function renderAuditPanel(container, state, actions) {
 
   // Bind copy audit
   container.querySelector('#copy-audit')?.addEventListener('click', () => {
-    const report = generateAuditReport(state);
+    const report = generateTextAuditReport(state);
     actions.copyCode(report);
+  });
+
+  // Bind PDF export
+  container.querySelector('#export-pdf')?.addEventListener('click', () => {
+    if (actions.exportPDF) {
+      actions.exportPDF();
+    }
   });
 }
 
 function renderAuditRow(platform, expectedEvent, diffs, existingEvents) {
   if (!expectedEvent) return '';
 
-  // Find if this event exists in the diff results
   const diffResult = diffs.find(
     (d) => d.expected?.eventName === expectedEvent
   );
@@ -127,7 +147,6 @@ function renderAuditRow(platform, expectedEvent, diffs, existingEvents) {
       statusClass = 'tp-diff-missing';
     }
   } else {
-    // Check if the event simply exists
     const exists = existingEvents.some((e) => e.event === expectedEvent);
     if (exists) {
       statusIcon = '<span class="tp-dot tp-dot-green"></span>';
@@ -183,7 +202,7 @@ function renderFieldDiffs(item) {
   `;
 }
 
-function generateAuditReport(state) {
+function generateTextAuditReport(state) {
   const lines = [];
   const pageType = state.pageType?.pageType || 'unknown';
   const cms = state.cms?.cms || 'unknown';

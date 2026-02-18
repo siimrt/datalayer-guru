@@ -1,20 +1,24 @@
 /**
- * TrackPulse Side Panel — Main entry point.
+ * TrackPulse Side Panel — Main entry point (V2).
  * Manages state, listens for messages from the background/content script,
- * and orchestrates rendering of all components.
+ * orchestrates rendering of all components, and manages plan/licensing state.
  */
 
 import { MSG } from '../shared/messaging.js';
+import { getPlanCapabilities } from '../licensing/feature-gates.js';
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
 import { renderEventGenerator } from './components/EventGenerator.js';
 import { renderAuditPanel } from './components/AuditPanel.js';
 import { renderDataLayerLive, appendDataLayerEntry } from './components/DataLayerLive.js';
 import { renderPixelStatus } from './components/PixelStatus.js';
+import { renderSettingsPanel } from './components/SettingsPanel.js';
+import { renderFunnelMode, FunnelSession } from './components/FunnelMode.js';
 
 // ---- Application State ----
 
 const state = {
+  // V1 state
   cms: null,
   pageType: null,
   ecommerceData: null,
@@ -28,7 +32,19 @@ const state = {
   loading: true,
   url: '',
   timestamp: null,
+
+  // V2 plan/licensing state
+  plan: 'free',
+  planLoading: true,
+  userEmail: null,
+  capabilities: null,
+
+  // V2 funnel mode
+  funnelReport: null,
 };
+
+// Funnel session singleton
+const funnelSession = new FunnelSession();
 
 // ---- DOM References ----
 
@@ -37,6 +53,12 @@ const mainContentEl = document.getElementById('main-content');
 const headerEl = document.getElementById('header');
 const tabNavEl = document.getElementById('tab-nav');
 const tabContentEl = document.getElementById('tab-content');
+
+// ---- Plan Capabilities Resolver ----
+
+function resolvePlanCapabilities(plan) {
+  return getPlanCapabilities(plan);
+}
 
 // ---- Actions ----
 
@@ -52,15 +74,19 @@ const actions = {
   },
 
   async copyCode(code) {
+    // Check plan access
+    if (!state.capabilities?.canCopyEvents) {
+      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      return;
+    }
+
     try {
-      // Decode HTML entities back to raw code
       const textarea = document.createElement('textarea');
       textarea.innerHTML = code;
       const decoded = textarea.value;
       await navigator.clipboard.writeText(decoded);
       showToast('Copied to clipboard', 'success');
     } catch (e) {
-      // Fallback
       try {
         const textarea = document.createElement('textarea');
         textarea.innerHTML = code;
@@ -77,7 +103,12 @@ const actions = {
   },
 
   pushToDataLayer(code) {
-    // Decode HTML entities
+    // Check plan access
+    if (!state.capabilities?.canPushEvents) {
+      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      return;
+    }
+
     const textarea = document.createElement('textarea');
     textarea.innerHTML = code;
     const decoded = textarea.value;
@@ -104,7 +135,6 @@ const actions = {
     state.loading = true;
     showLoading();
     chrome.runtime.sendMessage({ type: MSG.REQUEST_REDETECT });
-    // Also try sending directly to active tab
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs?.[0]?.id) {
         chrome.tabs.sendMessage(
@@ -117,7 +147,62 @@ const actions = {
       }
     });
   },
+
+  handleUpgrade() {
+    chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+  },
+
+  async exportPDF() {
+    if (!state.capabilities?.canExportPDF) {
+      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
+      return;
+    }
+
+    // Track usage
+    const { trackPDFExport } = await import('../licensing/usage-tracker.js');
+    const result = await trackPDFExport(state.capabilities.pdfLimit);
+    if (!result.allowed) {
+      showToast(`PDF limit reached (${result.count}/${result.limit} this month)`, 'error');
+      return;
+    }
+
+    // Dynamic import for PDF generation
+    const { generateAuditReport } = await import('../export/pdf-report.js');
+    const filename = await generateAuditReport(state, {
+      whiteLabelLogo: state.capabilities.canWhiteLabel ? null : null, // Agency can set logo
+    });
+    showToast(`Report saved: ${filename}`, 'success');
+  },
 };
+
+// ---- Plan Initialization ----
+
+async function initPlan() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_GET_PLAN' });
+    state.plan = response?.plan || 'free';
+    state.userEmail = response?.email || null;
+    state.planLoading = false;
+    state.capabilities = resolvePlanCapabilities(state.plan);
+  } catch (err) {
+    // Fallback: check chrome.storage directly
+    const data = await chrome.storage.local.get(['tp_plan']);
+    state.plan = data.tp_plan || 'free';
+    state.planLoading = false;
+    state.capabilities = resolvePlanCapabilities(state.plan);
+  }
+
+  // If we already have detection data, render
+  if (!state.loading) {
+    render();
+  }
+}
+
+// Initialize plan on load
+initPlan();
+
+// Load funnel session
+funnelSession.loadSession();
 
 // ---- Message Listeners ----
 
@@ -146,6 +231,11 @@ chrome.runtime.onMessage.addListener((msg) => {
         // Don't replace stream — these are the snapshot events
       }
 
+      // If funnel recording is active, add this step
+      if (funnelSession.isRecording) {
+        funnelSession.addStep(payload);
+      }
+
       render();
       break;
     }
@@ -170,10 +260,25 @@ chrome.runtime.onMessage.addListener((msg) => {
       }
       break;
     }
+
+    case 'TRACKPULSE_PLAN_CHANGED': {
+      // Real-time plan upgrade detection
+      state.plan = msg.payload?.plan || state.plan;
+      state.capabilities = resolvePlanCapabilities(state.plan);
+      state.planLoading = false;
+      render(); // Re-render immediately to unlock features
+      break;
+    }
   }
 });
 
 // ---- Rendering ----
+
+function handleTabChange(tab) {
+  state.activeTab = tab;
+  renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
+  renderActiveTab();
+}
 
 function render() {
   if (state.loading) {
@@ -181,13 +286,14 @@ function render() {
     return;
   }
 
+  // Ensure capabilities are resolved
+  if (!state.capabilities) {
+    state.capabilities = resolvePlanCapabilities(state.plan);
+  }
+
   hideLoading();
-  renderHeader(headerEl, state, actions.refresh);
-  renderTabNav(tabNavEl, state.activeTab, (tab) => {
-    state.activeTab = tab;
-    renderTabNav(tabNavEl, state.activeTab, arguments[0]);
-    renderActiveTab();
-  });
+  renderHeader(headerEl, state, actions.refresh, actions.handleUpgrade);
+  renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
   renderActiveTab();
 }
 
@@ -205,6 +311,12 @@ function renderActiveTab() {
     case 'pixels':
       renderPixelStatus(tabContentEl, state);
       break;
+    case 'funnel':
+      renderFunnelMode(tabContentEl, funnelSession, state.capabilities, state.funnelReport);
+      break;
+    case 'settings':
+      renderSettingsPanel(tabContentEl, state);
+      break;
   }
 }
 
@@ -221,7 +333,6 @@ function hideLoading() {
 // ---- Toast Notifications ----
 
 function showToast(message, type = 'success') {
-  // Remove existing toasts
   document.querySelectorAll('.tp-toast').forEach((t) => t.remove());
 
   const toast = document.createElement('div');
@@ -239,7 +350,6 @@ function showToast(message, type = 'success') {
 // Request current tab's data on panel open
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   if (tabs?.[0]?.id) {
-    // First try to get cached data from background
     chrome.runtime.sendMessage(
       { type: 'TRACKPULSE_GET_TAB_DATA' },
       (response) => {
@@ -260,13 +370,11 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           state.loading = false;
           render();
         } else {
-          // No cached data — request detection
           chrome.tabs.sendMessage(
             tabs[0].id,
             { type: MSG.REQUEST_REDETECT },
             () => {
               if (chrome.runtime.lastError) {
-                // Content script not ready — show loading
                 state.loading = true;
                 render();
               }
@@ -287,24 +395,3 @@ setTimeout(() => {
     render();
   }
 }, 8000);
-
-// Fix the renderTabNav callback issue by caching the callback
-function handleTabChange(tab) {
-  state.activeTab = tab;
-  renderTabNav(tabNavEl, state.activeTab, handleTabChange);
-  renderActiveTab();
-}
-
-// Override the initial render to use the proper callback
-const originalRender = render;
-render = function () {
-  if (state.loading) {
-    showLoading();
-    return;
-  }
-
-  hideLoading();
-  renderHeader(headerEl, state, actions.refresh);
-  renderTabNav(tabNavEl, state.activeTab, handleTabChange);
-  renderActiveTab();
-};

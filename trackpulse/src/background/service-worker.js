@@ -1,10 +1,27 @@
 /**
  * TrackPulse Background Service Worker
- * Handles extension icon clicks, badge management, message routing, and tab tracking.
+ * Handles extension icon clicks, badge management, message routing, tab tracking,
+ * and ExtensionPay license management (V2).
  */
 
 import { MSG } from '../shared/messaging.js';
 import { CMS_INFO } from '../shared/constants.js';
+import { planManager } from '../licensing/plan-manager.js';
+
+// Initialize ExtensionPay on extension startup
+planManager.init().then(() => {
+  console.log('[TrackPulse] Plan:', planManager.getPlan());
+}).catch((err) => {
+  console.error('[TrackPulse] Plan init error:', err);
+});
+
+// Listen for plan changes and notify all extension contexts
+planManager.onChange((newPlan) => {
+  chrome.runtime.sendMessage({
+    type: 'TRACKPULSE_PLAN_CHANGED',
+    payload: { plan: newPlan },
+  }).catch(() => {}); // Ignore if no listeners
+});
 
 // Store per-tab context data
 const tabContexts = {};
@@ -85,6 +102,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // Side panel requesting current tab's stored data
       getActiveTabId().then((activeTabId) => {
         sendResponse(tabContexts[activeTabId] || null);
+      });
+      return true; // Async sendResponse
+    }
+
+    case 'TRACKPULSE_GET_PLAN': {
+      // Return current plan info from cache
+      chrome.storage.local.get(['tp_plan', 'tp_user_email', 'tp_paid'], (data) => {
+        sendResponse({
+          plan: data.tp_plan || 'free',
+          email: data.tp_user_email || null,
+          paid: data.tp_paid || false,
+        });
+      });
+      return true; // Async sendResponse
+    }
+
+    case 'TRACKPULSE_OPEN_PAYMENT': {
+      planManager.openPaymentPage();
+      sendResponse({ success: true });
+      break;
+    }
+
+    case 'TRACKPULSE_OPEN_MANAGEMENT': {
+      planManager.openManagementPage();
+      sendResponse({ success: true });
+      break;
+    }
+
+    case 'TRACKPULSE_REFRESH_PLAN': {
+      planManager._refreshInBackground().then(() => {
+        sendResponse({ plan: planManager.getPlan() });
       });
       return true; // Async sendResponse
     }

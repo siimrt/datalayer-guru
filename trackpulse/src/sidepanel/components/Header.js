@@ -1,10 +1,11 @@
 /**
- * Header Component — Shows CMS badge, page type, currency, and refresh button.
+ * Header Component — Shows CMS badge, page type, currency, plan badge, and refresh button.
  */
 
 import { CMS_INFO, CMS_LOGOS, PAGE_TYPE_LABELS } from '../../shared/constants.js';
+import { renderPlanBadge } from './PlanBadge.js';
 
-export function renderHeader(container, state, onRefresh) {
+export function renderHeader(container, state, onRefresh, onUpgrade) {
   const cms = state.cms?.cms || 'unknown';
   const cmsInfo = CMS_INFO[cms] || CMS_INFO.unknown;
   const confidence = state.cms?.confidence || 0;
@@ -33,20 +34,29 @@ export function renderHeader(container, state, onRefresh) {
           <span class="tp-badge tp-badge-page">${pageLabel}</span>
           ${currency ? `<span class="tp-badge tp-badge-currency">${currency}</span>` : ''}
         </div>
-        <button class="tp-refresh-btn" id="refresh-btn" title="Re-detect">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M13.65 2.35A7.958 7.958 0 008 0C3.58 0 .01 3.58.01 8S3.58 16 8 16c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 018 14 6 6 0 018 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35z" fill="currentColor"/>
-          </svg>
-        </button>
+        <div class="flex items-center gap-2">
+          <span id="header-plan-badge"></span>
+          <button class="tp-refresh-btn" id="refresh-btn" title="Re-detect">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M13.65 2.35A7.958 7.958 0 008 0C3.58 0 .01 3.58.01 8S3.58 16 8 16c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 018 14 6 6 0 018 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="flex items-center gap-2 text-[11px] text-tp-text-muted">
         ${hostname ? `<span>${hostname}</span>` : ''}
-        ${version ? `<span>· ${version}</span>` : ''}
-        ${state.pageType?.method ? `<span>· Detection: ${state.pageType.method}</span>` : ''}
+        ${version ? `<span>&middot; ${version}</span>` : ''}
+        ${state.pageType?.method ? `<span>&middot; Detection: ${state.pageType.method}</span>` : ''}
       </div>
     </div>
   `;
 
   // Bind refresh
   container.querySelector('#refresh-btn')?.addEventListener('click', onRefresh);
+
+  // Render plan badge
+  const planBadgeEl = container.querySelector('#header-plan-badge');
+  if (planBadgeEl) {
+    renderPlanBadge(planBadgeEl, state.plan || 'free', onUpgrade);
+  }
 }

@@ -490,3 +490,99 @@ body {
 
 .tp-toast.success { border-color: var(--tp-success); }
 .tp-toast.error { border-color: var(--tp-error); }
+
+/* ---- V2: Paywall Styles ---- */
+
+.paywall-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.paywall-overlay {
+  pointer-events: auto;
+}
+
+.paywall-overlay button:hover {
+  filter: brightness(1.1);
+}
+
+/* Blur effect on code for free plan */
+.event-code.blurred {
+  filter: blur(4px);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Locked button style */
+.locked-btn {
+  opacity: 0.6;
+  position: relative;
+}
+
+.locked-btn:hover {
+  opacity: 0.8;
+}
+
+/* Plan badge animations */
+.plan-badge {
+  transition: all 0.2s ease;
+}
+
+.plan-badge:hover {
+  filter: brightness(1.1);
+}
+
+/* Upgrade prompt pulse animation */
+@keyframes upgradePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(108, 92, 231, 0); }
+}
+
+.upgrade-pulse {
+  animation: upgradePulse 2s infinite;
+}
+
+/* Section paywall smooth entry */
+.section-paywall-btn {
+  transition: all 0.2s ease;
+}
+
+.section-paywall-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
+}
+
+/* Usage bar */
+.usage-bar {
+  background: var(--tp-border);
+  border-radius: 4px;
+  height: 4px;
+  overflow: hidden;
+}
+
+.usage-bar-fill {
+  background: var(--tp-primary);
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.usage-bar-fill.warning {
+  background: var(--tp-warning);
+}
+
+.usage-bar-fill.critical {
+  background: var(--tp-error);
+}
+
+/* Settings tab icon */
+.tp-tab-settings {
+  flex: 0 !important;
+  min-width: auto;
+}
+
+/* Locked platform toggle */
+.tp-platform-toggle.locked {
+  border-style: dashed;
+}
