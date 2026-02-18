@@ -37,16 +37,7 @@ async function init() {
   // 4. Run the full detection and extraction pipeline
   await runPipeline(pageContext);
 
-  // 5. Listen for dataLayer pushes (forwarded from page context)
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    if (event.data?.type === 'TRACKPULSE_DATALAYER_PUSH') {
-      sendMessage(MSG.DATALAYER_PUSH, {
-        data: event.data.payload,
-        timestamp: Date.now(),
-      });
-    }
-  });
+  // 5. dataLayer push listening is handled in bridge.js (initBridge)
 
   // 6. Listen for re-detection requests
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

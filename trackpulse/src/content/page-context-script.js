@@ -281,9 +281,13 @@
     );
   }
 
-  // --- Set up dataLayer watcher ---
+  // --- Set up dataLayer watcher (with guard to prevent double-wrapping on re-injection) ---
   try {
-    if (window.dataLayer && Array.isArray(window.dataLayer)) {
+    function hookDataLayerPush() {
+      if (window.__TRACKPULSE_DL_HOOKED__) return; // Already hooked
+      if (!window.dataLayer || !Array.isArray(window.dataLayer)) return false;
+
+      window.__TRACKPULSE_DL_HOOKED__ = true;
       const originalPush = window.dataLayer.push.bind(window.dataLayer);
       window.dataLayer.push = function (...args) {
         const result = originalPush(...args);
@@ -298,31 +302,16 @@
         } catch (e) {}
         return result;
       };
-    } else {
+      return true;
+    }
+
+    if (!hookDataLayerPush()) {
       // dataLayer doesn't exist yet — watch for it
       let dlCheckCount = 0;
       const dlChecker = setInterval(() => {
         dlCheckCount++;
-        if (dlCheckCount > 50) {
+        if (dlCheckCount > 50 || hookDataLayerPush()) {
           clearInterval(dlChecker);
-          return;
-        }
-        if (window.dataLayer && Array.isArray(window.dataLayer)) {
-          clearInterval(dlChecker);
-          const originalPush = window.dataLayer.push.bind(window.dataLayer);
-          window.dataLayer.push = function (...args) {
-            const result = originalPush(...args);
-            try {
-              window.postMessage(
-                {
-                  type: 'TRACKPULSE_DATALAYER_PUSH',
-                  payload: JSON.parse(JSON.stringify(args)),
-                },
-                '*'
-              );
-            } catch (e) {}
-            return result;
-          };
         }
       }, 200);
     }
