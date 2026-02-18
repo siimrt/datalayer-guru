@@ -6,7 +6,7 @@
 import ExtPay from 'extpay';
 import { PLANS, PLAN_ID_MAP } from '../shared/plans.js';
 
-const extpay = ExtPay('trackpulse'); // Replace with actual ExtensionPay ID after registration
+const extpay = ExtPay('datalayer-guru');
 
 class PlanManager {
   constructor() {
