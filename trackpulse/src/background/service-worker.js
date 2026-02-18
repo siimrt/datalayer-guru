@@ -107,12 +107,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     case 'TRACKPULSE_GET_PLAN': {
-      // Return current plan info from cache
-      chrome.storage.local.get(['tp_plan', 'tp_user_email', 'tp_paid'], (data) => {
+      // Wait for planManager to finish initializing, then return live state
+      planManager.waitForInit().then((plan) => {
+        console.log('[TrackPulse] GET_PLAN responding with live plan:', plan);
         sendResponse({
-          plan: data.tp_plan || 'free',
-          email: data.tp_user_email || null,
-          paid: data.tp_paid || false,
+          plan: planManager.getPlan(),
+          email: planManager.user?.email || null,
+          paid: !!planManager.user?.paid,
+        });
+      }).catch((err) => {
+        console.error('[TrackPulse] GET_PLAN error, falling back to cache:', err);
+        chrome.storage.local.get(['tp_plan', 'tp_user_email', 'tp_paid'], (data) => {
+          sendResponse({
+            plan: data.tp_plan || 'free',
+            email: data.tp_user_email || null,
+            paid: data.tp_paid || false,
+          });
         });
       });
       return true; // Async sendResponse
@@ -131,7 +141,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     case 'TRACKPULSE_REFRESH_PLAN': {
-      planManager._refreshInBackground().then(() => {
+      planManager.refreshPlan().then((plan) => {
+        console.log('[TrackPulse] REFRESH_PLAN responded with:', plan);
+        sendResponse({ plan: plan, email: planManager.user?.email || null });
+      }).catch((err) => {
+        console.error('[TrackPulse] REFRESH_PLAN error:', err);
         sendResponse({ plan: planManager.getPlan() });
       });
       return true; // Async sendResponse

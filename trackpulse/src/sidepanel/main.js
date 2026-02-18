@@ -179,22 +179,44 @@ const actions = {
 
 async function initPlan() {
   try {
+    // First: get the current plan (waits for planManager init in service worker)
     const response = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_GET_PLAN' });
     state.plan = response?.plan || 'free';
     state.userEmail = response?.email || null;
     state.planLoading = false;
     state.capabilities = resolvePlanCapabilities(state.plan);
+    console.log('[TrackPulse Sidepanel] Initial plan:', state.plan);
+
+    // If we already have detection data, render with initial plan
+    if (!state.loading) {
+      render();
+    }
+
+    // Then: force a fresh refresh from ExtensionPay to pick up any recent payments
+    try {
+      const refreshed = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_REFRESH_PLAN' });
+      if (refreshed?.plan && refreshed.plan !== state.plan) {
+        console.log('[TrackPulse Sidepanel] Plan updated after refresh:', refreshed.plan);
+        state.plan = refreshed.plan;
+        state.userEmail = refreshed.email || state.userEmail;
+        state.capabilities = resolvePlanCapabilities(state.plan);
+        render(); // Re-render with updated plan
+      }
+    } catch (refreshErr) {
+      console.warn('[TrackPulse Sidepanel] Refresh failed (non-blocking):', refreshErr);
+    }
   } catch (err) {
+    console.error('[TrackPulse Sidepanel] initPlan error:', err);
     // Fallback: check chrome.storage directly
     const data = await chrome.storage.local.get(['tp_plan']);
     state.plan = data.tp_plan || 'free';
     state.planLoading = false;
     state.capabilities = resolvePlanCapabilities(state.plan);
-  }
 
-  // If we already have detection data, render
-  if (!state.loading) {
-    render();
+    // If we already have detection data, render
+    if (!state.loading) {
+      render();
+    }
   }
 }
 
