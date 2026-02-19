@@ -98,7 +98,7 @@ export function renderSettingsPanel(container, state, actions) {
         <button id="settings-force-refresh" style="
           margin-top: 8px; background: #2E2E34; color: #9B9BAE; border: 1px solid #3E3E44;
           padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
-        ">&#8635; Force Refresh Plan</button>
+        ">&#8635; Debug: Force Refresh Plan</button>
       </div>
       ` : ''}
 

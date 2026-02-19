@@ -12,6 +12,11 @@ export const PLANS = {
 
 // Map ExtensionPay plan IDs to internal plan names
 export const PLAN_ID_MAP = {
+  // Bare plan names (ExtensionPay may return these directly)
+  'starter': 'starter',
+  'pro': 'pro',
+  'agency': 'agency',
+  // Suffixed plan IDs (standard format from ExtensionPay dashboard)
   'starter-monthly': 'starter',
   'starter-annual': 'starter',
   'pro-monthly': 'pro',
@@ -19,6 +24,30 @@ export const PLAN_ID_MAP = {
   'agency-monthly': 'agency',
   'agency-annual': 'agency',
 };
+
+/**
+ * Resolve an internal plan name from an ExtensionPay plan ID string.
+ * Strategy:
+ *   1. Direct lookup in PLAN_ID_MAP
+ *   2. Case-insensitive partial match (highest tier first: agency > pro > starter)
+ *   3. Return null if unrecognizable (caller decides fallback)
+ */
+export function resolvePlanFromId(planId) {
+  if (!planId) return null;
+
+  // 1. Direct lookup
+  const direct = PLAN_ID_MAP[planId];
+  if (direct) return direct;
+
+  // 2. Case-insensitive partial match (check highest tier first)
+  const lower = String(planId).toLowerCase();
+  if (lower.includes('agency')) return 'agency';
+  if (lower.includes('pro')) return 'pro';
+  if (lower.includes('starter')) return 'starter';
+
+  // 3. Unrecognizable
+  return null;
+}
 
 // Plan display configuration
 export const PLAN_CONFIG = {

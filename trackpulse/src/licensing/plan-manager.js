@@ -4,7 +4,7 @@
  */
 
 import ExtPay from 'extpay';
-import { PLANS, PLAN_ID_MAP } from '../shared/plans.js';
+import { PLANS, PLAN_ID_MAP, resolvePlanFromId } from '../shared/plans.js';
 
 const extpay = ExtPay('datalayer-guru');
 
@@ -49,6 +49,7 @@ class PlanManager {
         console.log('[TrackPulse] Plan after payment:', this.currentPlan);
         this._persistPlanCache();
         this._notifyListeners();
+        this._broadcastPlanChanged();
       });
 
       // Cache plan in chrome.storage for quick access
@@ -111,11 +112,11 @@ class PlanManager {
 
     console.log('[TrackPulse] User isPaid=true, planId="' + planId + '"');
 
-    if (planId && PLAN_ID_MAP[planId]) {
-      this.currentPlan = PLAN_ID_MAP[planId];
+    const resolved = resolvePlanFromId(planId);
+    if (resolved) {
+      this.currentPlan = resolved;
     } else {
-      // Paid but no plan ID — ExtensionPay is single-tier by default
-      // Default to 'starter' (lowest paid tier)
+      // Paid but no recognizable plan ID — default to 'starter' (lowest paid tier)
       this.currentPlan = 'starter';
     }
   }
@@ -161,6 +162,7 @@ class PlanManager {
       console.log('[TrackPulse] Refresh - resolved plan:', this.currentPlan);
       await this._persistPlanCache();
       this._notifyListeners();
+      this._broadcastPlanChanged();
       return this.currentPlan;
     } catch (e) {
       console.error('[TrackPulse] Refresh failed:', e);
@@ -172,6 +174,10 @@ class PlanManager {
    * Wait for initialization to complete, then return plan.
    */
   async waitForInit() {
+    if (!this._initPromise && !this._initialized) {
+      // Service worker may have restarted — re-initialize
+      this.init();
+    }
     if (this._initPromise) {
       await this._initPromise;
     }
@@ -220,6 +226,13 @@ class PlanManager {
 
   _notifyListeners() {
     this.listeners.forEach((cb) => cb(this.currentPlan));
+  }
+
+  _broadcastPlanChanged() {
+    chrome.runtime.sendMessage({
+      type: 'TRACKPULSE_PLAN_CHANGED',
+      payload: { plan: this.currentPlan },
+    }).catch(() => {}); // Ignore if no listeners
   }
 }
 

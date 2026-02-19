@@ -211,12 +211,12 @@ async function initPlan() {
     // Then: force a fresh refresh from ExtensionPay to pick up any recent payments
     try {
       const refreshed = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_REFRESH_PLAN' });
-      if (refreshed?.plan && refreshed.plan !== state.plan) {
-        console.log('[TrackPulse Sidepanel] Plan updated after refresh:', refreshed.plan);
+      if (refreshed?.plan) {
+        console.log('[TrackPulse Sidepanel] Plan after refresh:', refreshed.plan);
         state.plan = refreshed.plan;
         state.userEmail = refreshed.email || state.userEmail;
         state.capabilities = resolvePlanCapabilities(state.plan);
-        render(); // Re-render with updated plan
+        render();
       }
     } catch (refreshErr) {
       console.warn('[TrackPulse Sidepanel] Refresh failed (non-blocking):', refreshErr);
@@ -238,6 +238,35 @@ async function initPlan() {
 
 // Initialize plan on load
 initPlan();
+
+// Refresh plan when sidepanel regains focus (e.g. user returns from Stripe checkout)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    refreshPlanQuietly();
+  }
+});
+
+// Periodic plan recheck every 30s while sidepanel is open
+setInterval(() => {
+  if (document.visibilityState === 'visible') {
+    refreshPlanQuietly();
+  }
+}, 30000);
+
+async function refreshPlanQuietly() {
+  try {
+    const refreshed = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_REFRESH_PLAN' });
+    if (refreshed?.plan && refreshed.plan !== state.plan) {
+      console.log('[TrackPulse Sidepanel] Plan updated via refresh:', refreshed.plan);
+      state.plan = refreshed.plan;
+      state.userEmail = refreshed.email || state.userEmail;
+      state.capabilities = resolvePlanCapabilities(state.plan);
+      render();
+    }
+  } catch (e) {
+    // Silent fail — non-critical background refresh
+  }
+}
 
 // Load funnel session
 funnelSession.loadSession();
