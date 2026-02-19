@@ -15,6 +15,7 @@ class PlanManager {
     this.listeners = new Set();
     this._initialized = false;
     this._initPromise = null;
+    this._storedPlan = null; // Plan stored locally when user clicks CTA (ExtensionPay doesn't return planId)
   }
 
   /**
@@ -34,6 +35,10 @@ class PlanManager {
     try {
       // ExtensionPay background setup
       extpay.startBackground();
+
+      // Load locally stored plan selection (ExtensionPay doesn't return planId)
+      const stored = await chrome.storage.local.get('tp_selected_plan');
+      this._storedPlan = stored.tp_selected_plan || null;
 
       // Get current user
       this.user = await extpay.getUser();
@@ -115,8 +120,12 @@ class PlanManager {
     const resolved = resolvePlanFromId(planId);
     if (resolved) {
       this.currentPlan = resolved;
+    } else if (this._storedPlan) {
+      // ExtensionPay doesn't return planId — use locally stored selection from checkout
+      console.log('[TrackPulse] Using stored plan selection:', this._storedPlan);
+      this.currentPlan = this._storedPlan;
     } else {
-      // Paid but no recognizable plan ID — default to 'starter' (lowest paid tier)
+      // Paid but no recognizable plan ID and no stored selection — default to 'starter'
       this.currentPlan = 'starter';
     }
   }
@@ -156,6 +165,10 @@ class PlanManager {
    */
   async refreshPlan() {
     try {
+      // Reload stored plan selection in case it was updated
+      const stored = await chrome.storage.local.get('tp_selected_plan');
+      this._storedPlan = stored.tp_selected_plan || this._storedPlan;
+
       this.user = await extpay.getUser();
       console.log('[TrackPulse] Refresh - ExtPay user:', JSON.stringify(this.user));
       this._resolvePlan();

@@ -7,6 +7,7 @@
 import { MSG } from '../shared/messaging.js';
 import { CMS_INFO } from '../shared/constants.js';
 import { planManager } from '../licensing/plan-manager.js';
+import { resolvePlanFromId } from '../shared/plans.js';
 
 // Initialize ExtensionPay on extension startup
 planManager.init().then(() => {
@@ -119,9 +120,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           debug: {
             userPaid: user?.paid,
             subscriptionStatus: user?.subscriptionStatus,
+            subscriptionPlanId: user?.subscriptionPlanId || null,
             paidAt: user?.paidAt,
-            installedAt: user?.installedAt,
-            trialStartedAt: user?.trialStartedAt,
+            storedPlan: planManager._storedPlan || null,
+            allKeys: user ? Object.keys(user) : [],
           },
         });
       }).catch((err) => {
@@ -149,6 +151,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // Open Stripe Checkout for a specific plan nickname
       const planNickname = msg.payload?.planNickname;
       if (planNickname) {
+        // Store which plan the user selected (ExtensionPay doesn't return planId)
+        const selectedPlan = resolvePlanFromId(planNickname);
+        if (selectedPlan) {
+          chrome.storage.local.set({ tp_selected_plan: selectedPlan });
+          planManager._storedPlan = selectedPlan;
+        }
         planManager.openPaymentPage(planNickname);
       } else {
         planManager.openPaymentPage();

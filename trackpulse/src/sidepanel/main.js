@@ -318,11 +318,22 @@ async function refreshPlanQuietly() {
   try {
     const refreshed = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_REFRESH_PLAN' });
     if (refreshed?.plan && refreshed.plan !== state.plan) {
-      console.log('[TrackPulse Sidepanel] Plan updated via refresh:', refreshed.plan);
+      const oldPlan = state.plan;
+      console.log('[TrackPulse Sidepanel] Plan updated via refresh:', oldPlan, '->', refreshed.plan);
       state.plan = refreshed.plan;
       state.userEmail = refreshed.email || state.userEmail;
       state.capabilities = resolvePlanCapabilities(state.plan);
-      render();
+
+      // If on pricing page and plan upgraded, show success animation + redirect
+      if (state.activeTab === 'pricing' && state.plan !== 'free' && state.plan !== oldPlan) {
+        showUpgradeSuccess(state.plan);
+        setTimeout(() => {
+          state.activeTab = 'events';
+          render();
+        }, 1500);
+      } else {
+        render();
+      }
     }
   } catch (e) {
     // Silent fail — non-critical background refresh

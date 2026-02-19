@@ -90,8 +90,11 @@ export function renderSettingsPanel(container, state, actions) {
         ">
           <div>paid: <span style="color: ${state.planDebug.userPaid ? '#00B894' : '#FF6B6B'};">${String(state.planDebug.userPaid)}</span></div>
           <div>subscriptionStatus: <span style="color: #5B9BD5;">${state.planDebug.subscriptionStatus || 'null'}</span></div>
+          <div>subscriptionPlanId: <span style="color: #FDCB6E;">${state.planDebug.subscriptionPlanId || 'null'}</span></div>
+          <div>storedPlan: <span style="color: #00B894;">${state.planDebug.storedPlan || 'null'}</span></div>
           <div>paidAt: <span style="color: #E8E8ED;">${state.planDebug.paidAt || 'null'}</span></div>
           <div>resolvedPlan: <span style="color: #6C5CE7; font-weight: bold;">${plan}</span></div>
+          ${state.planDebug.allKeys ? `<div>userKeys: <span style="color: #9B9BAE;">${state.planDebug.allKeys.join(', ')}</span></div>` : ''}
           ${state.planDebug.source ? `<div>source: <span style="color: #FDCB6E;">${state.planDebug.source}</span></div>` : ''}
           ${state.planDebug.error ? `<div>error: <span style="color: #FF6B6B;">${state.planDebug.error}</span></div>` : ''}
         </div>
