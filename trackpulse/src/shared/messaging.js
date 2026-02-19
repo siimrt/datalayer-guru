@@ -13,6 +13,12 @@ export const MSG = {
   // Content <-> Page Context (window.postMessage)
   EXECUTE_IN_PAGE: 'TRACKPULSE_EXECUTE_IN_PAGE',
   EXECUTE_RESULT: 'TRACKPULSE_EXECUTE_RESULT',
+
+  // SidePanel -> Background: list Shopify custom pixel iframes
+  LIST_FRAMES: 'TRACKPULSE_LIST_FRAMES',
+
+  // SidePanel -> Background: execute code in a specific frame
+  EXECUTE_IN_FRAME: 'TRACKPULSE_EXECUTE_IN_FRAME',
 };
 
 /**

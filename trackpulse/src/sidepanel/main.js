@@ -47,6 +47,10 @@ const state = {
 
   // V2 funnel mode
   funnelReport: null,
+
+  // V2 Quick Push (synthetic events)
+  customPixelFrames: [],    // [{frameId, url, label}] — detected Shopify custom pixel iframes
+  quickPushTarget: 'top',   // 'top' or frameId (number)
 };
 
 // Funnel session singleton
@@ -185,6 +189,63 @@ const actions = {
     });
     showToast(`Report saved: ${filename}`, 'success');
   },
+
+  pushSyntheticEvent(code, target) {
+    if (!state.capabilities?.canPushEvents) {
+      actions.navigateToPricing();
+      return;
+    }
+
+    if (target && target !== 'top') {
+      // Push to a specific Shopify custom pixel sandbox frame
+      chrome.runtime.sendMessage(
+        {
+          type: MSG.EXECUTE_IN_FRAME,
+          payload: { code, frameId: target },
+        },
+        (response) => {
+          if (response?.success) {
+            showToast('Pushed to custom pixel', 'success');
+          } else {
+            showToast(`Push failed: ${response?.error || 'unknown'}`, 'error');
+          }
+        }
+      );
+    } else {
+      // Push to top-level dataLayer via existing content script bridge
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs?.[0]?.id) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: MSG.EXECUTE_CODE,
+            code,
+          });
+          showToast('Pushed to dataLayer', 'success');
+        } else {
+          showToast('No active tab found', 'error');
+        }
+      });
+    }
+  },
+
+  async detectCustomPixelFrames() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: MSG.LIST_FRAMES });
+      state.customPixelFrames = response?.frames || [];
+      if (state.quickPushTarget !== 'top') {
+        const exists = state.customPixelFrames.some(
+          (f) => f.frameId === state.quickPushTarget
+        );
+        if (!exists) state.quickPushTarget = 'top';
+      }
+    } catch (e) {
+      state.customPixelFrames = [];
+    }
+  },
+
+  setQuickPushTarget(target) {
+    state.quickPushTarget = target === 'top' ? 'top' : parseInt(target);
+    renderActiveTab();
+  },
 };
 
 // ---- Wire Paywall upgrade handler to pricing page ----
@@ -304,6 +365,15 @@ chrome.runtime.onMessage.addListener((msg) => {
       }
 
       render();
+
+      // Detect Shopify custom pixel frames for Quick Push targeting
+      if (state.cms?.cms === 'shopify') {
+        actions.detectCustomPixelFrames().then(() => {
+          if (state.customPixelFrames.length > 0 && state.activeTab === 'events') {
+            renderActiveTab();
+          }
+        });
+      }
       break;
     }
 

@@ -586,3 +586,74 @@ body {
 .tp-platform-toggle.locked {
   border-style: dashed;
 }
+
+/* ---- Quick Push Section ---- */
+
+.tp-quick-push-section {
+  margin: 8px 12px;
+  padding: 10px 14px;
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border);
+  border-radius: 10px;
+}
+
+.tp-quick-push-section.locked {
+  opacity: 0.7;
+}
+
+.tp-quick-push-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tp-quick-push-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid rgba(108, 92, 231, 0.3);
+  background: rgba(108, 92, 231, 0.1);
+  color: var(--tp-primary);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.tp-quick-push-btn:hover {
+  background: rgba(108, 92, 231, 0.2);
+  border-color: rgba(108, 92, 231, 0.5);
+}
+
+.tp-quick-push-btn.pushed {
+  background: rgba(0, 184, 148, 0.2);
+  border-color: rgba(0, 184, 148, 0.4);
+  color: var(--tp-success);
+}
+
+.tp-quick-push-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px;
+  text-align: center;
+}
+
+.tp-target-select {
+  background: var(--tp-bg);
+  border: 1px solid var(--tp-border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  color: var(--tp-text);
+  outline: none;
+  flex: 1;
+  max-width: 220px;
+}
+
+.tp-target-select:focus {
+  border-color: var(--tp-primary);
+}

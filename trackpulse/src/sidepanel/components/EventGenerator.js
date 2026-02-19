@@ -6,6 +6,7 @@
 import { syntaxHighlight, escapeHtml } from '../../shared/utils.js';
 import { renderDataExtracted } from './DataExtracted.js';
 import { applyCodePaywall, renderLockedButton, renderCMSGateBanner } from './Paywall.js';
+import { getSyntheticEvents } from '../../content/generators/synthetic-events.js';
 
 const PLATFORM_LABELS = {
   ga4: 'GA4',
@@ -76,6 +77,92 @@ export function renderEventGenerator(container, state, actions) {
     }
   }
 
+  // Compute synthetic events for Quick Push
+  const syntheticEvents = getSyntheticEvents(
+    state.pageType?.pageType,
+    state.ecommerceData
+  );
+  const hasFrames = (state.customPixelFrames || []).length > 0;
+  const quickPushTarget = state.quickPushTarget || 'top';
+
+  // Build Quick Push section HTML
+  let quickPushHtml = '';
+  if (syntheticEvents.length > 0) {
+    if (!capabilities?.canPushEvents) {
+      // Locked state for non-Pro users
+      quickPushHtml = `
+        <div class="tp-quick-push-section locked">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--tp-text); opacity: 0.5;">
+              &#9889; Quick Push
+            </span>
+            <span style="font-size: 10px; color: var(--tp-primary); font-weight: 700;">PRO</span>
+          </div>
+          <div class="tp-quick-push-locked">
+            <span style="font-size: 11px; color: var(--tp-text-muted);">
+              &#128274; Push synthetic events to test your tracking
+            </span>
+            <button id="quick-push-upgrade-btn" style="
+              margin-top: 8px; padding: 6px 14px; border-radius: 6px; border: none;
+              background: var(--tp-primary); color: white; font-size: 11px; font-weight: 600;
+              cursor: pointer;
+            ">Unlock with Pro</button>
+          </div>
+        </div>
+      `;
+    } else {
+      // Target selector (only when Shopify custom pixel frames detected)
+      let targetSelector = '';
+      if (hasFrames) {
+        const frameOptions = state.customPixelFrames
+          .map(
+            (f) =>
+              `<option value="${f.frameId}" ${quickPushTarget === f.frameId ? 'selected' : ''}>${escapeHtml(f.label)}</option>`
+          )
+          .join('');
+        targetSelector = `
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+            <span style="font-size: 11px; color: var(--tp-text-secondary);">Target:</span>
+            <select id="quick-push-target" class="tp-target-select">
+              <option value="top" ${quickPushTarget === 'top' ? 'selected' : ''}>dataLayer (top)</option>
+              ${frameOptions}
+            </select>
+          </div>
+        `;
+      }
+
+      // Event buttons
+      const buttons = syntheticEvents
+        .map(
+          (evt, i) => `
+          <button class="tp-quick-push-btn" data-synthetic-index="${i}" title="Push ${escapeHtml(evt.eventName)} to dataLayer">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2v10M8 2l-3 3M8 2l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M3 14h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            ${escapeHtml(evt.label)}
+          </button>
+        `
+        )
+        .join('');
+
+      quickPushHtml = `
+        <div class="tp-quick-push-section">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <span style="font-size: 12px; font-weight: 600; color: var(--tp-text);">
+              &#9889; Quick Push
+            </span>
+            <span style="font-size: 10px; color: var(--tp-text-muted);">Synthetic events</span>
+          </div>
+          ${targetSelector}
+          <div class="tp-quick-push-buttons" id="quick-push-buttons">
+            ${buttons}
+          </div>
+        </div>
+      `;
+    }
+  }
+
   // Build events HTML
   let eventsHtml = '';
 
@@ -94,6 +181,7 @@ export function renderEventGenerator(container, state, actions) {
       ${toggles}
     </div>
     ${dataSummary}
+    ${quickPushHtml}
     <div id="cms-gate-banner"></div>
     <div id="event-cards-container">
       ${eventsHtml}
@@ -105,6 +193,36 @@ export function renderEventGenerator(container, state, actions) {
   if (!cmsSupported) {
     const bannerEl = container.querySelector('#cms-gate-banner');
     renderCMSGateBanner(bannerEl, detectedCMS, capabilities.supportedCMS);
+  }
+
+  // Bind Quick Push buttons
+  if (syntheticEvents.length > 0 && capabilities?.canPushEvents) {
+    container.querySelectorAll('.tp-quick-push-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const index = parseInt(btn.dataset.syntheticIndex);
+        const evt = syntheticEvents[index];
+        if (evt) {
+          const target = state.quickPushTarget || 'top';
+          actions.pushSyntheticEvent(evt.code, target);
+          btn.classList.add('pushed');
+          setTimeout(() => btn.classList.remove('pushed'), 600);
+        }
+      });
+    });
+
+    const targetSelect = container.querySelector('#quick-push-target');
+    if (targetSelect) {
+      targetSelect.addEventListener('change', (e) => {
+        actions.setQuickPushTarget(e.target.value);
+      });
+    }
+  } else if (syntheticEvents.length > 0 && !capabilities?.canPushEvents) {
+    const upgradeBtn = container.querySelector('#quick-push-upgrade-btn');
+    if (upgradeBtn) {
+      upgradeBtn.addEventListener('click', () => {
+        if (actions.navigateToPricing) actions.navigateToPricing();
+      });
+    }
   }
 
   // Render event cards with plan gating (DOM-based for paywall overlay)

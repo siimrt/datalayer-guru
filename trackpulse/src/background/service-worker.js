@@ -173,6 +173,66 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
       return true; // Async sendResponse
     }
+
+    case MSG.LIST_FRAMES: {
+      // Discover Shopify custom pixel sandbox iframes in the active tab
+      getActiveTabId().then(async (activeTabId) => {
+        if (!activeTabId) {
+          sendResponse({ frames: [] });
+          return;
+        }
+        try {
+          const allFrames = await chrome.webNavigation.getAllFrames({ tabId: activeTabId });
+          const pixelFrames = (allFrames || []).filter((frame) => {
+            if (frame.frameId === 0) return false;
+            const url = frame.url || '';
+            return (
+              url.includes('web-pixels-manager') ||
+              url.includes('custom-pixels') ||
+              url.includes('shopify.com/pixels') ||
+              (url.startsWith('blob:') && frame.parentFrameId === 0)
+            );
+          });
+          sendResponse({
+            frames: pixelFrames.map((f) => ({
+              frameId: f.frameId,
+              url: f.url,
+              label: extractPixelFrameLabel(f.url),
+            })),
+          });
+        } catch (err) {
+          console.debug('[TrackPulse] LIST_FRAMES error:', err);
+          sendResponse({ frames: [] });
+        }
+      });
+      return true;
+    }
+
+    case MSG.EXECUTE_IN_FRAME: {
+      // Execute code in a specific iframe (Shopify custom pixel sandbox)
+      const { code, frameId } = msg.payload || {};
+      getActiveTabId().then(async (activeTabId) => {
+        if (!activeTabId) {
+          sendResponse({ success: false, error: 'No active tab' });
+          return;
+        }
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: activeTabId, frameIds: [frameId] },
+            world: 'MAIN',
+            func: (codeStr) => {
+              new Function(codeStr)();
+            },
+            args: [code],
+          });
+          sendResponse({ success: true });
+        } catch (err) {
+          console.debug('[TrackPulse] EXECUTE_IN_FRAME error:', err);
+          sendResponse({ success: false, error: err.message });
+        }
+      });
+      return true;
+    }
   }
 });
 
@@ -260,4 +320,16 @@ function forwardToExtensionPages(msg) {
   chrome.runtime.sendMessage(msg).catch(() => {
     // No listeners — side panel may not be open
   });
+}
+
+function extractPixelFrameLabel(url) {
+  if (!url) return 'Custom Pixel';
+  try {
+    const u = new URL(url);
+    const name = u.searchParams.get('name') || u.searchParams.get('pixel');
+    if (name) return `Custom Pixel: ${name}`;
+  } catch {}
+  if (url.includes('web-pixels-manager')) return 'Shopify Pixel Sandbox';
+  if (url.startsWith('blob:')) return 'Pixel Sandbox';
+  return 'Custom Pixel Frame';
 }
