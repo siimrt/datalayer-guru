@@ -64,6 +64,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       break;
     }
 
+    case MSG.NETWORK_REQUEST: {
+      // Forward tracking network request to side panel
+      forwardToExtensionPages(msg);
+      break;
+    }
+
     case MSG.REQUEST_REDETECT: {
       // Forward re-detect request to the active tab's content script
       getActiveTabId().then((activeTabId) => {

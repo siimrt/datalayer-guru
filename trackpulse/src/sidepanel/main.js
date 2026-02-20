@@ -10,7 +10,8 @@ import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
 import { renderEventGenerator } from './components/EventGenerator.js';
 import { renderAuditPanel } from './components/AuditPanel.js';
-import { renderDataLayerLive, appendDataLayerEntry } from './components/DataLayerLive.js';
+import { renderDataLayerLive, appendDataLayerEntry, appendNetworkEntry } from './components/DataLayerLive.js';
+import { parseNetworkRequest } from '../content/parsers/network-request-parser.js';
 import { renderPixelStatus } from './components/PixelStatus.js';
 import { renderSettingsPanel } from './components/SettingsPanel.js';
 import { renderFunnelMode, FunnelSession } from './components/FunnelMode.js';
@@ -51,6 +52,9 @@ const state = {
   // V2 Quick Push (synthetic events)
   customPixelFrames: [],    // [{frameId, url, label}] — detected Shopify custom pixel iframes
   quickPushTarget: 'top',   // 'top' or frameId (number)
+
+  // V2 Network request monitoring
+  networkRequests: [],      // Captured tracking platform network requests
 };
 
 // Funnel session singleton
@@ -144,6 +148,7 @@ const actions = {
 
   clearDataLayerStream() {
     state.dataLayerStream = [];
+    state.networkRequests = [];
     renderActiveTab();
   },
 
@@ -417,6 +422,40 @@ chrome.runtime.onMessage.addListener((msg) => {
       // If we're on the datalayer tab, append without full re-render
       if (state.activeTab === 'datalayer') {
         appendDataLayerEntry(tabContentEl, entry, state.dataLayerStream.length);
+      }
+      break;
+    }
+
+    case MSG.NETWORK_REQUEST: {
+      const netPayload = msg.payload;
+      const parsed = parseNetworkRequest(netPayload.platform, netPayload.url, netPayload.body);
+      const netEntry = {
+        id: Date.now() + Math.random(),
+        timestamp: new Date(netPayload.timestamp || Date.now()),
+        platform: netPayload.platform,
+        url: netPayload.url,
+        method: netPayload.method,
+        eventName: parsed.eventName,
+        params: parsed.params,
+        items: parsed.items,
+        measurementId: parsed.measurementId || null,
+        pixelId: parsed.pixelId || null,
+      };
+      state.networkRequests.unshift(netEntry);
+
+      // Keep max 500 entries
+      if (state.networkRequests.length > 500) {
+        state.networkRequests = state.networkRequests.slice(0, 500);
+      }
+
+      // If on audit tab, re-render to show network status
+      if (state.activeTab === 'audit') {
+        renderActiveTab();
+      }
+
+      // If on datalayer tab, append network entry to live stream
+      if (state.activeTab === 'datalayer') {
+        appendNetworkEntry(tabContentEl, netEntry, state.networkRequests.length);
       }
       break;
     }

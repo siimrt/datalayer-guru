@@ -89,6 +89,9 @@ export function renderAuditPanel(container, state, actions) {
     }
   }
 
+  // Network Requests section
+  auditHtml += renderNetworkRequestsSection(state.networkRequests || []);
+
   // Action buttons
   auditHtml += `
     <div class="p-3 flex gap-2">
@@ -202,6 +205,77 @@ function renderFieldDiffs(item) {
   `;
 }
 
+const PLATFORM_LABELS = {
+  ga4: 'GA4', meta: 'Meta', tiktok: 'TikTok',
+  pinterest: 'Pinterest', snapchat: 'Snapchat', linkedin: 'LinkedIn',
+};
+
+function renderNetworkRequestsSection(networkRequests) {
+  if (networkRequests.length === 0) {
+    return `
+      <div class="tp-card">
+        <div class="p-3">
+          <div class="text-[12px] font-medium mb-2" style="display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--tp-text-muted);">&#9889;</span>
+            Network Requests
+          </div>
+          <div class="text-[11px] text-tp-text-muted">
+            No tracking network requests captured yet. Interact with the page to trigger events.
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Group by platform
+  const byPlatform = {};
+  for (const req of networkRequests) {
+    if (!byPlatform[req.platform]) byPlatform[req.platform] = [];
+    byPlatform[req.platform].push(req);
+  }
+
+  const platformRows = Object.entries(byPlatform).map(([platform, reqs]) => {
+    const events = [...new Set(reqs.map((r) => r.eventName).filter(Boolean))];
+    const count = reqs.length;
+    const label = PLATFORM_LABELS[platform] || platform;
+
+    return `
+      <div class="flex items-start gap-2 py-2 border-b border-tp-border last:border-0">
+        <div class="mt-1"><span class="tp-dot tp-dot-green"></span></div>
+        <div class="flex-1">
+          <div class="text-[12px]">
+            <span class="font-medium">${label}</span>
+            <span class="text-tp-text-muted"> &mdash; ${count} request${count > 1 ? 's' : ''}</span>
+          </div>
+          <div class="text-[11px] text-tp-text-secondary mt-1">
+            ${events.length > 0
+              ? events.map((e) => `<span class="tp-badge tp-badge-page mr-1 mb-1" style="display:inline-block; font-size:10px; padding: 1px 6px;">${escapeHtml(e)}</span>`).join('')
+              : '<span class="text-tp-text-muted">No event names parsed</span>'
+            }
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="tp-card">
+      <div class="p-3">
+        <div class="text-[12px] font-medium mb-2" style="display: flex; align-items: center; gap: 6px;">
+          <span style="color: #F0932B;">&#9889;</span>
+          Network Requests Detected
+          <span style="
+            font-size: 10px; color: var(--tp-text-muted);
+            background: var(--tp-surface-hover); padding: 1px 6px;
+            border-radius: 10px; border: 1px solid var(--tp-border);
+          ">${networkRequests.length}</span>
+        </div>
+        ${platformRows}
+      </div>
+    </div>
+  `;
+}
+
 function generateTextAuditReport(state) {
   const lines = [];
   const pageType = state.pageType?.pageType || 'unknown';
@@ -233,6 +307,23 @@ function generateTextAuditReport(state) {
   lines.push(`Pixels Detected:`);
   for (const p of state.pixels || []) {
     lines.push(`  ${p.active ? '[ON]' : '[--]'} ${p.platform}: ${p.id || 'ID unknown'}`);
+  }
+
+  lines.push(``);
+  lines.push(`Network Requests:`);
+  const netReqs = state.networkRequests || [];
+  if (netReqs.length === 0) {
+    lines.push(`  No tracking requests captured`);
+  } else {
+    const byPlatform = {};
+    for (const r of netReqs) {
+      if (!byPlatform[r.platform]) byPlatform[r.platform] = [];
+      byPlatform[r.platform].push(r);
+    }
+    for (const [platform, reqs] of Object.entries(byPlatform)) {
+      const events = [...new Set(reqs.map((r) => r.eventName).filter(Boolean))];
+      lines.push(`  ${PLATFORM_LABELS[platform] || platform}: ${reqs.length} request(s) — events: ${events.join(', ') || 'unknown'}`);
+    }
   }
 
   lines.push(``);

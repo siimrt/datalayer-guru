@@ -136,6 +136,47 @@ export function appendDataLayerEntry(container, entry, number) {
   }
 }
 
+/**
+ * Append a new network request entry to the live stream without full re-render.
+ */
+export function appendNetworkEntry(container, entry, number) {
+  const entriesEl = container.querySelector('#dl-entries');
+  if (!entriesEl) return;
+
+  // Apply filter check before appending
+  if (filterText) {
+    const str = JSON.stringify(entry).toLowerCase();
+    if (!str.includes(filterText.toLowerCase())) return;
+  }
+
+  // Remove empty state if present
+  const emptyEl = entriesEl.querySelector('.tp-empty');
+  if (emptyEl) emptyEl.remove();
+
+  // Add new entry at top
+  const html = renderNetworkStreamEntry(entry, number);
+  entriesEl.insertAdjacentHTML('afterbegin', html);
+
+  // Bind click on new entry
+  const newEntry = entriesEl.firstElementChild;
+  if (newEntry) {
+    newEntry.addEventListener('click', (e) => {
+      if (e.target.closest('.dl-copy-btn')) return;
+      toggleEntry(newEntry);
+    });
+    const copyBtn = newEntry.querySelector('.dl-copy-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const json = copyBtn.dataset.json;
+        navigator.clipboard.writeText(json).catch(() => {});
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1000);
+      });
+    }
+  }
+}
+
 function bindEntryClicks(container) {
   container.querySelectorAll('.tp-dl-entry').forEach((entry) => {
     entry.addEventListener('click', (e) => {
@@ -477,4 +518,87 @@ function buildPreview(data, info) {
   }
 
   return '';
+}
+
+// ---- Network Request Entry Rendering ----
+
+const PLATFORM_COLORS = {
+  ga4: '#5B9BD5', meta: '#1877F2', tiktok: '#69C9D0',
+  pinterest: '#E60023', snapchat: '#FFFC00', linkedin: '#0A66C2',
+};
+const PLATFORM_LABELS = {
+  ga4: 'GA4', meta: 'Meta', tiktok: 'TikTok',
+  pinterest: 'Pinterest', snapchat: 'Snap', linkedin: 'LinkedIn',
+};
+
+function renderNetworkStreamEntry(entry, number) {
+  const time = formatTime(entry.timestamp);
+  const isExpanded = expandedEntries.has(String(entry.id));
+
+  const color = PLATFORM_COLORS[entry.platform] || '#F0932B';
+  const platformLabel = PLATFORM_LABELS[entry.platform] || entry.platform;
+  const eventLabel = entry.eventName || 'request';
+
+  let detailObj = {
+    platform: entry.platform,
+    eventName: entry.eventName,
+    method: entry.method,
+    params: entry.params,
+    items: entry.items,
+    url: entry.url,
+  };
+  if (entry.measurementId) detailObj.measurementId = entry.measurementId;
+  if (entry.pixelId) detailObj.pixelId = entry.pixelId;
+
+  let jsonStr;
+  try {
+    jsonStr = JSON.stringify(detailObj, null, 2);
+  } catch (e) {
+    jsonStr = String(entry.url);
+  }
+
+  let urlPath = '';
+  try { urlPath = new URL(entry.url).pathname.slice(0, 60); } catch (e) {}
+
+  return `
+    <div class="tp-dl-entry animate-slide-in" data-entry-id="${entry.id}" data-type="network" style="border-left: 2px solid #F0932B;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+        <div style="display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1;">
+          <span style="font-size: 9px; color: var(--tp-text-muted); min-width: 22px; text-align: right;">#${number}</span>
+          <span style="font-size: 10px; color: var(--tp-text-muted); min-width: 52px;">${time}</span>
+          <span style="
+            display: inline-block; font-size: 8px; padding: 1px 4px; border-radius: 3px;
+            background: rgba(240, 147, 43, 0.2); color: #F0932B; font-weight: 700;
+            letter-spacing: 0.5px;
+          ">NET</span>
+          <span style="font-size: 12px; font-weight: 600; color: ${color}; white-space: nowrap;">
+            ${escapeHtml(eventLabel)}
+          </span>
+          <span style="
+            font-size: 9px; padding: 1px 5px; border-radius: 3px;
+            background: rgba(91, 155, 213, 0.12);
+            color: ${color}; white-space: nowrap;
+          ">${platformLabel}</span>
+        </div>
+        <svg class="tp-chevron ${isExpanded ? 'open' : ''}" width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div style="
+        font-size: 10px; color: var(--tp-text-muted);
+        margin: 3px 0 0 84px; overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap;
+      ">${entry.method} ${escapeHtml(urlPath)}</div>
+      <div class="tp-dl-detail" style="display: ${isExpanded ? 'block' : 'none'}; margin-top: 8px;">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 4px;">
+          <button class="dl-copy-btn" data-json="${escapeHtml(jsonStr)}" style="
+            font-size: 10px; color: var(--tp-text-muted); background: var(--tp-surface);
+            border: 1px solid var(--tp-border); border-radius: 4px;
+            padding: 2px 8px; cursor: pointer;
+          ">Copy</button>
+        </div>
+        <div class="code-block text-[10.5px]">${syntaxHighlight(jsonStr)}</div>
+      </div>
+    </div>
+  `;
 }

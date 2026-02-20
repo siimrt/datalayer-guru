@@ -317,6 +317,108 @@
     }
   } catch (e) {}
 
+  // --- Set up network request monitoring (guard to prevent double-hooking on re-injection) ---
+  try {
+    if (!window.__TRACKPULSE_NET_HOOKED__) {
+      window.__TRACKPULSE_NET_HOOKED__ = true;
+
+      // Inline endpoint matching (can't import modules in MAIN world IIFE)
+      var _TP_TRACKING_PATTERNS = [
+        { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
+        { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$/ },
+        { platform: 'tiktok',    re: /analytics\.tiktok\.com/ },
+        { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\// },
+        { platform: 'snapchat',  re: /tr\.snapchat\.com\// },
+        { platform: 'linkedin',  re: /px\.ads\.linkedin\.com\/collect/ },
+      ];
+
+      function _tpMatchUrl(url) {
+        if (!url || typeof url !== 'string') return null;
+        for (var i = 0; i < _TP_TRACKING_PATTERNS.length; i++) {
+          if (_TP_TRACKING_PATTERNS[i].re.test(url)) return _TP_TRACKING_PATTERNS[i].platform;
+        }
+        return null;
+      }
+
+      function _tpPostNetworkHit(platform, url, method, body) {
+        try {
+          window.postMessage({
+            type: 'TRACKPULSE_NETWORK_REQUEST',
+            payload: {
+              platform: platform,
+              url: String(url).slice(0, 4000),
+              method: method,
+              body: body ? String(body).slice(0, 8000) : null,
+              timestamp: Date.now(),
+            },
+          }, '*');
+        } catch (e) {}
+      }
+
+      // Hook fetch
+      var _origFetch = window.fetch;
+      window.fetch = function (input, init) {
+        try {
+          var url = typeof input === 'string' ? input
+                    : (input instanceof Request) ? input.url
+                    : String(input);
+          var platform = _tpMatchUrl(url);
+          if (platform) {
+            var method = (init && init.method) || (input instanceof Request ? input.method : 'GET');
+            var body = null;
+            if (init && init.body) {
+              if (typeof init.body === 'string') body = init.body;
+              else if (init.body instanceof URLSearchParams) body = init.body.toString();
+            }
+            _tpPostNetworkHit(platform, url, method, body);
+          }
+        } catch (e) {}
+        return _origFetch.apply(this, arguments);
+      };
+
+      // Hook XMLHttpRequest
+      var _origXHROpen = XMLHttpRequest.prototype.open;
+      var _origXHRSend = XMLHttpRequest.prototype.send;
+
+      XMLHttpRequest.prototype.open = function (method, url) {
+        this.__tp_method = method;
+        this.__tp_url = String(url);
+        return _origXHROpen.apply(this, arguments);
+      };
+
+      XMLHttpRequest.prototype.send = function (body) {
+        try {
+          if (this.__tp_url) {
+            var platform = _tpMatchUrl(this.__tp_url);
+            if (platform) {
+              _tpPostNetworkHit(
+                platform,
+                this.__tp_url,
+                this.__tp_method || 'GET',
+                body ? String(body) : null
+              );
+            }
+          }
+        } catch (e) {}
+        return _origXHRSend.apply(this, arguments);
+      };
+
+      // Hook navigator.sendBeacon
+      if (navigator.sendBeacon) {
+        var _origBeacon = navigator.sendBeacon.bind(navigator);
+        navigator.sendBeacon = function (url, data) {
+          try {
+            var platform = _tpMatchUrl(String(url));
+            if (platform) {
+              _tpPostNetworkHit(platform, String(url), 'BEACON', data ? String(data) : null);
+            }
+          } catch (e) {}
+          return _origBeacon.apply(navigator, arguments);
+        };
+      }
+    }
+  } catch (e) {}
+
   // --- Listen for code execution requests (guard to prevent duplicates on re-injection) ---
   if (!window.__TRACKPULSE_EXECUTE_LISTENER__) {
     window.__TRACKPULSE_EXECUTE_LISTENER__ = true;

@@ -56,6 +56,10 @@ export function initBridge() {
       });
     }
 
+    if (type === 'TRACKPULSE_NETWORK_REQUEST') {
+      sendMessage(MSG.NETWORK_REQUEST, payload);
+    }
+
     if (type === 'TRACKPULSE_EXECUTE_RESULT') {
       // Could dispatch a custom event for code that's waiting on execution results
       document.dispatchEvent(
