@@ -231,6 +231,15 @@ const actions = {
     try {
       const response = await chrome.runtime.sendMessage({ type: MSG.LIST_FRAMES });
       state.customPixelFrames = response?.frames || [];
+
+      if (state.customPixelFrames.length > 0) {
+        // Auto-select first custom pixel frame on Shopify (it's where GTM/GA4 runs)
+        if (state.cms?.cms === 'shopify' && state.quickPushTarget === 'top') {
+          state.quickPushTarget = state.customPixelFrames[0].frameId;
+        }
+      }
+
+      // If previously selected target no longer exists, reset
       if (state.quickPushTarget !== 'top') {
         const exists = state.customPixelFrames.some(
           (f) => f.frameId === state.quickPushTarget
@@ -377,8 +386,11 @@ chrome.runtime.onMessage.addListener((msg) => {
 
       render();
 
-      // Detect Shopify custom pixel frames for Quick Push targeting
-      if (state.cms?.cms === 'shopify') {
+      // Detect custom pixel frames for Quick Push targeting
+      // Always detect on Shopify; also on checkout/thank_you pages (Shopify checkout may be on checkout.shopify.com)
+      const isShopify = state.cms?.cms === 'shopify';
+      const isCheckout = state.pageType?.pageType === 'checkout' || state.pageType?.pageType === 'thank_you';
+      if (isShopify || isCheckout) {
         actions.detectCustomPixelFrames().then(() => {
           if (state.customPixelFrames.length > 0 && state.activeTab === 'events') {
             renderActiveTab();

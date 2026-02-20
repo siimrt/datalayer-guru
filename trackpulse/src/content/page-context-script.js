@@ -317,30 +317,26 @@
     }
   } catch (e) {}
 
-  // --- Listen for code execution requests ---
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    if (event.data?.type === 'TRACKPULSE_EXECUTE_IN_PAGE') {
-      try {
-        // Use Function constructor instead of eval for slightly better safety
-        const fn = new Function(event.data.code);
-        fn();
-        window.postMessage(
-          {
-            type: 'TRACKPULSE_EXECUTE_RESULT',
-            payload: { success: true },
-          },
-          '*'
-        );
-      } catch (err) {
-        window.postMessage(
-          {
-            type: 'TRACKPULSE_EXECUTE_RESULT',
-            payload: { success: false, error: err.message },
-          },
-          '*'
-        );
+  // --- Listen for code execution requests (guard to prevent duplicates on re-injection) ---
+  if (!window.__TRACKPULSE_EXECUTE_LISTENER__) {
+    window.__TRACKPULSE_EXECUTE_LISTENER__ = true;
+    window.addEventListener('message', (event) => {
+      if (event.source !== window) return;
+      if (event.data?.type === 'TRACKPULSE_EXECUTE_IN_PAGE') {
+        try {
+          const fn = new Function(event.data.code);
+          fn();
+          window.postMessage(
+            { type: 'TRACKPULSE_EXECUTE_RESULT', payload: { success: true } },
+            '*'
+          );
+        } catch (err) {
+          window.postMessage(
+            { type: 'TRACKPULSE_EXECUTE_RESULT', payload: { success: false, error: err.message } },
+            '*'
+          );
+        }
       }
-    }
-  });
+    });
+  }
 })();

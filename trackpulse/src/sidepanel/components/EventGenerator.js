@@ -131,6 +131,21 @@ export function renderEventGenerator(container, state, actions) {
         `;
       }
 
+      // Build data preview showing what real page data will be used
+      let dataPreview = '';
+      const previewPageType = state.pageType?.pageType;
+      if (previewPageType === 'product' && state.ecommerceData?.product) {
+        const p = state.ecommerceData.product;
+        const priceStr = p.price != null ? ` \u2014 ${p.currency || ''}${p.price}` : '';
+        dataPreview = `${p.name || 'Product'}${priceStr}`;
+      } else if ((previewPageType === 'checkout' || previewPageType === 'cart') && state.ecommerceData?.cart) {
+        const c = state.ecommerceData.cart;
+        dataPreview = `${c.items?.length || 0} items \u2014 ${c.currency || ''}${c.totalValue || '?'}`;
+      } else if (previewPageType === 'thank_you' && state.ecommerceData?.order) {
+        const o = state.ecommerceData.order;
+        dataPreview = `Order ${o.transactionId || '?'} \u2014 ${o.currency || ''}${o.value || '?'}`;
+      }
+
       // Event buttons
       const buttons = syntheticEvents
         .map(
@@ -154,6 +169,7 @@ export function renderEventGenerator(container, state, actions) {
             </span>
             <span style="font-size: 10px; color: var(--tp-text-muted);">Synthetic events</span>
           </div>
+          ${dataPreview ? `<div style="font-size: 10px; color: var(--tp-text-muted); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Using: ${escapeHtml(dataPreview)}</div>` : ''}
           ${targetSelector}
           <div class="tp-quick-push-buttons" id="quick-push-buttons">
             ${buttons}

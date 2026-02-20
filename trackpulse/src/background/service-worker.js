@@ -183,7 +183,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
 
     case MSG.LIST_FRAMES: {
-      // Discover Shopify custom pixel sandbox iframes in the active tab
+      // Discover Shopify custom pixel sandbox iframes in the active tab.
+      // Strategy: find candidate frames by URL, then probe each for a dataLayer.
       getActiveTabId().then(async (activeTabId) => {
         if (!activeTabId) {
           sendResponse({ frames: [] });
@@ -191,23 +192,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         try {
           const allFrames = await chrome.webNavigation.getAllFrames({ tabId: activeTabId });
-          const pixelFrames = (allFrames || []).filter((frame) => {
+          // Step 1: broad candidate filter — any non-top frame on a Shopify-related URL
+          const candidates = (allFrames || []).filter((frame) => {
             if (frame.frameId === 0) return false;
-            const url = frame.url || '';
+            const url = (frame.url || '').toLowerCase();
             return (
               url.includes('web-pixels-manager') ||
               url.includes('custom-pixels') ||
-              url.includes('shopify.com/pixels') ||
-              (url.startsWith('blob:') && frame.parentFrameId === 0)
+              url.includes('shopify') ||
+              url.includes('pixel') ||
+              url.includes('wpm') ||
+              url.includes('sandbox') ||
+              url.startsWith('blob:') ||
+              url === 'about:srcdoc' ||
+              url === ''
             );
           });
-          sendResponse({
-            frames: pixelFrames.map((f) => ({
-              frameId: f.frameId,
-              url: f.url,
-              label: extractPixelFrameLabel(f.url),
-            })),
-          });
+
+          if (candidates.length === 0) {
+            sendResponse({ frames: [] });
+            return;
+          }
+
+          // Step 2: probe each candidate to check if it has a dataLayer
+          const probeResults = [];
+          for (const frame of candidates) {
+            try {
+              const result = await chrome.scripting.executeScript({
+                target: { tabId: activeTabId, frameIds: [frame.frameId] },
+                world: 'MAIN',
+                func: () => {
+                  const hasDL = !!(window.dataLayer && Array.isArray(window.dataLayer));
+                  const dlLen = hasDL ? window.dataLayer.length : 0;
+                  // Try to find a GTM container ID
+                  let gtmId = null;
+                  if (hasDL) {
+                    for (const entry of window.dataLayer) {
+                      if (entry?.['gtm.uniqueEventId'] !== undefined || entry?.['gtm.start']) {
+                        gtmId = 'GTM detected';
+                        break;
+                      }
+                    }
+                  }
+                  return { hasDL, dlLen, gtmId, title: document.title || null };
+                },
+              });
+              const probeData = result?.[0]?.result;
+              if (probeData?.hasDL) {
+                probeResults.push({
+                  frameId: frame.frameId,
+                  url: frame.url,
+                  label: extractPixelFrameLabel(frame.url, probeData),
+                  hasDataLayer: true,
+                  dataLayerLength: probeData.dlLen,
+                });
+              }
+            } catch (probeErr) {
+              // Frame not accessible (cross-origin sandbox) — skip
+            }
+          }
+
+          sendResponse({ frames: probeResults });
         } catch (err) {
           console.debug('[TrackPulse] LIST_FRAMES error:', err);
           sendResponse({ frames: [] });
@@ -330,14 +375,23 @@ function forwardToExtensionPages(msg) {
   });
 }
 
-function extractPixelFrameLabel(url) {
-  if (!url) return 'Custom Pixel';
-  try {
-    const u = new URL(url);
-    const name = u.searchParams.get('name') || u.searchParams.get('pixel');
-    if (name) return `Custom Pixel: ${name}`;
-  } catch {}
-  if (url.includes('web-pixels-manager')) return 'Shopify Pixel Sandbox';
-  if (url.startsWith('blob:')) return 'Pixel Sandbox';
-  return 'Custom Pixel Frame';
+function extractPixelFrameLabel(url, probeData) {
+  let label = 'Custom Pixel';
+  if (url) {
+    try {
+      const u = new URL(url);
+      const name = u.searchParams.get('name') || u.searchParams.get('pixel');
+      if (name) { label = `Custom Pixel: ${name}`; }
+      else if (url.includes('web-pixels-manager')) { label = 'Shopify Pixel Sandbox'; }
+      else if (url.startsWith('blob:') || url === 'about:srcdoc') { label = 'Pixel Sandbox'; }
+    } catch {
+      if (url.includes('shopify')) { label = 'Shopify Pixel'; }
+    }
+  }
+  // Append dataLayer info from probe
+  if (probeData) {
+    const suffix = probeData.gtmId ? ' (GTM)' : ` (dL: ${probeData.dlLen})`;
+    label += suffix;
+  }
+  return label;
 }
