@@ -412,7 +412,7 @@ function classifyEvent(data) {
     // Custom/user events
     return {
       label: evt,
-      color: '#DFE6E9',
+      color: 'var(--tp-text-secondary)',
       category: 'custom',
     };
   }

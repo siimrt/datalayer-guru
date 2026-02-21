@@ -31,8 +31,8 @@ export function renderPlanBadge(container, plan, onUpgrade) {
   if (isFree && onUpgrade) {
     badge.addEventListener('click', onUpgrade);
     badge.addEventListener('mouseenter', () => {
-      badge.style.borderColor = '#6C5CE7';
-      badge.style.background = '#2a1f4e';
+      badge.style.borderColor = 'var(--tp-primary)';
+      badge.style.background = 'rgba(108, 92, 231, 0.2)';
     });
     badge.addEventListener('mouseleave', () => {
       badge.style.borderColor = c.border;

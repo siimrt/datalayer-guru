@@ -128,12 +128,12 @@ function renderBillingToggle() {
         background: ${billingCycle === 'annual' ? 'var(--tp-primary)' : 'transparent'};
         color: ${billingCycle === 'annual' ? '#fff' : 'var(--tp-text-muted)'};
       ">Annual <span style="
-        font-size: 9px; background: rgba(0,184,148,0.15); color: #00B894;
+        font-size: 9px; background: rgba(0,184,148,0.15); color: var(--tp-success);
         padding: 1px 4px; border-radius: 3px; margin-left: 2px;
       ">-33%</span></button>
     </div>
     ${billingCycle === 'annual' ? `
-    <div style="text-align: center; font-size: 10px; color: #00B894; margin-top: -10px; margin-bottom: 12px;">
+    <div style="text-align: center; font-size: 10px; color: var(--tp-success); margin-top: -10px; margin-bottom: 12px;">
       2 months free
     </div>` : ''}
   `;
@@ -154,7 +154,7 @@ function renderCompactCard(planKey, currentPlan) {
   let boxShadow = 'none';
   let marginTop = '0';
   if (isPro) {
-    borderStyle = '2px solid #6C5CE7';
+    borderStyle = '2px solid var(--tp-primary)';
     boxShadow = '0 0 16px rgba(108, 92, 231, 0.25)';
     marginTop = '-4px';
   }
@@ -183,7 +183,7 @@ function renderCompactCard(planKey, currentPlan) {
     if (isPro) {
       ctaHtml = `<button data-plan-nickname="${nickname}" style="
         width: 100%; padding: 8px 4px; border-radius: 6px; border: none;
-        background: #6C5CE7; color: white; font-size: 11px; font-weight: 700;
+        background: var(--tp-primary); color: white; font-size: 11px; font-weight: 700;
         cursor: pointer; transition: all 0.2s;
       ">Choose Pro</button>`;
     } else {
@@ -211,7 +211,7 @@ function renderCompactCard(planKey, currentPlan) {
       ${isPro ? `
       <div style="
         position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
-        background: #6C5CE7; color: white; font-size: 8px; font-weight: 700;
+        background: var(--tp-primary); color: white; font-size: 8px; font-weight: 700;
         padding: 2px 8px; border-radius: 8px; letter-spacing: 0.5px;
         white-space: nowrap;
       ">&#11088; POPULAR</div>` : ''}
@@ -250,13 +250,13 @@ function renderFeatureTable(currentPlan) {
       <tr style="border-bottom: 1px solid var(--tp-border);">
         <td style="padding: 5px 4px; font-size: 11px; color: var(--tp-text-secondary);">${label}</td>
         <td style="padding: 5px 2px; text-align: center; font-size: 11px;">
-          ${starter ? '<span style="color: #00B894;">&#10003;</span>' : '<span style="color: var(--tp-text-muted);">&mdash;</span>'}
+          ${starter ? '<span style="color: var(--tp-success);">&#10003;</span>' : '<span style="color: var(--tp-text-muted);">&mdash;</span>'}
         </td>
         <td style="padding: 5px 2px; text-align: center; font-size: 11px;">
-          ${pro ? '<span style="color: #00B894;">&#10003;</span>' : '<span style="color: var(--tp-text-muted);">&mdash;</span>'}
+          ${pro ? '<span style="color: var(--tp-success);">&#10003;</span>' : '<span style="color: var(--tp-text-muted);">&mdash;</span>'}
         </td>
         <td style="padding: 5px 2px; text-align: center; font-size: 11px;">
-          ${agency ? '<span style="color: #00B894;">&#10003;</span>' : '<span style="color: var(--tp-text-muted);">&mdash;</span>'}
+          ${agency ? '<span style="color: var(--tp-success);">&#10003;</span>' : '<span style="color: var(--tp-text-muted);">&mdash;</span>'}
         </td>
       </tr>
     `;
@@ -335,7 +335,7 @@ function bindPricingEvents(container, state, onBack) {
     const isProBtn = btn.dataset.planNickname?.includes('pro');
     if (isProBtn) {
       btn.addEventListener('mouseenter', () => { btn.style.background = '#7d6ef0'; });
-      btn.addEventListener('mouseleave', () => { btn.style.background = '#6C5CE7'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--tp-primary)'; });
     } else {
       btn.addEventListener('mouseenter', () => { btn.style.borderColor = 'var(--tp-primary)'; });
       btn.addEventListener('mouseleave', () => { btn.style.borderColor = 'var(--tp-border)'; });

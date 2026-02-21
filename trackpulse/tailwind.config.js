@@ -7,17 +7,17 @@ export default {
     extend: {
       colors: {
         tp: {
-          bg: '#0F0F10',
-          surface: '#1A1A1E',
-          'surface-hover': '#252529',
-          border: '#2E2E34',
-          primary: '#6C5CE7',
-          success: '#00B894',
-          warning: '#FDCB6E',
-          error: '#FF6B6B',
-          text: '#E8E8ED',
-          'text-secondary': '#9B9BAE',
-          'text-muted': '#5E5E72',
+          bg: 'var(--tp-bg)',
+          surface: 'var(--tp-surface)',
+          'surface-hover': 'var(--tp-surface-hover)',
+          border: 'var(--tp-border)',
+          primary: 'var(--tp-primary)',
+          success: 'var(--tp-success)',
+          warning: 'var(--tp-warning)',
+          error: 'var(--tp-error)',
+          text: 'var(--tp-text)',
+          'text-secondary': 'var(--tp-text-secondary)',
+          'text-muted': 'var(--tp-text-muted)',
         }
       },
       fontFamily: {

@@ -49,12 +49,12 @@ export function resolvePlanFromId(planId) {
   return null;
 }
 
-// Plan display configuration
+// Plan display configuration (uses rgba for dual-theme support)
 export const PLAN_CONFIG = {
-  free: { label: 'FREE', bg: '#2E2E34', text: '#9B9BAE', border: '#3E3E44' },
-  starter: { label: 'STARTER', bg: '#1a2744', text: '#5B9BD5', border: '#2a3f5f' },
-  pro: { label: 'PRO', bg: '#2a1f4e', text: '#6C5CE7', border: '#3d2d6b' },
-  agency: { label: 'AGENCY', bg: '#3a2f1a', text: '#FDCB6E', border: '#5a4a2a' },
+  free: { label: 'FREE', bg: 'rgba(155, 155, 174, 0.12)', text: 'var(--tp-text-muted)', border: 'rgba(155, 155, 174, 0.2)' },
+  starter: { label: 'STARTER', bg: 'rgba(91, 155, 213, 0.12)', text: '#5B9BD5', border: 'rgba(91, 155, 213, 0.2)' },
+  pro: { label: 'PRO', bg: 'rgba(108, 92, 231, 0.12)', text: '#6C5CE7', border: 'rgba(108, 92, 231, 0.2)' },
+  agency: { label: 'AGENCY', bg: 'rgba(253, 203, 110, 0.15)', text: '#D4A017', border: 'rgba(253, 203, 110, 0.25)' },
 };
 
 // Plan pricing (for display in paywalls)

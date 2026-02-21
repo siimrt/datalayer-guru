@@ -85,6 +85,10 @@ export function applyCodePaywall(codeBlock, feature, upgradePlan) {
   codeBlock.parentNode.insertBefore(wrapper, codeBlock);
   wrapper.appendChild(codeBlock);
 
+  // Dynamic gradient based on theme
+  const isDark = document.documentElement.classList.contains('dark');
+  const rgb = isDark ? '15, 15, 16' : '250, 250, 250';
+
   // Blur gradient overlay (shows top ~3 lines clearly)
   const overlay = document.createElement('div');
   overlay.className = 'paywall-overlay';
@@ -95,9 +99,9 @@ export function applyCodePaywall(codeBlock, feature, upgradePlan) {
       to bottom,
       transparent 0%,
       transparent 25%,
-      rgba(15, 15, 16, 0.7) 40%,
-      rgba(15, 15, 16, 0.95) 60%,
-      rgba(15, 15, 16, 1) 80%
+      rgba(${rgb}, 0.7) 40%,
+      rgba(${rgb}, 0.95) 60%,
+      rgba(${rgb}, 1) 80%
     );
     backdrop-filter: blur(3px);
     display: flex;
@@ -112,17 +116,17 @@ export function applyCodePaywall(codeBlock, feature, upgradePlan) {
 
   overlay.innerHTML = `
     <div style="text-align: center; padding: 16px; max-width: 280px;">
-      <div style="font-size: 13px; color: #E8E8ED; margin-bottom: 12px; line-height: 1.4;">
+      <div style="font-size: 13px; color: var(--tp-text); margin-bottom: 12px; line-height: 1.4;">
         &#128274; ${getPaywallMessage(feature)}
       </div>
       <button class="paywall-upgrade-btn" style="
-        background: #6C5CE7; color: white; border: none;
+        background: var(--tp-primary); color: white; border: none;
         padding: 8px 20px; border-radius: 6px; font-size: 13px;
         font-weight: 600; cursor: pointer; transition: all 0.2s; width: 100%;
       ">
         Unlock ${upgradePlan.charAt(0).toUpperCase() + upgradePlan.slice(1)} (${planPrice})
       </button>
-      <div style="font-size: 11px; color: #5E5E72; margin-top: 8px;">
+      <div style="font-size: 11px; color: var(--tp-text-muted); margin-top: 8px;">
         30-day money-back guarantee
       </div>
     </div>
@@ -133,7 +137,7 @@ export function applyCodePaywall(codeBlock, feature, upgradePlan) {
   const btn = overlay.querySelector('.paywall-upgrade-btn');
   btn.addEventListener('click', triggerUpgrade);
   btn.addEventListener('mouseenter', () => { btn.style.background = '#7d6ef0'; });
-  btn.addEventListener('mouseleave', () => { btn.style.background = '#6C5CE7'; });
+  btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--tp-primary)'; });
 }
 
 /**
@@ -149,20 +153,20 @@ export function renderSectionPaywall(container, feature, upgradePlan) {
       justify-content: center; min-height: 200px; padding: 32px 24px; text-align: center;
     ">
       <div style="font-size: 40px; margin-bottom: 16px;">${getPaywallIcon(feature)}</div>
-      <div style="font-size: 15px; font-weight: 600; color: #E8E8ED; margin-bottom: 8px;">
+      <div style="font-size: 15px; font-weight: 600; color: var(--tp-text); margin-bottom: 8px;">
         ${getPaywallTitle(feature)}
       </div>
-      <div style="font-size: 13px; color: #9B9BAE; margin-bottom: 20px; line-height: 1.5; max-width: 300px;">
+      <div style="font-size: 13px; color: var(--tp-text-secondary); margin-bottom: 20px; line-height: 1.5; max-width: 300px;">
         ${getPaywallMessage(feature)}
       </div>
       <button class="section-paywall-btn" style="
-        background: #6C5CE7; color: white; border: none;
+        background: var(--tp-primary); color: white; border: none;
         padding: 10px 24px; border-radius: 8px; font-size: 14px;
         font-weight: 600; cursor: pointer; transition: all 0.2s;
       ">
         Upgrade to ${planLabel} (${planPrice}) &rarr;
       </button>
-      <div style="font-size: 11px; color: #5E5E72; margin-top: 12px;">
+      <div style="font-size: 11px; color: var(--tp-text-muted); margin-top: 12px;">
         &#10003; Cancel anytime &middot; &#10003; 30-day guarantee
       </div>
     </div>
@@ -175,7 +179,7 @@ export function renderSectionPaywall(container, feature, upgradePlan) {
     btn.style.transform = 'scale(1.02)';
   });
   btn.addEventListener('mouseleave', () => {
-    btn.style.background = '#6C5CE7';
+    btn.style.background = 'var(--tp-primary)';
     btn.style.transform = 'scale(1)';
   });
 }
@@ -194,8 +198,8 @@ export function renderLockedButton(container, label, feature, upgradePlan) {
     triggerUpgrade();
   });
   btn.addEventListener('mouseenter', () => {
-    btn.style.borderColor = '#6C5CE7';
-    btn.style.color = '#9B9BAE';
+    btn.style.borderColor = 'var(--tp-primary)';
+    btn.style.color = 'var(--tp-text-secondary)';
   });
   btn.addEventListener('mouseleave', () => {
     btn.style.borderColor = '';
@@ -222,19 +226,19 @@ export function renderCMSGateBanner(container, detectedCMS, supportedCMS) {
 
   const banner = document.createElement('div');
   banner.style.cssText = `
-    background: linear-gradient(135deg, #1a1a2e 0%, #1a1a1e 100%);
-    border: 1px solid #6C5CE7; border-radius: 8px;
+    background: var(--tp-surface);
+    border: 1px solid var(--tp-primary); border-radius: 8px;
     padding: 16px; margin: 12px; text-align: center;
   `;
   banner.innerHTML = `
-    <div style="font-size: 14px; color: #E8E8ED; margin-bottom: 4px;">
+    <div style="font-size: 14px; color: var(--tp-text); margin-bottom: 4px;">
       ${cmsLabel} detected
     </div>
-    <div style="font-size: 12px; color: #9B9BAE; margin-bottom: 12px;">
+    <div style="font-size: 12px; color: var(--tp-text-secondary); margin-bottom: 12px;">
       ${cmsLabel} support requires ${needed} plan
     </div>
     <button class="cms-gate-upgrade-btn" style="
-      background: #6C5CE7; color: white; border: none; padding: 8px 16px;
+      background: var(--tp-primary); color: white; border: none; padding: 8px 16px;
       border-radius: 6px; font-size: 12px; cursor: pointer;
     ">Upgrade to ${needed}</button>
   `;

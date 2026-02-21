@@ -8,6 +8,17 @@ import { MSG } from '../shared/messaging.js';
 import { getPlanCapabilities } from '../licensing/feature-gates.js';
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
+
+// ---- Theme Initialization ----
+// Apply saved theme before first paint to avoid flash
+(async function initTheme() {
+  try {
+    const data = await chrome.storage.local.get('tp_theme');
+    if ((data.tp_theme || 'light') === 'dark') {
+      document.documentElement.classList.add('dark');
+    }
+  } catch (e) {}
+})();
 import { renderEventGenerator } from './components/EventGenerator.js';
 import { renderAuditPanel } from './components/AuditPanel.js';
 import { renderDataLayerLive, appendDataLayerEntry, appendNetworkEntry } from './components/DataLayerLive.js';
@@ -258,6 +269,16 @@ const actions = {
 
   setQuickPushTarget(target) {
     state.quickPushTarget = target === 'top' ? 'top' : parseInt(target);
+    renderActiveTab();
+  },
+
+  toggleTheme(theme) {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    chrome.storage.local.set({ tp_theme: theme });
     renderActiveTab();
   },
 };
@@ -565,10 +586,10 @@ function showUpgradeSuccess(plan) {
   overlay.innerHTML = `
     <div style="text-align: center; animation: slide-in 0.3s ease;">
       <div style="font-size: 48px; margin-bottom: 12px;">&#127881;</div>
-      <div style="font-size: 18px; font-weight: 700; color: #E8E8ED;">
+      <div style="font-size: 18px; font-weight: 700; color: var(--tp-text);">
         Welcome to ${plan.charAt(0).toUpperCase() + plan.slice(1)}!
       </div>
-      <div style="font-size: 13px; color: #9B9BAE; margin-top: 8px;">
+      <div style="font-size: 13px; color: var(--tp-text-secondary); margin-top: 8px;">
         All features unlocked
       </div>
     </div>

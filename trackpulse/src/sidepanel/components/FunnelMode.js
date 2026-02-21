@@ -162,15 +162,15 @@ function renderIdleState(container, funnelSession, capabilities) {
   container.innerHTML = `
     <div style="padding: 16px; text-align: center;">
       <div style="font-size: 32px; margin-bottom: 12px;">&#128279;</div>
-      <div style="color: #E8E8ED; font-size: 14px; font-weight: 600; margin-bottom: 8px;">
+      <div style="color: var(--tp-text); font-size: 14px; font-weight: 600; margin-bottom: 8px;">
         Funnel Mode
       </div>
-      <div style="color: #9B9BAE; font-size: 12px; margin-bottom: 16px; line-height: 1.5;">
+      <div style="color: var(--tp-text-secondary); font-size: 12px; margin-bottom: 16px; line-height: 1.5;">
         Record your navigation through a purchase funnel.<br>
         TrackPulse will audit tracking on each step.
       </div>
       <button id="funnel-start-btn" style="
-        background: #6C5CE7; color: white; border: none;
+        background: var(--tp-primary); color: white; border: none;
         padding: 10px 24px; border-radius: 8px;
         font-size: 13px; font-weight: 600; cursor: pointer;
         transition: all 0.2s;
@@ -184,7 +184,7 @@ function renderIdleState(container, funnelSession, capabilities) {
     renderRecordingState(container, funnelSession, capabilities);
   });
   startBtn.addEventListener('mouseenter', () => { startBtn.style.background = '#7d6ef0'; });
-  startBtn.addEventListener('mouseleave', () => { startBtn.style.background = '#6C5CE7'; });
+  startBtn.addEventListener('mouseleave', () => { startBtn.style.background = 'var(--tp-primary)'; });
 }
 
 function renderRecordingState(container, funnelSession, capabilities) {
@@ -193,10 +193,10 @@ function renderRecordingState(container, funnelSession, capabilities) {
   container.innerHTML = `
     <div style="padding: 16px;">
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
-        <div style="width: 8px; height: 8px; background: #FF6B6B; border-radius: 50; animation: pulse-custom 1s infinite;"></div>
-        <span style="color: #FF6B6B; font-size: 13px; font-weight: 600;">Recording Funnel...</span>
+        <div style="width: 8px; height: 8px; background: var(--tp-error); border-radius: 50%; animation: pulse-custom 1s infinite;"></div>
+        <span style="color: var(--tp-error); font-size: 13px; font-weight: 600;">Recording Funnel...</span>
       </div>
-      <div style="color: #9B9BAE; font-size: 12px; margin-bottom: 12px;">
+      <div style="color: var(--tp-text-secondary); font-size: 12px; margin-bottom: 12px;">
         ${steps.length} page${steps.length !== 1 ? 's' : ''} captured.
         Navigate to the next page in the funnel.
       </div>
@@ -205,16 +205,17 @@ function renderRecordingState(container, funnelSession, capabilities) {
         try { pathname = new URL(step.url).pathname; } catch (e) { pathname = step.url; }
         return `
         <div style="
-          background: #1A1A1E; border-radius: 6px; padding: 8px 12px;
-          margin-bottom: 4px; border-left: 3px solid #6C5CE7;
+          background: var(--tp-surface); border-radius: 6px; padding: 8px 12px;
+          margin-bottom: 4px; border-left: 3px solid var(--tp-primary);
           display: flex; justify-content: space-between; align-items: center;
+          border: 1px solid var(--tp-border);
         ">
-          <span style="color: #E8E8ED; font-size: 12px;">${i + 1}. ${step.pageType}</span>
-          <span style="color: #5E5E72; font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pathname}</span>
+          <span style="color: var(--tp-text); font-size: 12px;">${i + 1}. ${step.pageType}</span>
+          <span style="color: var(--tp-text-muted); font-size: 11px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${pathname}</span>
         </div>`;
       }).join('')}
       <button id="funnel-stop-btn" style="
-        background: #FF6B6B; color: white; border: none;
+        background: var(--tp-error); color: white; border: none;
         padding: 10px 0; border-radius: 8px; width: 100%;
         font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 12px;
         transition: all 0.2s;
@@ -229,32 +230,33 @@ function renderRecordingState(container, funnelSession, capabilities) {
 }
 
 function renderFunnelReport(container, report, funnelSession, capabilities) {
-  const scoreColor = report.overallScore >= 80 ? '#00B894' : report.overallScore >= 50 ? '#FDCB6E' : '#FF6B6B';
+  const scoreColor = report.overallScore >= 80 ? 'var(--tp-success)' : report.overallScore >= 50 ? 'var(--tp-warning)' : 'var(--tp-error)';
 
   container.innerHTML = `
     <div style="padding: 16px;">
       <div style="text-align: center; margin-bottom: 20px;">
         <div style="font-size: 36px; font-weight: 700; color: ${scoreColor};">${report.overallScore}%</div>
-        <div style="color: #9B9BAE; font-size: 12px;">Overall Funnel Score</div>
+        <div style="color: var(--tp-text-secondary); font-size: 12px;">Overall Funnel Score</div>
       </div>
 
       <div style="margin-bottom: 16px;">
-        <div style="color: #E8E8ED; font-size: 13px; font-weight: 600; margin-bottom: 8px;">Funnel Steps</div>
+        <div style="color: var(--tp-text); font-size: 13px; font-weight: 600; margin-bottom: 8px;">Funnel Steps</div>
         ${report.steps.map((step) => {
-          const stepColor = step.overallScore >= 80 ? '#00B894' : step.overallScore >= 50 ? '#FDCB6E' : '#FF6B6B';
+          const stepColor = step.overallScore >= 80 ? 'var(--tp-success)' : step.overallScore >= 50 ? 'var(--tp-warning)' : 'var(--tp-error)';
           let pathname = '';
           try { pathname = new URL(step.url).pathname; } catch (e) { pathname = step.url; }
           return `
           <div style="
-            background: #1A1A1E; border-radius: 6px; padding: 10px 12px;
+            background: var(--tp-surface); border-radius: 6px; padding: 10px 12px;
             margin-bottom: 4px; border-left: 3px solid ${stepColor};
+            border: 1px solid var(--tp-border);
           ">
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-              <span style="color: #E8E8ED; font-size: 12px; font-weight: 600;">${step.stepNumber}. ${step.pageType}</span>
+              <span style="color: var(--tp-text); font-size: 12px; font-weight: 600;">${step.stepNumber}. ${step.pageType}</span>
               <span style="color: ${stepColor}; font-size: 12px;">${step.overallScore}%</span>
             </div>
-            <div style="color: #5E5E72; font-size: 11px;">${pathname}</div>
-            <div style="color: #9B9BAE; font-size: 11px; margin-top: 4px;">
+            <div style="color: var(--tp-text-muted); font-size: 11px;">${pathname}</div>
+            <div style="color: var(--tp-text-secondary); font-size: 11px; margin-top: 4px;">
               GA4: ${step.eventsFound.ga4} found, ${step.eventsMissing.ga4} missing &middot;
               Meta: ${step.eventsFound.meta} found, ${step.eventsMissing.meta} missing
             </div>
@@ -264,24 +266,24 @@ function renderFunnelReport(container, report, funnelSession, capabilities) {
 
       ${report.missingSteps.length > 0 ? `
       <div style="
-        background: rgba(255, 107, 107, 0.1); border: 1px solid rgba(255, 107, 107, 0.3);
+        background: rgba(231, 76, 60, 0.08); border: 1px solid rgba(231, 76, 60, 0.2);
         border-radius: 6px; padding: 10px 12px; margin-bottom: 16px;
       ">
-        <div style="color: #FF6B6B; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Missing funnel steps:</div>
-        <div style="color: #9B9BAE; font-size: 12px;">${report.missingSteps.join(', ')}</div>
+        <div style="color: var(--tp-error); font-size: 12px; font-weight: 600; margin-bottom: 4px;">Missing funnel steps:</div>
+        <div style="color: var(--tp-text-secondary); font-size: 12px;">${report.missingSteps.join(', ')}</div>
       </div>
       ` : ''}
 
       <div style="display: flex; gap: 8px;">
         ${capabilities.canExportPDF ? `
         <button id="funnel-export-btn" style="
-          background: #1A1A1E; color: #E8E8ED; border: 1px solid #2E2E34;
+          background: var(--tp-surface); color: var(--tp-text); border: 1px solid var(--tp-border);
           padding: 8px 16px; border-radius: 6px; font-size: 12px; cursor: pointer; flex: 1;
           transition: all 0.2s;
         ">&#128196; Export PDF</button>
         ` : ''}
         <button id="funnel-new-btn" style="
-          background: #6C5CE7; color: white; border: none;
+          background: var(--tp-primary); color: white; border: none;
           padding: 8px 16px; border-radius: 6px; font-size: 12px; cursor: pointer; flex: 1;
           transition: all 0.2s;
         ">&#128279; New Funnel</button>

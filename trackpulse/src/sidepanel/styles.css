@@ -22,7 +22,24 @@
 }
 
 /* ---- Base Styles ---- */
+
+/* Light mode (default) */
 :root {
+  --tp-bg: #FAFAFA;
+  --tp-surface: #FFFFFF;
+  --tp-surface-hover: #F0F0F5;
+  --tp-border: #E5E5EA;
+  --tp-primary: #6C5CE7;
+  --tp-success: #00B894;
+  --tp-warning: #E67E22;
+  --tp-error: #E74C3C;
+  --tp-text: #1A1A2E;
+  --tp-text-secondary: #6B6B80;
+  --tp-text-muted: #9B9BB0;
+}
+
+/* Dark mode */
+html.dark {
   --tp-bg: #0F0F10;
   --tp-surface: #1A1A1E;
   --tp-surface-hover: #252529;
@@ -59,17 +76,25 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--tp-border);
+  background: #D0D0D8;
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
+  background: #B0B0B8;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: var(--tp-border);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
   background: var(--tp-text-muted);
 }
 
 /* ---- Code Block Styling ---- */
 .code-block {
-  background: #13131A;
+  background: #F5F5FA;
   border: 1px solid var(--tp-border);
   border-radius: 8px;
   padding: 12px;
@@ -82,12 +107,23 @@ body {
   color: var(--tp-text);
 }
 
-/* Syntax highlighting */
-.syn-string { color: #A8E6A3; }
-.syn-number { color: #F9CA56; }
-.syn-keyword { color: #FF6B9D; }
-.syn-function { color: #7DABF8; }
-.syn-key { color: #C4A7E7; }
+html.dark .code-block {
+  background: #13131A;
+}
+
+/* Syntax highlighting — light mode */
+.syn-string { color: #16A085; }
+.syn-number { color: #E67E22; }
+.syn-keyword { color: #E74C3C; }
+.syn-function { color: #2980B9; }
+.syn-key { color: #8E44AD; }
+
+/* Syntax highlighting — dark mode */
+html.dark .syn-string { color: #A8E6A3; }
+html.dark .syn-number { color: #F9CA56; }
+html.dark .syn-keyword { color: #FF6B9D; }
+html.dark .syn-function { color: #7DABF8; }
+html.dark .syn-key { color: #C4A7E7; }
 
 /* ---- Component Styles ---- */
 
@@ -109,16 +145,31 @@ body {
 }
 
 .tp-badge-cms {
+  background: rgba(108, 92, 231, 0.12);
+  color: #6C5CE7;
+}
+
+.tp-badge-page {
+  background: rgba(0, 184, 148, 0.12);
+  color: #00B894;
+}
+
+.tp-badge-currency {
+  background: rgba(253, 203, 110, 0.12);
+  color: #D4A017;
+}
+
+html.dark .tp-badge-cms {
   background: rgba(108, 92, 231, 0.15);
   color: #A29BFE;
 }
 
-.tp-badge-page {
+html.dark .tp-badge-page {
   background: rgba(0, 184, 148, 0.15);
   color: #55EFC4;
 }
 
-.tp-badge-currency {
+html.dark .tp-badge-currency {
   background: rgba(253, 203, 110, 0.15);
   color: #FDCB6E;
 }
@@ -485,6 +536,10 @@ body {
   color: var(--tp-text);
   z-index: 1000;
   animation: slide-in 0.2s ease-out;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+html.dark .tp-toast {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -656,4 +711,95 @@ body {
 
 .tp-target-select:focus {
   border-color: var(--tp-primary);
+}
+
+/* ---- Synthetic Event Cards (Premium Quick Push) ---- */
+
+.tp-playground-section {
+  margin: 8px 12px;
+}
+
+.tp-synthetic-card {
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border);
+  border-left: 3px solid var(--tp-primary);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.tp-synthetic-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.tp-synthetic-card-header:hover {
+  background: var(--tp-surface-hover);
+}
+
+.tp-synthetic-code-preview {
+  max-height: 120px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tp-synthetic-code-preview.expanded {
+  max-height: none;
+}
+
+.tp-synthetic-code-fade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: linear-gradient(transparent, var(--tp-surface));
+  pointer-events: none;
+}
+
+.tp-synthetic-code-preview.expanded .tp-synthetic-code-fade {
+  display: none;
+}
+
+.tp-synthetic-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px 10px;
+}
+
+/* Theme toggle (segmented control) */
+.tp-theme-toggle {
+  display: flex;
+  background: var(--tp-bg);
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.tp-theme-toggle button {
+  flex: 1;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+  color: var(--tp-text-muted);
+}
+
+.tp-theme-toggle button.active {
+  background: var(--tp-surface);
+  color: var(--tp-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+html.dark .tp-theme-toggle button.active {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }

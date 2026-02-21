@@ -1,6 +1,7 @@
 /**
  * EventGenerator Component — Shows generated events grouped by platform.
  * V2: Plan-gated features — blurred code on Free, locked Copy/Push buttons.
+ * Quick Push: Expandable code preview cards below event cards.
  */
 
 import { syntaxHighlight, escapeHtml } from '../../shared/utils.js';
@@ -85,13 +86,13 @@ export function renderEventGenerator(container, state, actions) {
   const hasFrames = (state.customPixelFrames || []).length > 0;
   const quickPushTarget = state.quickPushTarget || 'top';
 
-  // Build Quick Push section HTML
+  // Build Quick Push section HTML (now placed BELOW event cards)
   let quickPushHtml = '';
   if (syntheticEvents.length > 0) {
     if (!capabilities?.canPushEvents) {
       // Locked state for non-Pro users
       quickPushHtml = `
-        <div class="tp-quick-push-section locked">
+        <div class="tp-quick-push-section locked" style="margin-top: 4px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
             <span style="font-size: 12px; font-weight: 600; color: var(--tp-text); opacity: 0.5;">
               &#9889; Quick Push
@@ -121,7 +122,7 @@ export function renderEventGenerator(container, state, actions) {
           )
           .join('');
         targetSelector = `
-          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 10px;">
             <span style="font-size: 11px; color: var(--tp-text-secondary);">Target:</span>
             <select id="quick-push-target" class="tp-target-select">
               <option value="top" ${quickPushTarget === 'top' ? 'selected' : ''}>dataLayer (top)</option>
@@ -131,49 +132,51 @@ export function renderEventGenerator(container, state, actions) {
         `;
       }
 
-      // Build data preview showing what real page data will be used
-      let dataPreview = '';
-      const previewPageType = state.pageType?.pageType;
-      if (previewPageType === 'product' && state.ecommerceData?.product) {
-        const p = state.ecommerceData.product;
-        const priceStr = p.price != null ? ` \u2014 ${p.currency || ''}${p.price}` : '';
-        dataPreview = `${p.name || 'Product'}${priceStr}`;
-      } else if ((previewPageType === 'checkout' || previewPageType === 'cart') && state.ecommerceData?.cart) {
-        const c = state.ecommerceData.cart;
-        dataPreview = `${c.items?.length || 0} items \u2014 ${c.currency || ''}${c.totalValue || '?'}`;
-      } else if (previewPageType === 'thank_you' && state.ecommerceData?.order) {
-        const o = state.ecommerceData.order;
-        dataPreview = `Order ${o.transactionId || '?'} \u2014 ${o.currency || ''}${o.value || '?'}`;
-      }
+      // Build expandable code preview cards for each synthetic event
+      const syntheticCards = syntheticEvents.map((evt, i) => {
+        const jsonPreview = JSON.stringify(evt.data, null, 2);
+        const highlighted = syntaxHighlight(jsonPreview);
 
-      // Event buttons
-      const buttons = syntheticEvents
-        .map(
-          (evt, i) => `
-          <button class="tp-quick-push-btn" data-synthetic-index="${i}" title="Push ${escapeHtml(evt.eventName)} to dataLayer">
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
-              <path d="M8 2v10M8 2l-3 3M8 2l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M3 14h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            </svg>
-            ${escapeHtml(evt.label)}
-          </button>
-        `
-        )
-        .join('');
+        return `
+          <div class="tp-synthetic-card" data-synthetic-index="${i}">
+            <div class="tp-synthetic-card-header" data-toggle-code="${i}">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 13px;">&#9889;</span>
+                <span style="font-size: 12px; font-weight: 600; color: var(--tp-text);">${escapeHtml(evt.eventName)}</span>
+              </div>
+              <button class="tp-btn tp-btn-sm tp-btn-primary" data-push-index="${i}" style="padding: 4px 12px;">
+                Push
+              </button>
+            </div>
+            <div style="padding: 0 14px;">
+              <div class="tp-synthetic-code-preview" id="synthetic-code-${i}">
+                <div class="code-block" style="margin: 0; border-radius: 6px; font-size: 10.5px;">${highlighted}</div>
+                <div class="tp-synthetic-code-fade"></div>
+              </div>
+            </div>
+            <div class="tp-synthetic-actions">
+              <button class="tp-btn tp-btn-sm" data-expand-index="${i}" style="font-size: 10px; padding: 3px 8px;">
+                Show more
+              </button>
+              <button class="tp-btn tp-btn-sm" data-copy-index="${i}" style="font-size: 10px; padding: 3px 8px;">
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>
+                Copy
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
 
       quickPushHtml = `
-        <div class="tp-quick-push-section">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-            <span style="font-size: 12px; font-weight: 600; color: var(--tp-text);">
+        <div class="tp-playground-section">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <span style="font-size: 13px; font-weight: 600; color: var(--tp-text);">
               &#9889; Quick Push
             </span>
             <span style="font-size: 10px; color: var(--tp-text-muted);">Synthetic events</span>
           </div>
-          ${dataPreview ? `<div style="font-size: 10px; color: var(--tp-text-muted); margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Using: ${escapeHtml(dataPreview)}</div>` : ''}
           ${targetSelector}
-          <div class="tp-quick-push-buttons" id="quick-push-buttons">
-            ${buttons}
-          </div>
+          ${syntheticCards}
         </div>
       `;
     }
@@ -192,16 +195,17 @@ export function renderEventGenerator(container, state, actions) {
     `;
   }
 
+  // Layout: Platform toggles → Data Summary → CMS Gate → Event Cards → Quick Push (moved below)
   container.innerHTML = `
     <div class="p-3 flex gap-2 flex-wrap border-b border-tp-border">
       ${toggles}
     </div>
     ${dataSummary}
-    ${quickPushHtml}
     <div id="cms-gate-banner"></div>
     <div id="event-cards-container">
       ${eventsHtml}
     </div>
+    ${quickPushHtml}
     <div class="h-4"></div>
   `;
 
@@ -211,21 +215,70 @@ export function renderEventGenerator(container, state, actions) {
     renderCMSGateBanner(bannerEl, detectedCMS, capabilities.supportedCMS);
   }
 
-  // Bind Quick Push buttons
+  // Bind Quick Push expandable card interactions
   if (syntheticEvents.length > 0 && capabilities?.canPushEvents) {
-    container.querySelectorAll('.tp-quick-push-btn').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const index = parseInt(btn.dataset.syntheticIndex);
+    // Push buttons
+    container.querySelectorAll('[data-push-index]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const index = parseInt(btn.dataset.pushIndex);
         const evt = syntheticEvents[index];
         if (evt) {
           const target = state.quickPushTarget || 'top';
           actions.pushSyntheticEvent(evt.code, target);
-          btn.classList.add('pushed');
-          setTimeout(() => btn.classList.remove('pushed'), 600);
+          const originalText = btn.textContent;
+          btn.textContent = 'Pushed!';
+          btn.style.background = 'var(--tp-success)';
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.background = '';
+          }, 800);
         }
       });
     });
 
+    // Expand/collapse buttons
+    container.querySelectorAll('[data-expand-index]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const index = btn.dataset.expandIndex;
+        const preview = container.querySelector(`#synthetic-code-${index}`);
+        if (preview) {
+          const isExpanded = preview.classList.contains('expanded');
+          preview.classList.toggle('expanded');
+          btn.textContent = isExpanded ? 'Show more' : 'Show less';
+        }
+      });
+    });
+
+    // Header toggle (expand/collapse code)
+    container.querySelectorAll('[data-toggle-code]').forEach((header) => {
+      header.addEventListener('click', (e) => {
+        // Don't toggle when clicking the push button inside the header
+        if (e.target.closest('[data-push-index]')) return;
+        const index = header.dataset.toggleCode;
+        const preview = container.querySelector(`#synthetic-code-${index}`);
+        if (preview) {
+          preview.classList.toggle('expanded');
+          const expandBtn = container.querySelector(`[data-expand-index="${index}"]`);
+          if (expandBtn) {
+            expandBtn.textContent = preview.classList.contains('expanded') ? 'Show less' : 'Show more';
+          }
+        }
+      });
+    });
+
+    // Copy buttons
+    container.querySelectorAll('[data-copy-index]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const index = parseInt(btn.dataset.copyIndex);
+        const evt = syntheticEvents[index];
+        if (evt) {
+          actions.copyCode(evt.code);
+        }
+      });
+    });
+
+    // Target selector
     const targetSelect = container.querySelector('#quick-push-target');
     if (targetSelect) {
       targetSelect.addEventListener('change', (e) => {
