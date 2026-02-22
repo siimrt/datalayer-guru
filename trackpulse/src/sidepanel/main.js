@@ -508,6 +508,11 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.capabilities = resolvePlanCapabilities(state.plan);
       state.planLoading = false;
 
+      if (state.plan !== oldPlan) {
+        identifyUser(state.plan, state.userEmail);
+        trackEvent('subscription_changed', { from: oldPlan, to: state.plan });
+      }
+
       // If on pricing page and plan upgraded, show success animation
       if (state.activeTab === 'pricing' && state.plan !== 'free' && state.plan !== oldPlan) {
         showUpgradeSuccess(state.plan);

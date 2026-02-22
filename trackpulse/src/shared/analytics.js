@@ -2,15 +2,19 @@
  * PostHog Analytics Module for TrackPulse Extension.
  * Uses posthog-js-lite (MV3 compatible, no remote code execution).
  *
- * Setup: Replace POSTHOG_API_KEY with your PostHog project API key.
- * Dashboard: https://app.posthog.com
+ * Setup:
+ *   1. Copy .env.example to .env.local
+ *   2. Set VITE_POSTHOG_KEY=phc_xxx (from PostHog project settings)
+ *   3. Rebuild — the key is injected at build time via Vite, never committed.
+ *
+ * Docs: https://posthog.com/docs/libraries/js-lite (npm: posthog-js-lite)
  */
 
 import PostHog from 'posthog-js-lite';
 
-// ---- Configuration ----
-const POSTHOG_API_KEY = '__POSTHOG_API_KEY__'; // TODO: Replace with your PostHog project API key
-const POSTHOG_HOST = 'https://eu.i.posthog.com'; // EU region; use 'https://us.i.posthog.com' for US
+// ---- Configuration (injected at build time by Vite) ----
+const POSTHOG_API_KEY = import.meta.env.VITE_POSTHOG_KEY || '';
+const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST || 'https://eu.i.posthog.com';
 
 // ---- Singleton ----
 let posthog = null;
@@ -22,17 +26,16 @@ let posthog = null;
  */
 export function initAnalytics() {
   if (posthog) return; // Already initialized
-  if (!POSTHOG_API_KEY || POSTHOG_API_KEY === '__POSTHOG_API_KEY__') {
-    console.debug('[TrackPulse Analytics] PostHog API key not configured — analytics disabled.');
+  if (!POSTHOG_API_KEY) {
+    console.debug('[TrackPulse Analytics] VITE_POSTHOG_KEY not set — analytics disabled.');
     return;
   }
 
   try {
     posthog = new PostHog(POSTHOG_API_KEY, {
       host: POSTHOG_HOST,
-      flushAt: 10,       // Batch up to 10 events before flushing
+      flushAt: 10,         // Batch up to 10 events before flushing
       flushInterval: 30000, // Flush every 30s
-      captureMode: 'json',
     });
 
     // Generate or retrieve a stable anonymous ID from chrome.storage
@@ -65,8 +68,10 @@ export function trackEvent(eventName, properties = {}) {
 }
 
 /**
- * Identify the user (e.g. after plan resolution).
- * Sets person properties on the PostHog user profile.
+ * Identify the user and set person properties (plan, email).
+ * posthog-js-lite identify(distinctId, properties):
+ *   - distinctId: if undefined, keeps the current ID
+ *   - properties: flat object treated as $set (person properties)
  */
 export function identifyUser(plan, email) {
   if (!posthog) return;
