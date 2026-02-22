@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .screenshot {
+    width: 1280px;
+    height: 800px;
+    background: linear-gradient(155deg, #1A1A2E 0%, #0F0F10 50%, #1A1025 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .screenshot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108, 92, 231, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108, 92, 231, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .glow-1 {
+    position: absolute; width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(108, 92, 231, 0.1) 0%, transparent 70%);
+    top: -100px; left: 300px;
+  }
+  .glow-2 {
+    position: absolute; width: 300px; height: 300px;
+    background: radial-gradient(circle, rgba(212, 160, 23, 0.06) 0%, transparent 70%);
+    bottom: -50px; right: 200px;
+  }
+
+  .title-section {
+    position: relative; z-index: 1; text-align: center; margin-bottom: 40px;
+  }
+  .title-section h2 {
+    font-size: 32px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px; margin-bottom: 10px;
+  }
+  .title-section h2 em {
+    font-style: normal;
+    background: linear-gradient(135deg, #A29BFE, #6C5CE7);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .title-section p {
+    font-size: 16px; color: rgba(255, 255, 255, 0.5); font-weight: 400;
+  }
+
+  .content-row {
+    position: relative; z-index: 1;
+    display: flex; gap: 32px; align-items: flex-start;
+  }
+
+  /* Funnel panel */
+  .funnel-panel {
+    width: 380px;
+    background: #FFFFFF;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .fp-h {
+    padding: 10px 14px;
+    border-bottom: 1px solid #E5E5EA;
+    display: flex; gap: 6px; align-items: center;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 5px; font-size: 10.5px; font-weight: 600;
+  }
+  .b-cms { background: rgba(108, 92, 231, 0.12); color: #6C5CE7; }
+  .b-plan { background: rgba(108, 92, 231, 0.15); color: #6C5CE7; font-size: 9.5px; margin-left: auto; }
+  .fp-tabs {
+    display: flex; border-bottom: 1px solid #E5E5EA; padding: 0 6px;
+  }
+  .fp-tab {
+    flex: 1; padding: 8px 4px; text-align: center;
+    font-size: 10.5px; font-weight: 500; color: #9B9BB0;
+    border-bottom: 2px solid transparent;
+  }
+  .fp-tab.active { color: #6C5CE7; border-bottom-color: #6C5CE7; }
+
+  .funnel-header {
+    padding: 12px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .funnel-title {
+    font-size: 14px; font-weight: 700; color: #1A1A2E;
+  }
+  .funnel-controls {
+    display: flex; gap: 6px;
+  }
+  .f-btn {
+    padding: 4px 10px; border-radius: 6px;
+    font-size: 10px; font-weight: 600;
+    border: 1px solid #E5E5EA; background: white; color: #6B6B80;
+  }
+  .f-btn-stop {
+    background: #E74C3C; color: white; border-color: #E74C3C;
+  }
+  .f-btn-export {
+    background: #6C5CE7; color: white; border-color: #6C5CE7;
+  }
+
+  .funnel-progress {
+    padding: 0 14px 12px;
+    font-size: 10px; color: #9B9BB0;
+  }
+  .progress-bar {
+    height: 4px; background: #E5E5EA; border-radius: 4px;
+    margin-top: 4px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: #6C5CE7; border-radius: 4px; width: 80%;
+  }
+
+  /* Funnel steps */
+  .funnel-steps {
+    padding: 0 14px 14px;
+  }
+  .f-step {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0;
+  }
+  .f-step-line {
+    display: flex; flex-direction: column; align-items: center;
+    width: 20px; flex-shrink: 0;
+  }
+  .f-step-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-weight: 700; color: white;
+    flex-shrink: 0;
+  }
+  .f-step-connector {
+    width: 2px; height: 24px;
+    margin: 4px 0;
+  }
+  .f-step-complete .f-step-dot { background: #00B894; }
+  .f-step-complete .f-step-connector { background: #00B894; }
+  .f-step-partial .f-step-dot { background: #E67E22; }
+  .f-step-partial .f-step-connector { background: #E67E22; }
+  .f-step-current .f-step-dot { background: #6C5CE7; box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.2); }
+  .f-step-current .f-step-connector { background: #E5E5EA; }
+  .f-step-pending .f-step-dot { background: #E5E5EA; }
+  .f-step-pending .f-step-connector { background: #E5E5EA; }
+
+  .f-step-content { flex: 1; }
+  .f-step-title {
+    font-size: 12px; font-weight: 600; color: #1A1A2E;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .f-step-url {
+    font-size: 10px; color: #9B9BB0; font-family: 'JetBrains Mono', monospace;
+    margin-top: 2px;
+  }
+  .f-step-stats {
+    display: flex; gap: 8px; margin-top: 4px;
+  }
+  .f-stat {
+    font-size: 10px; font-weight: 600;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .f-stat-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+  }
+  .f-stat-green { color: #00B894; }
+  .f-stat-green .f-stat-dot { background: #00B894; }
+  .f-stat-orange { color: #E67E22; }
+  .f-stat-orange .f-stat-dot { background: #E67E22; }
+  .f-stat-red { color: #E74C3C; }
+  .f-stat-red .f-stat-dot { background: #E74C3C; }
+
+  /* Pricing cards */
+  .pricing-section {
+    display: flex; flex-direction: column; gap: 12px;
+    width: 480px;
+  }
+  .pricing-title {
+    font-size: 18px; font-weight: 700; color: #FFFFFF;
+    margin-bottom: 4px;
+  }
+  .pricing-subtitle {
+    font-size: 12px; color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 8px;
+  }
+
+  .pricing-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .price-card {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 18px 16px;
+    position: relative;
+  }
+  .price-card.popular {
+    border-color: rgba(108, 92, 231, 0.4);
+    background: rgba(108, 92, 231, 0.08);
+  }
+  .price-card.popular::before {
+    content: 'MOST POPULAR';
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #6C5CE7;
+    color: white;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+  .pc-name {
+    font-size: 14px; font-weight: 700; color: #FFFFFF;
+    margin-bottom: 4px;
+  }
+  .pc-price {
+    font-size: 26px; font-weight: 800; color: #FFFFFF;
+    margin-bottom: 2px;
+  }
+  .pc-price span {
+    font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.4);
+  }
+  .pc-features {
+    list-style: none;
+    margin-top: 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .pc-features li {
+    font-size: 11px; color: rgba(255, 255, 255, 0.65);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pc-check {
+    color: #00B894; font-size: 12px; flex-shrink: 0;
+  }
+  .pc-features li.highlight {
+    color: #A29BFE; font-weight: 600;
+  }
+
+  .pc-free .pc-name { color: rgba(255,255,255,0.6); }
+  .pc-free .pc-price { color: rgba(255,255,255,0.6); }
+
+  .pc-starter .pc-name { color: #5B9BD5; }
+  .pc-pro .pc-name { color: #A29BFE; }
+  .pc-agency .pc-name { color: #D4A017; }
+
+  .guarantee {
+    text-align: center;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.35);
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="screenshot">
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+
+  <div class="title-section">
+    <h2>Audit entire funnels & <em>choose your plan</em></h2>
+    <p>Record multi-page purchase flows and validate tracking at every step</p>
+  </div>
+
+  <div class="content-row">
+    <!-- Funnel panel -->
+    <div class="funnel-panel">
+      <div class="fp-h">
+        <div class="badge b-cms">Shopify</div>
+        <div class="badge b-plan">PRO</div>
+      </div>
+      <div class="fp-tabs">
+        <div class="fp-tab">Events</div>
+        <div class="fp-tab">Audit</div>
+        <div class="fp-tab">DataLayer</div>
+        <div class="fp-tab">Pixels</div>
+        <div class="fp-tab active">Funnel</div>
+      </div>
+
+      <div class="funnel-header">
+        <div class="funnel-title">Funnel Recording</div>
+        <div class="funnel-controls">
+          <div class="f-btn f-btn-stop">Stop</div>
+          <div class="f-btn f-btn-export">Export PDF</div>
+        </div>
+      </div>
+
+      <div class="funnel-progress">
+        4 of 5 steps recorded
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      </div>
+
+      <div class="funnel-steps">
+        <!-- Step 1: Product -->
+        <div class="f-step">
+          <div class="f-step-line f-step-complete">
+            <div class="f-step-dot">&#10003;</div>
+            <div class="f-step-connector"></div>
+          </div>
+          <div class="f-step-content">
+            <div class="f-step-title">Product Page</div>
+            <div class="f-step-url">/products/nike-air-max-90</div>
+            <div class="f-step-stats">
+              <div class="f-stat f-stat-green"><div class="f-stat-dot"></div> 3 matched</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Cart -->
+        <div class="f-step">
+          <div class="f-step-line f-step-complete">
+            <div class="f-step-dot">&#10003;</div>
+            <div class="f-step-connector"></div>
+          </div>
+          <div class="f-step-content">
+            <div class="f-step-title">Cart</div>
+            <div class="f-step-url">/cart</div>
+            <div class="f-step-stats">
+              <div class="f-stat f-stat-green"><div class="f-stat-dot"></div> 2 matched</div>
+              <div class="f-stat f-stat-orange"><div class="f-stat-dot"></div> 1 partial</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Checkout -->
+        <div class="f-step">
+          <div class="f-step-line f-step-partial">
+            <div class="f-step-dot">!</div>
+            <div class="f-step-connector"></div>
+          </div>
+          <div class="f-step-content">
+            <div class="f-step-title">Checkout</div>
+            <div class="f-step-url">/checkout/information</div>
+            <div class="f-step-stats">
+              <div class="f-stat f-stat-green"><div class="f-stat-dot"></div> 2 matched</div>
+              <div class="f-stat f-stat-red"><div class="f-stat-dot"></div> 1 missing</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4: Thank you (current) -->
+        <div class="f-step">
+          <div class="f-step-line f-step-current">
+            <div class="f-step-dot" style="font-size:7px;">&#9679;</div>
+            <div class="f-step-connector"></div>
+          </div>
+          <div class="f-step-content">
+            <div class="f-step-title">
+              Thank You
+              <span style="font-size:9px;color:#6C5CE7;font-weight:500;">Recording...</span>
+            </div>
+            <div class="f-step-url">/thank-you/ORD-2847</div>
+            <div class="f-step-stats">
+              <div class="f-stat f-stat-green"><div class="f-stat-dot"></div> 4 matched</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 5: Pending -->
+        <div class="f-step">
+          <div class="f-step-line f-step-pending">
+            <div class="f-step-dot">5</div>
+          </div>
+          <div class="f-step-content">
+            <div class="f-step-title" style="color:#9B9BB0;">Order Confirmation</div>
+            <div class="f-step-url">/account/orders</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pricing section -->
+    <div class="pricing-section">
+      <div class="pricing-title">Simple, transparent pricing</div>
+      <div class="pricing-subtitle">Start free, upgrade when you need more power</div>
+
+      <div class="pricing-cards">
+        <!-- Free -->
+        <div class="price-card pc-free">
+          <div class="pc-name">Free</div>
+          <div class="pc-price">$0 <span>/mo</span></div>
+          <ul class="pc-features">
+            <li><span class="pc-check">&#10003;</span> CMS detection</li>
+            <li><span class="pc-check">&#10003;</span> DataLayer live stream</li>
+            <li><span class="pc-check">&#10003;</span> Pixel detection</li>
+            <li><span class="pc-check">&#10003;</span> GA4 event generation</li>
+          </ul>
+        </div>
+
+        <!-- Starter -->
+        <div class="price-card pc-starter">
+          <div class="pc-name">Starter</div>
+          <div class="pc-price">$9 <span>/mo</span></div>
+          <ul class="pc-features">
+            <li><span class="pc-check">&#10003;</span> Everything in Free</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> Copy events</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> Meta Pixel support</li>
+            <li><span class="pc-check">&#10003;</span> PrestaShop CMS</li>
+          </ul>
+        </div>
+
+        <!-- Pro -->
+        <div class="price-card popular pc-pro">
+          <div class="pc-name">Pro</div>
+          <div class="pc-price">$19 <span>/mo</span></div>
+          <ul class="pc-features">
+            <li><span class="pc-check">&#10003;</span> Everything in Starter</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> Push to dataLayer</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> Event audit & diff</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> TikTok + Pinterest</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> Funnel mode + PDF</li>
+          </ul>
+        </div>
+
+        <!-- Agency -->
+        <div class="price-card pc-agency">
+          <div class="pc-name">Agency</div>
+          <div class="pc-price">$49 <span>/mo</span></div>
+          <ul class="pc-features">
+            <li><span class="pc-check">&#10003;</span> Everything in Pro</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> White-label reports</li>
+            <li class="highlight"><span class="pc-check">&#10003;</span> 5 team seats</li>
+            <li><span class="pc-check">&#10003;</span> Priority support</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="guarantee">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        30-day money-back guarantee &middot; Cancel anytime &middot; Secure Stripe payments
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

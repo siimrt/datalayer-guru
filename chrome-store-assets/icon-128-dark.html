@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; }
+  body { width: 128px; height: 128px; overflow: hidden; }
+  .icon {
+    width: 128px;
+    height: 128px;
+    background: linear-gradient(145deg, #0F0F15 0%, #050508 100%);
+    border-radius: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .icon::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108, 92, 231, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108, 92, 231, 0.05) 1px, transparent 1px);
+    background-size: 8px 8px;
+  }
+  .icon::after {
+    content: '';
+    position: absolute;
+    width: 90px;
+    height: 50px;
+    background: radial-gradient(ellipse, rgba(108, 92, 231, 0.3) 0%, transparent 70%);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  svg {
+    position: relative;
+    z-index: 1;
+    filter: drop-shadow(0 0 12px rgba(108, 92, 231, 0.6));
+  }
+</style>
+</head>
+<body>
+<div class="icon">
+  <svg width="90" height="60" viewBox="0 0 90 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="pulseGrad" x1="0" y1="30" x2="90" y2="30" gradientUnits="userSpaceOnUse">
+        <stop offset="0%" stop-color="#6C5CE7" stop-opacity="0.1"/>
+        <stop offset="15%" stop-color="#6C5CE7" stop-opacity="0.7"/>
+        <stop offset="50%" stop-color="#A29BFE" stop-opacity="1"/>
+        <stop offset="85%" stop-color="#6C5CE7" stop-opacity="0.7"/>
+        <stop offset="100%" stop-color="#6C5CE7" stop-opacity="0.1"/>
+      </linearGradient>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+    <polyline
+      points="0,30 15,30 22,30 28,18 34,42 40,8 46,52 52,20 58,38 64,30 72,30 90,30"
+      stroke="rgba(108, 92, 231, 0.12)"
+      stroke-width="8"
+      fill="none"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <polyline
+      points="0,30 15,30 22,30 28,18 34,42 40,8 46,52 52,20 58,38 64,30 72,30 90,30"
+      stroke="url(#pulseGrad)"
+      stroke-width="3.5"
+      fill="none"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      filter="url(#glow)"
+    />
+    <circle cx="40" cy="8" r="3" fill="#A29BFE" opacity="0.95"/>
+  </svg>
+</div>
+</body>
+</html>

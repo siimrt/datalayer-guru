@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 920px;
+    height: 680px;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .tile {
+    width: 920px;
+    height: 680px;
+    background: linear-gradient(155deg, #1A1A2E 0%, #0F0F10 40%, #1A1025 100%);
+    display: flex;
+    position: relative;
+    overflow: hidden;
+  }
+  /* Grid pattern */
+  .tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108, 92, 231, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108, 92, 231, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  /* Glow orbs */
+  .glow-1 {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(108, 92, 231, 0.12) 0%, transparent 70%);
+    top: -100px;
+    right: 100px;
+  }
+  .glow-2 {
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(0, 184, 148, 0.06) 0%, transparent 70%);
+    bottom: -50px;
+    left: 50px;
+  }
+
+  .left {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 56px 40px 56px 56px;
+    position: relative;
+    z-index: 1;
+  }
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .logo-icon {
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(145deg, #1A1A2E, #0F0F10);
+    border: 1px solid rgba(108, 92, 231, 0.3);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .brand {
+    font-size: 28px;
+    font-weight: 800;
+    color: #FFFFFF;
+    letter-spacing: -0.5px;
+  }
+  .brand span { color: #A29BFE; }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #FFFFFF;
+    line-height: 1.3;
+    margin-bottom: 16px;
+    letter-spacing: -0.3px;
+  }
+  h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, #A29BFE, #6C5CE7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.5;
+    margin-bottom: 28px;
+    max-width: 360px;
+  }
+
+  .features {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .feature {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+  }
+  .feature-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .fi-purple { background: rgba(108, 92, 231, 0.2); }
+  .fi-green { background: rgba(0, 184, 148, 0.2); }
+  .fi-orange { background: rgba(230, 126, 34, 0.2); }
+
+  /* Right side: UI mockup */
+  .right {
+    width: 420px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 1;
+    padding-right: 32px;
+  }
+  .mockup {
+    width: 340px;
+    background: #FFFFFF;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow:
+      0 20px 60px rgba(0, 0, 0, 0.4),
+      0 0 0 1px rgba(255, 255, 255, 0.05);
+    transform: perspective(800px) rotateY(-3deg) rotateX(1deg);
+  }
+
+  /* Mockup header */
+  .m-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid #E5E5EA;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .m-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .m-badge-cms { background: rgba(108, 92, 231, 0.12); color: #6C5CE7; }
+  .m-badge-page { background: rgba(0, 184, 148, 0.12); color: #00B894; }
+  .m-badge-cur { background: rgba(253, 203, 110, 0.12); color: #D4A017; }
+  .m-badge-plan { background: rgba(108, 92, 231, 0.15); color: #6C5CE7; font-size: 10px; margin-left: auto; }
+
+  /* Mockup tabs */
+  .m-tabs {
+    display: flex;
+    border-bottom: 1px solid #E5E5EA;
+    padding: 0 8px;
+  }
+  .m-tab {
+    flex: 1;
+    padding: 9px 4px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 500;
+    color: #9B9BB0;
+    border-bottom: 2px solid transparent;
+  }
+  .m-tab.active {
+    color: #6C5CE7;
+    border-bottom-color: #6C5CE7;
+  }
+
+  /* Data summary */
+  .m-summary {
+    margin: 8px 12px;
+    padding: 10px 12px;
+    background: rgba(108, 92, 231, 0.06);
+    border: 1px solid rgba(108, 92, 231, 0.12);
+    border-radius: 8px;
+  }
+  .m-data-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    padding: 2px 0;
+  }
+  .m-data-label { color: #6B6B80; }
+  .m-data-value { color: #1A1A2E; font-weight: 600; }
+
+  /* Platform toggles */
+  .m-toggles {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+  }
+  .m-toggle {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid #E5E5EA;
+    color: #9B9BB0;
+  }
+  .m-toggle.active {
+    background: rgba(108, 92, 231, 0.12);
+    color: #6C5CE7;
+    border-color: rgba(108, 92, 231, 0.3);
+  }
+
+  /* Event card */
+  .m-event {
+    margin: 6px 12px;
+    border: 1px solid #E5E5EA;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .m-event-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+  }
+  .m-event-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .m-platform-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .m-event-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1A1A2E;
+  }
+  .m-event-status {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00B894;
+  }
+  .m-event-code {
+    padding: 8px 12px;
+    background: #F5F5FA;
+    border-top: 1px solid #E5E5EA;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    color: #1A1A2E;
+  }
+  .m-event-code .key { color: #8E44AD; }
+  .m-event-code .str { color: #16A085; }
+  .m-event-code .num { color: #E67E22; }
+
+  .m-event-actions {
+    display: flex;
+    gap: 6px;
+    padding: 6px 12px;
+    border-top: 1px solid #E5E5EA;
+  }
+  .m-btn {
+    padding: 4px 10px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid #E5E5EA;
+    color: #6B6B80;
+    background: white;
+  }
+  .m-btn-primary {
+    background: #6C5CE7;
+    color: white;
+    border-color: #6C5CE7;
+  }
+
+  .m-more-events {
+    text-align: center;
+    padding: 8px;
+    font-size: 10px;
+    color: #9B9BB0;
+  }
+</style>
+</head>
+<body>
+<div class="tile">
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+
+  <div class="left">
+    <div class="logo-row">
+      <div class="logo-icon">
+        <svg width="26" height="18" viewBox="0 0 90 60" fill="none">
+          <polyline points="0,30 15,30 22,30 28,18 34,42 40,8 46,52 52,20 58,38 64,30 72,30 90,30"
+            stroke="#6C5CE7" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="brand">Track<span>Pulse</span></div>
+    </div>
+
+    <h1>Stop wasting 4h/week<br>on <em>manual tracking<br>audits</em></h1>
+
+    <p class="subtitle">Detect CMS, extract ecommerce data, generate & validate tracking events across all major platforms.</p>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon fi-purple">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A29BFE" stroke-width="2" stroke-linecap="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        Auto-detect CMS & extract product data
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-green">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#55EFC4" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+        Generate & validate GA4, Meta, TikTok events
+      </div>
+      <div class="feature">
+        <div class="feature-icon fi-orange">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FDCB6E" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </div>
+        Real-time dataLayer monitoring & audit
+      </div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="mockup">
+      <div class="m-header">
+        <div class="m-badge m-badge-cms">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="#6C5CE7"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          Shopify
+        </div>
+        <div class="m-badge m-badge-page">Product</div>
+        <div class="m-badge m-badge-cur">EUR</div>
+        <div class="m-badge m-badge-plan">PRO</div>
+      </div>
+
+      <div class="m-tabs">
+        <div class="m-tab active">Events</div>
+        <div class="m-tab">Audit</div>
+        <div class="m-tab">DataLayer</div>
+        <div class="m-tab">Pixels</div>
+        <div class="m-tab">Funnel</div>
+      </div>
+
+      <div class="m-summary">
+        <div class="m-data-row">
+          <span class="m-data-label">Product</span>
+          <span class="m-data-value">Nike Air Max 90</span>
+        </div>
+        <div class="m-data-row">
+          <span class="m-data-label">Price</span>
+          <span class="m-data-value">149.99 EUR</span>
+        </div>
+        <div class="m-data-row">
+          <span class="m-data-label">Item ID</span>
+          <span class="m-data-value">SKU-AM90-BLK</span>
+        </div>
+      </div>
+
+      <div class="m-toggles">
+        <div class="m-toggle active">GA4</div>
+        <div class="m-toggle active">Meta</div>
+        <div class="m-toggle">TikTok</div>
+        <div class="m-toggle">Pinterest</div>
+      </div>
+
+      <!-- GA4 Event -->
+      <div class="m-event">
+        <div class="m-event-header">
+          <div class="m-event-info">
+            <div class="m-platform-dot" style="background:#E37400"></div>
+            <span class="m-event-name">view_item</span>
+          </div>
+          <div class="m-event-status"></div>
+        </div>
+        <div class="m-event-code">
+<span class="key">event</span>: <span class="str">"view_item"</span>,
+<span class="key">currency</span>: <span class="str">"EUR"</span>,
+<span class="key">value</span>: <span class="num">149.99</span>,
+<span class="key">items</span>: [{ <span class="key">item_name</span>: <span class="str">"Nike Air Max 90"</span> }]
+        </div>
+        <div class="m-event-actions">
+          <div class="m-btn">Copy</div>
+          <div class="m-btn m-btn-primary">Push to dataLayer</div>
+        </div>
+      </div>
+
+      <!-- Meta Event -->
+      <div class="m-event">
+        <div class="m-event-header">
+          <div class="m-event-info">
+            <div class="m-platform-dot" style="background:#0081FB"></div>
+            <span class="m-event-name">ViewContent</span>
+          </div>
+          <div class="m-event-status"></div>
+        </div>
+      </div>
+
+      <div class="m-more-events">+ 2 more events generated</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

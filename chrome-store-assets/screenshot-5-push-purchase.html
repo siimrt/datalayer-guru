@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .screenshot {
+    width: 1280px;
+    height: 800px;
+    background: linear-gradient(155deg, #1A1A2E 0%, #0F0F10 50%, #1A1025 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .screenshot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108, 92, 231, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108, 92, 231, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .glow-1 {
+    position: absolute; width: 500px; height: 500px;
+    background: radial-gradient(circle, rgba(108, 92, 231, 0.1) 0%, transparent 70%);
+    top: -80px; right: 150px;
+  }
+  .glow-2 {
+    position: absolute; width: 350px; height: 350px;
+    background: radial-gradient(circle, rgba(0, 184, 148, 0.07) 0%, transparent 70%);
+    bottom: -80px; left: 200px;
+  }
+
+  .title-section {
+    position: relative; z-index: 1; text-align: center; margin-bottom: 32px;
+  }
+  .title-section h2 {
+    font-size: 30px; font-weight: 800; color: #FFFFFF; letter-spacing: -0.5px; margin-bottom: 10px;
+    line-height: 1.2;
+  }
+  .title-section h2 em {
+    font-style: normal;
+    background: linear-gradient(135deg, #A29BFE, #6C5CE7);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .title-section p {
+    font-size: 15px; color: rgba(255, 255, 255, 0.5); font-weight: 400;
+    max-width: 700px; margin: 0 auto;
+  }
+
+  .panel-container {
+    position: relative; z-index: 1;
+    display: flex; gap: 24px; align-items: flex-start;
+  }
+
+  /* Browser - Shopify Thank You page */
+  .browser {
+    width: 560px;
+    background: #FFFFFF;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .browser-bar {
+    height: 34px;
+    background: #F0F0F5;
+    border-bottom: 1px solid #E5E5EA;
+    display: flex; align-items: center; padding: 0 12px; gap: 7px;
+  }
+  .browser-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot-r { background: #FF5F57; }
+  .dot-y { background: #FFBD2E; }
+  .dot-g { background: #28C840; }
+  .browser-url {
+    flex: 1; margin-left: 10px; height: 20px;
+    background: #FFFFFF; border-radius: 4px; border: 1px solid #E5E5EA;
+    display: flex; align-items: center; padding: 0 8px;
+    font-size: 10.5px; color: #6B6B80;
+  }
+  .browser-url .lock {
+    color: #00B894; margin-right: 4px;
+  }
+
+  /* Shopify Thank You page content */
+  .ty-page {
+    padding: 28px 32px;
+    background: #FAFAFA;
+  }
+  .ty-check {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: #00B894; display: flex; align-items: center; justify-content: center;
+    margin-bottom: 14px;
+  }
+  .ty-check svg { width: 24px; height: 24px; }
+  .ty-title {
+    font-size: 20px; font-weight: 700; color: #1A1A2E; margin-bottom: 4px;
+  }
+  .ty-order-id {
+    font-size: 12px; color: #9B9BB0; margin-bottom: 20px;
+  }
+
+  .ty-summary {
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+  .ty-summary-title {
+    font-size: 13px; font-weight: 700; color: #1A1A2E;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #F0F0F5;
+  }
+  .ty-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0;
+  }
+  .ty-item-img {
+    width: 44px; height: 44px; background: #F0F0F5;
+    border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .ty-item-img span { font-size: 18px; opacity: 0.3; }
+  .ty-item-info { flex: 1; }
+  .ty-item-name { font-size: 12px; font-weight: 600; color: #1A1A2E; }
+  .ty-item-variant { font-size: 10px; color: #9B9BB0; }
+  .ty-item-qty { font-size: 10px; color: #9B9BB0; }
+  .ty-item-price { font-size: 12px; font-weight: 600; color: #1A1A2E; }
+
+  .ty-totals {
+    border-top: 1px solid #F0F0F5;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+  .ty-total-row {
+    display: flex; justify-content: space-between;
+    padding: 2px 0; font-size: 11px;
+  }
+  .ty-total-label { color: #6B6B80; }
+  .ty-total-value { color: #1A1A2E; font-weight: 500; }
+  .ty-total-row.grand {
+    border-top: 1px solid #E5E5EA;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+  .ty-total-row.grand .ty-total-label { font-weight: 700; color: #1A1A2E; font-size: 13px; }
+  .ty-total-row.grand .ty-total-value { font-weight: 800; color: #1A1A2E; font-size: 13px; }
+
+  /* Annotation arrows */
+  .annotation {
+    position: absolute; z-index: 20;
+  }
+  .ann-line {
+    position: absolute;
+  }
+  .ann-label {
+    background: rgba(108, 92, 231, 0.92);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(108, 92, 231, 0.4);
+    position: absolute;
+    z-index: 20;
+  }
+  .ann-label-green {
+    background: rgba(0, 184, 148, 0.92);
+    box-shadow: 0 4px 16px rgba(0, 184, 148, 0.4);
+  }
+
+  /* TrackPulse panel */
+  .tp-panel {
+    width: 400px;
+    background: #FFFFFF;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .tp-h {
+    padding: 9px 12px;
+    border-bottom: 1px solid #E5E5EA;
+    display: flex; gap: 5px; align-items: center; flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 7px; border-radius: 5px; font-size: 10px; font-weight: 600;
+  }
+  .b-cms { background: rgba(108, 92, 231, 0.12); color: #6C5CE7; }
+  .b-page { background: rgba(0, 184, 148, 0.12); color: #00B894; }
+  .b-cur { background: rgba(253, 203, 110, 0.12); color: #D4A017; }
+  .b-plan { background: rgba(108, 92, 231, 0.15); color: #6C5CE7; font-size: 9px; margin-left: auto; }
+
+  .tp-tabs {
+    display: flex; border-bottom: 1px solid #E5E5EA; padding: 0 6px;
+  }
+  .tp-tab {
+    flex: 1; padding: 7px 4px; text-align: center;
+    font-size: 10px; font-weight: 500; color: #9B9BB0;
+    border-bottom: 2px solid transparent;
+  }
+  .tp-tab.active { color: #6C5CE7; border-bottom-color: #6C5CE7; }
+
+  /* Extracted data */
+  .tp-summary {
+    margin: 7px 10px;
+    padding: 8px 10px;
+    background: rgba(108, 92, 231, 0.06);
+    border: 1px solid rgba(108, 92, 231, 0.12);
+    border-radius: 8px;
+  }
+  .tp-dr {
+    display: flex; justify-content: space-between;
+    font-size: 10px; padding: 1.5px 0;
+  }
+  .tp-dl { color: #6B6B80; }
+  .tp-dv { color: #1A1A2E; font-weight: 600; }
+
+  /* Quick Push section */
+  .qp-section {
+    margin: 7px 10px;
+    padding: 10px 12px;
+    background: #FFFFFF;
+    border: 1px solid #E5E5EA;
+    border-radius: 10px;
+  }
+  .qp-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .qp-title {
+    font-size: 12px; font-weight: 700; color: #1A1A2E;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .qp-badge {
+    font-size: 9px; font-weight: 700; padding: 1px 6px;
+    border-radius: 3px; background: rgba(108, 92, 231, 0.12); color: #6C5CE7;
+  }
+
+  /* Target selector - THE KEY FEATURE */
+  .target-row {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 10px;
+    padding: 6px 8px;
+    background: rgba(108, 92, 231, 0.04);
+    border: 1px solid rgba(108, 92, 231, 0.12);
+    border-radius: 6px;
+  }
+  .target-label {
+    font-size: 10px; color: #6B6B80; font-weight: 500;
+    flex-shrink: 0;
+  }
+  .target-select {
+    flex: 1;
+    background: #FFFFFF;
+    border: 1px solid rgba(108, 92, 231, 0.3);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #6C5CE7;
+    outline: none;
+  }
+  .target-hint {
+    font-size: 9px;
+    color: #00B894;
+    font-weight: 600;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .target-hint-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: #00B894;
+  }
+
+  /* Synthetic purchase card */
+  .synth-card {
+    border: 2px solid rgba(108, 92, 231, 0.25);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #FFFFFF;
+  }
+  .synth-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 10px;
+    background: rgba(108, 92, 231, 0.04);
+  }
+  .synth-event-name {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 700; color: #1A1A2E;
+  }
+  .synth-event-name .bolt { color: #6C5CE7; font-size: 15px; }
+  .synth-push-btn {
+    padding: 5px 16px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    border: none;
+    background: #6C5CE7;
+    color: white;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 5px;
+    box-shadow: 0 2px 8px rgba(108, 92, 231, 0.3);
+  }
+  .synth-push-btn.pushed {
+    background: #00B894;
+    box-shadow: 0 2px 8px rgba(0, 184, 148, 0.3);
+  }
+
+  .synth-code {
+    padding: 8px 10px;
+    background: #F5F5FA;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    line-height: 1.55;
+    color: #1A1A2E;
+    max-height: 160px;
+    overflow: hidden;
+    position: relative;
+  }
+  .synth-code .k { color: #8E44AD; }
+  .synth-code .s { color: #16A085; }
+  .synth-code .n { color: #E67E22; }
+  .synth-code-fade {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 30px;
+    background: linear-gradient(transparent, #F5F5FA);
+  }
+
+  .synth-actions {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 10px;
+    border-top: 1px solid #E5E5EA;
+  }
+  .synth-action-btn {
+    padding: 3px 8px; border-radius: 4px;
+    font-size: 9px; font-weight: 600;
+    border: 1px solid #E5E5EA; color: #6B6B80; background: white;
+  }
+
+  /* Flow diagram at bottom */
+  .flow-section {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; gap: 0;
+    margin-top: 28px;
+  }
+  .flow-step {
+    display: flex; align-items: center; gap: 0;
+  }
+  .flow-box {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 12px 18px;
+    text-align: center;
+    min-width: 140px;
+  }
+  .flow-box.highlight {
+    border-color: rgba(108, 92, 231, 0.4);
+    background: rgba(108, 92, 231, 0.1);
+  }
+  .flow-box.success {
+    border-color: rgba(0, 184, 148, 0.4);
+    background: rgba(0, 184, 148, 0.08);
+  }
+  .flow-icon {
+    font-size: 20px; margin-bottom: 4px;
+  }
+  .flow-label {
+    font-size: 11px; font-weight: 700; color: #FFFFFF;
+  }
+  .flow-sub {
+    font-size: 9px; color: rgba(255,255,255,0.4); margin-top: 2px;
+  }
+  .flow-arrow {
+    color: rgba(255, 255, 255, 0.2);
+    font-size: 20px;
+    padding: 0 8px;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+<div class="screenshot">
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+
+  <div class="title-section">
+    <h2>Push a purchase event with <em>real checkout data</em><br>directly into Shopify custom pixels</h2>
+    <p>Auto-detect sandboxed pixel iframes, extract real order data, and push a complete purchase event in one click</p>
+  </div>
+
+  <div class="panel-container">
+    <!-- Browser: Shopify Thank You page -->
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dot dot-r"></div>
+        <div class="browser-dot dot-y"></div>
+        <div class="browser-dot dot-g"></div>
+        <div class="browser-url">
+          <span class="lock">&#128274;</span>
+          mystore.myshopify.com/thank-you/ORD-847291
+        </div>
+      </div>
+      <div class="ty-page">
+        <div class="ty-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div class="ty-title">Thank you for your order!</div>
+        <div class="ty-order-id">Order #ORD-847291 &middot; Confirmation email sent</div>
+
+        <div class="ty-summary">
+          <div class="ty-summary-title">Order summary</div>
+          <div class="ty-item">
+            <div class="ty-item-img"><span>&#128247;</span></div>
+            <div class="ty-item-info">
+              <div class="ty-item-name">Nike Air Max 90 - Black</div>
+              <div class="ty-item-variant">Size: 42 &middot; Color: Black</div>
+            </div>
+            <div class="ty-item-qty">x1</div>
+            <div class="ty-item-price">149.99 &euro;</div>
+          </div>
+          <div class="ty-item">
+            <div class="ty-item-img"><span>&#128247;</span></div>
+            <div class="ty-item-info">
+              <div class="ty-item-name">Nike Running Socks (3-Pack)</div>
+              <div class="ty-item-variant">Size: M</div>
+            </div>
+            <div class="ty-item-qty">x2</div>
+            <div class="ty-item-price">29.98 &euro;</div>
+          </div>
+          <div class="ty-totals">
+            <div class="ty-total-row">
+              <span class="ty-total-label">Subtotal</span>
+              <span class="ty-total-value">179.97 &euro;</span>
+            </div>
+            <div class="ty-total-row">
+              <span class="ty-total-label">Shipping</span>
+              <span class="ty-total-value">5.99 &euro;</span>
+            </div>
+            <div class="ty-total-row">
+              <span class="ty-total-label">Tax (20%)</span>
+              <span class="ty-total-value">37.19 &euro;</span>
+            </div>
+            <div class="ty-total-row grand">
+              <span class="ty-total-label">Total</span>
+              <span class="ty-total-value">223.15 &euro;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TrackPulse panel -->
+    <div class="tp-panel">
+      <div class="tp-h">
+        <div class="badge b-cms">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="#6C5CE7"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg>
+          Shopify
+        </div>
+        <div class="badge b-page">Thank You</div>
+        <div class="badge b-cur">EUR</div>
+        <div class="badge b-plan">PRO</div>
+      </div>
+
+      <div class="tp-tabs">
+        <div class="tp-tab active">Events</div>
+        <div class="tp-tab">Audit</div>
+        <div class="tp-tab">DataLayer</div>
+        <div class="tp-tab">Pixels</div>
+        <div class="tp-tab">Funnel</div>
+      </div>
+
+      <!-- Extracted order data -->
+      <div class="tp-summary">
+        <div class="tp-dr"><span class="tp-dl">Order ID</span><span class="tp-dv">ORD-847291</span></div>
+        <div class="tp-dr"><span class="tp-dl">Items</span><span class="tp-dv">Nike Air Max 90, Running Socks</span></div>
+        <div class="tp-dr"><span class="tp-dl">Subtotal</span><span class="tp-dv">179.97 EUR</span></div>
+        <div class="tp-dr"><span class="tp-dl">Tax</span><span class="tp-dv">37.19 EUR</span></div>
+        <div class="tp-dr"><span class="tp-dl">Shipping</span><span class="tp-dv">5.99 EUR</span></div>
+        <div class="tp-dr"><span class="tp-dl">Total</span><span class="tp-dv" style="color:#6C5CE7;font-weight:700;">223.15 EUR</span></div>
+      </div>
+
+      <!-- Quick Push section -->
+      <div class="qp-section">
+        <div class="qp-header">
+          <div class="qp-title">
+            <span style="font-size:14px;">&#9889;</span>
+            Quick Push
+            <span class="qp-badge">SYNTHETIC</span>
+          </div>
+        </div>
+
+        <!-- Target selector - THE STAR -->
+        <div class="target-row">
+          <span class="target-label">Target:</span>
+          <select class="target-select">
+            <option>Shopify Pixel Sandbox (GTM)</option>
+            <option>Custom Pixel: GA4 (dL: 38)</option>
+            <option>dataLayer (top)</option>
+          </select>
+          <div class="target-hint">
+            <div class="target-hint-dot"></div>
+            2 detected
+          </div>
+        </div>
+
+        <!-- Purchase synthetic event card -->
+        <div class="synth-card">
+          <div class="synth-header">
+            <div class="synth-event-name">
+              <span class="bolt">&#9889;</span>
+              purchase
+              <span style="font-size:9px;color:#00B894;font-weight:600;background:rgba(0,184,148,0.12);padding:1px 5px;border-radius:3px;">REAL DATA</span>
+            </div>
+            <button class="synth-push-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              Push
+            </button>
+          </div>
+          <div class="synth-code">
+<span class="k">dataLayer</span>.push({ <span class="k">ecommerce</span>: <span class="k">null</span> });
+<span class="k">dataLayer</span>.push({
+  <span class="k">"event"</span>: <span class="s">"purchase"</span>,
+  <span class="k">"ecommerce"</span>: {
+    <span class="k">"transaction_id"</span>: <span class="s">"ORD-847291"</span>,
+    <span class="k">"currency"</span>: <span class="s">"EUR"</span>,
+    <span class="k">"value"</span>: <span class="n">223.15</span>,
+    <span class="k">"tax"</span>: <span class="n">37.19</span>,
+    <span class="k">"shipping"</span>: <span class="n">5.99</span>,
+    <span class="k">"items"</span>: [{
+      <span class="k">"item_name"</span>: <span class="s">"Nike Air Max 90"</span>,
+      <span class="k">"item_id"</span>: <span class="s">"SKU-AM90-BLK"</span>,
+      <span class="k">"price"</span>: <span class="n">149.99</span>,
+      <span class="k">"item_brand"</span>: <span class="s">"Nike"</span>,
+      <span class="k">"quantity"</span>: <span class="n">1</span>
+    }, {
+      <span class="k">"item_name"</span>: <span class="s">"Running Socks (3-Pack)"</span>,
+      <span class="k">"item_id"</span>: <span class="s">"SKU-SOCK-3PK"</span>,
+      <span class="k">"price"</span>: <span class="n">14.99</span>,
+      <span class="k">"quantity"</span>: <span class="n">2</span>
+<div class="synth-code-fade"></div>
+          </div>
+          <div class="synth-actions">
+            <div class="synth-action-btn">Show more</div>
+            <div class="synth-action-btn">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6B6B80" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              Copy
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flow diagram -->
+  <div class="flow-section">
+    <div class="flow-box">
+      <div class="flow-icon">&#128722;</div>
+      <div class="flow-label">Shopify Checkout</div>
+      <div class="flow-sub">Real order completed</div>
+    </div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-box highlight">
+      <div class="flow-icon">&#128270;</div>
+      <div class="flow-label">Auto-Extract Data</div>
+      <div class="flow-sub">From Shopify.checkout</div>
+    </div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-box highlight">
+      <div class="flow-icon">&#127919;</div>
+      <div class="flow-label">Target Custom Pixel</div>
+      <div class="flow-sub">Sandbox auto-detected</div>
+    </div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-box success">
+      <div class="flow-icon">&#9889;</div>
+      <div class="flow-label">Push Purchase</div>
+      <div class="flow-sub">Bypasses iframe sandbox</div>
+    </div>
+    <div class="flow-arrow">&#10230;</div>
+    <div class="flow-box success">
+      <div class="flow-icon">&#9989;</div>
+      <div class="flow-label">GTM Fires Tag</div>
+      <div class="flow-sub">In custom pixel context</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

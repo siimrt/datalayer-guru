@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 440px;
+    height: 280px;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .tile {
+    width: 440px;
+    height: 280px;
+    background: linear-gradient(155deg, #1A1A2E 0%, #0F0F10 50%, #1A1025 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    padding: 32px;
+  }
+  /* Subtle grid */
+  .tile::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108, 92, 231, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108, 92, 231, 0.04) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  /* Glow orb */
+  .glow {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(108, 92, 231, 0.15) 0%, transparent 70%);
+    top: 20%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .content {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(145deg, #1A1A2E, #0F0F10);
+    border: 1px solid rgba(108, 92, 231, 0.3);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .brand {
+    font-size: 22px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: -0.5px;
+  }
+  .brand span {
+    color: #A29BFE;
+  }
+  .tagline {
+    font-size: 15px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.4;
+    max-width: 340px;
+  }
+  .platforms {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .platform-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+  }
+  .platform-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .dot-ga4 { background: #E37400; }
+  .dot-meta { background: #0081FB; }
+  .dot-tiktok { background: #FE2C55; }
+  .dot-pinterest { background: #E60023; }
+</style>
+</head>
+<body>
+<div class="tile">
+  <div class="glow"></div>
+  <div class="content">
+    <div class="logo-row">
+      <div class="logo-icon">
+        <svg width="22" height="16" viewBox="0 0 90 60" fill="none">
+          <polyline
+            points="0,30 15,30 22,30 28,18 34,42 40,8 46,52 52,20 58,38 64,30 72,30 90,30"
+            stroke="#6C5CE7"
+            stroke-width="5"
+            fill="none"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </div>
+      <div class="brand">Track<span>Pulse</span></div>
+    </div>
+
+    <div class="tagline">
+      Inspect, generate & audit ecommerce tracking events in one click
+    </div>
+
+    <div class="platforms">
+      <div class="platform-pill"><div class="platform-dot dot-ga4"></div> GA4</div>
+      <div class="platform-pill"><div class="platform-dot dot-meta"></div> Meta</div>
+      <div class="platform-pill"><div class="platform-dot dot-tiktok"></div> TikTok</div>
+      <div class="platform-pill"><div class="platform-dot dot-pinterest"></div> Pinterest</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

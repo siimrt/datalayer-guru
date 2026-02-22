@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+  }
+  .screenshot {
+    width: 1280px;
+    height: 800px;
+    background: linear-gradient(155deg, #1A1A2E 0%, #0F0F10 50%, #1A1025 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .screenshot::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(108, 92, 231, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(108, 92, 231, 0.03) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .glow-1 {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(108, 92, 231, 0.1) 0%, transparent 70%);
+    top: -100px;
+    right: 200px;
+  }
+  .glow-2 {
+    position: absolute;
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(0, 184, 148, 0.05) 0%, transparent 70%);
+    bottom: -100px;
+    left: 100px;
+  }
+
+  .title-section {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    margin-bottom: 36px;
+  }
+  .title-section h2 {
+    font-size: 32px;
+    font-weight: 800;
+    color: #FFFFFF;
+    letter-spacing: -0.5px;
+    margin-bottom: 10px;
+  }
+  .title-section h2 em {
+    font-style: normal;
+    background: linear-gradient(135deg, #A29BFE, #6C5CE7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .title-section p {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 400;
+  }
+
+  .panel-container {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+
+  /* Browser mockup */
+  .browser {
+    width: 640px;
+    background: #FFFFFF;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  .browser-bar {
+    height: 36px;
+    background: #F0F0F5;
+    border-bottom: 1px solid #E5E5EA;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 8px;
+  }
+  .browser-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .dot-r { background: #FF5F57; }
+  .dot-y { background: #FFBD2E; }
+  .dot-g { background: #28C840; }
+  .browser-url {
+    flex: 1;
+    margin-left: 12px;
+    height: 22px;
+    background: #FFFFFF;
+    border-radius: 4px;
+    border: 1px solid #E5E5EA;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 11px;
+    color: #6B6B80;
+  }
+  .browser-content {
+    height: 460px;
+    background: linear-gradient(180deg, #F8F8FC 0%, #FAFAFA 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  /* Fake ecommerce page */
+  .fake-page {
+    width: 100%;
+    height: 100%;
+    padding: 24px;
+    display: flex;
+    gap: 20px;
+  }
+  .fake-product-img {
+    width: 220px;
+    height: 220px;
+    background: linear-gradient(135deg, #E8E8F0 0%, #D8D8E2 100%);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    color: #C0C0D0;
+    flex-shrink: 0;
+  }
+  .fake-product-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .fake-breadcrumb {
+    font-size: 11px;
+    color: #9B9BB0;
+  }
+  .fake-product-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1A1A2E;
+  }
+  .fake-price {
+    font-size: 24px;
+    font-weight: 800;
+    color: #1A1A2E;
+  }
+  .fake-price-old {
+    font-size: 14px;
+    color: #9B9BB0;
+    text-decoration: line-through;
+    margin-left: 8px;
+    font-weight: 400;
+  }
+  .fake-rating {
+    font-size: 13px;
+    color: #D4A017;
+  }
+  .fake-desc {
+    font-size: 12px;
+    color: #6B6B80;
+    line-height: 1.5;
+    max-width: 340px;
+  }
+  .fake-sizes {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .fake-size {
+    width: 36px;
+    height: 32px;
+    border: 1px solid #E5E5EA;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #1A1A2E;
+  }
+  .fake-size.selected {
+    border-color: #1A1A2E;
+    background: #1A1A2E;
+    color: white;
+  }
+  .fake-atc {
+    width: 200px;
+    padding: 12px;
+    background: #1A1A2E;
+    color: white;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+
+  /* TrackPulse panel */
+  .tp-panel {
+    width: 370px;
+    background: #FFFFFF;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+    max-height: 500px;
+  }
+  .tp-h {
+    padding: 10px 14px;
+    border-bottom: 1px solid #E5E5EA;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .tp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+  .tp-b-cms { background: rgba(108, 92, 231, 0.12); color: #6C5CE7; }
+  .tp-b-page { background: rgba(0, 184, 148, 0.12); color: #00B894; }
+  .tp-b-cur { background: rgba(253, 203, 110, 0.12); color: #D4A017; }
+  .tp-b-plan { background: rgba(108, 92, 231, 0.15); color: #6C5CE7; font-size: 9.5px; margin-left: auto; }
+
+  .tp-tabs {
+    display: flex;
+    border-bottom: 1px solid #E5E5EA;
+    padding: 0 6px;
+  }
+  .tp-tab {
+    flex: 1;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: #9B9BB0;
+    border-bottom: 2px solid transparent;
+  }
+  .tp-tab.active {
+    color: #6C5CE7;
+    border-bottom-color: #6C5CE7;
+  }
+
+  .tp-summary {
+    margin: 8px 10px;
+    padding: 8px 10px;
+    background: rgba(108, 92, 231, 0.06);
+    border: 1px solid rgba(108, 92, 231, 0.12);
+    border-radius: 8px;
+  }
+  .tp-dr {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+    padding: 2px 0;
+  }
+  .tp-dl { color: #6B6B80; }
+  .tp-dv { color: #1A1A2E; font-weight: 600; }
+
+  .tp-toggles {
+    display: flex;
+    gap: 5px;
+    padding: 6px 10px;
+  }
+  .tp-toggle {
+    padding: 3px 7px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid #E5E5EA;
+    color: #9B9BB0;
+  }
+  .tp-toggle.on {
+    background: rgba(108, 92, 231, 0.12);
+    color: #6C5CE7;
+    border-color: rgba(108, 92, 231, 0.3);
+  }
+
+  .tp-event {
+    margin: 5px 10px;
+    border: 1px solid #E5E5EA;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .tp-eh {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 10px;
+  }
+  .tp-ei {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .tp-pd {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+  .tp-en {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #1A1A2E;
+  }
+  .tp-es {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #00B894;
+  }
+  .tp-code {
+    padding: 7px 10px;
+    background: #F5F5FA;
+    border-top: 1px solid #E5E5EA;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.5;
+    color: #1A1A2E;
+  }
+  .k { color: #8E44AD; }
+  .s { color: #16A085; }
+  .n { color: #E67E22; }
+
+  .tp-ea {
+    display: flex;
+    gap: 5px;
+    padding: 6px 10px;
+    border-top: 1px solid #E5E5EA;
+  }
+  .tp-btn {
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    border: 1px solid #E5E5EA;
+    color: #6B6B80;
+    background: white;
+  }
+  .tp-btn-p {
+    background: #6C5CE7;
+    color: white;
+    border-color: #6C5CE7;
+  }
+
+  /* Annotation arrow */
+  .annotation {
+    position: absolute;
+    z-index: 10;
+  }
+  .ann-label {
+    background: rgba(108, 92, 231, 0.9);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
+  }
+</style>
+</head>
+<body>
+<div class="screenshot">
+  <div class="glow-1"></div>
+  <div class="glow-2"></div>
+
+  <div class="title-section">
+    <h2>Generate tracking events <em>in one click</em></h2>
+    <p>Auto-detect product data and generate GA4, Meta, TikTok & Pinterest events instantly</p>
+  </div>
+
+  <div class="panel-container">
+    <!-- Browser with fake ecommerce page -->
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="browser-dot dot-r"></div>
+        <div class="browser-dot dot-y"></div>
+        <div class="browser-dot dot-g"></div>
+        <div class="browser-url">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9B9BB0" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          &nbsp; store.example.com/products/nike-air-max-90
+        </div>
+      </div>
+      <div class="browser-content">
+        <div class="fake-page">
+          <div class="fake-product-img">
+            <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#B0B0C0" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+          </div>
+          <div class="fake-product-info">
+            <div class="fake-breadcrumb">Home / Shoes / Running</div>
+            <div class="fake-product-name">Nike Air Max 90</div>
+            <div class="fake-rating">&#9733;&#9733;&#9733;&#9733;&#9734; (128 reviews)</div>
+            <div class="fake-price">149.99 EUR <span class="fake-price-old">189.99 EUR</span></div>
+            <div class="fake-desc">Classic Nike Air Max 90 with premium leather upper, visible Air cushioning and waffle outsole for heritage style and comfort.</div>
+            <div class="fake-sizes">
+              <div class="fake-size">40</div>
+              <div class="fake-size">41</div>
+              <div class="fake-size selected">42</div>
+              <div class="fake-size">43</div>
+              <div class="fake-size">44</div>
+            </div>
+            <div class="fake-atc">Add to Cart</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TrackPulse side panel -->
+    <div class="tp-panel">
+      <div class="tp-h">
+        <div class="tp-badge tp-b-cms">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="#6C5CE7"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          Shopify
+        </div>
+        <div class="tp-badge tp-b-page">Product</div>
+        <div class="tp-badge tp-b-cur">EUR</div>
+        <div class="tp-badge tp-b-plan">PRO</div>
+      </div>
+
+      <div class="tp-tabs">
+        <div class="tp-tab active">Events</div>
+        <div class="tp-tab">Audit</div>
+        <div class="tp-tab">DataLayer</div>
+        <div class="tp-tab">Pixels</div>
+        <div class="tp-tab">Funnel</div>
+      </div>
+
+      <div class="tp-summary">
+        <div class="tp-dr"><span class="tp-dl">Product</span><span class="tp-dv">Nike Air Max 90</span></div>
+        <div class="tp-dr"><span class="tp-dl">Price</span><span class="tp-dv">149.99 EUR</span></div>
+        <div class="tp-dr"><span class="tp-dl">Item ID</span><span class="tp-dv">SKU-AM90-BLK</span></div>
+        <div class="tp-dr"><span class="tp-dl">Category</span><span class="tp-dv">Shoes > Running</span></div>
+      </div>
+
+      <div class="tp-toggles">
+        <div class="tp-toggle on">GA4</div>
+        <div class="tp-toggle on">Meta</div>
+        <div class="tp-toggle on">TikTok</div>
+        <div class="tp-toggle">Pinterest</div>
+      </div>
+
+      <!-- GA4 view_item -->
+      <div class="tp-event">
+        <div class="tp-eh">
+          <div class="tp-ei">
+            <div class="tp-pd" style="background:#E37400"></div>
+            <span class="tp-en">view_item</span>
+          </div>
+          <div class="tp-es"></div>
+        </div>
+        <div class="tp-code"><span class="k">event</span>: <span class="s">"view_item"</span>,
+<span class="k">currency</span>: <span class="s">"EUR"</span>, <span class="k">value</span>: <span class="n">149.99</span>,
+<span class="k">items</span>: [{ <span class="k">item_name</span>: <span class="s">"Nike Air Max 90"</span>,
+  <span class="k">price</span>: <span class="n">149.99</span>, <span class="k">item_brand</span>: <span class="s">"Nike"</span> }]</div>
+        <div class="tp-ea">
+          <div class="tp-btn">Copy</div>
+          <div class="tp-btn tp-btn-p">Push to dataLayer</div>
+        </div>
+      </div>
+
+      <!-- Meta ViewContent -->
+      <div class="tp-event">
+        <div class="tp-eh">
+          <div class="tp-ei">
+            <div class="tp-pd" style="background:#0081FB"></div>
+            <span class="tp-en">ViewContent</span>
+          </div>
+          <div class="tp-es"></div>
+        </div>
+        <div class="tp-code"><span class="k">event_name</span>: <span class="s">"ViewContent"</span>,
+<span class="k">content_name</span>: <span class="s">"Nike Air Max 90"</span>,
+<span class="k">content_ids</span>: [<span class="s">"SKU-AM90-BLK"</span>],
+<span class="k">value</span>: <span class="n">149.99</span>, <span class="k">currency</span>: <span class="s">"EUR"</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
