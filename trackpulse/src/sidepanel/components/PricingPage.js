@@ -97,11 +97,18 @@ export function renderPricingPage(container, state, onBack) {
       </div>
 
       ${currentPlan !== 'free' ? `
-      <div style="text-align: center; padding-bottom: 16px;">
+      <div style="
+        margin-top: 8px; padding: 14px; background: var(--tp-surface);
+        border: 1px solid var(--tp-border); border-radius: 10px; text-align: center;
+      ">
+        <div style="font-size: 12px; color: var(--tp-text-secondary); margin-bottom: 10px;">
+          Manage your billing, update payment method, or cancel anytime.
+        </div>
         <button id="pricing-manage" style="
-          background: none; border: none; color: var(--tp-text-muted);
-          font-size: 11px; cursor: pointer; text-decoration: underline;
-        ">Manage subscription</button>
+          background: var(--tp-surface-hover); color: var(--tp-text); border: 1px solid var(--tp-border);
+          padding: 10px 24px; border-radius: 8px; font-size: 13px; font-weight: 600;
+          cursor: pointer; transition: all 0.2s; width: 100%;
+        ">Manage Subscription &rarr;</button>
       </div>` : ''}
     </div>
   `;
@@ -343,9 +350,14 @@ function bindPricingEvents(container, state, onBack) {
   });
 
   // Manage subscription
-  container.querySelector('#pricing-manage')?.addEventListener('click', () => {
-    chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_MANAGEMENT' });
-  });
+  const manageBtn = container.querySelector('#pricing-manage');
+  if (manageBtn) {
+    manageBtn.addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_MANAGEMENT' });
+    });
+    manageBtn.addEventListener('mouseenter', () => { manageBtn.style.borderColor = 'var(--tp-primary)'; manageBtn.style.color = 'var(--tp-primary)'; });
+    manageBtn.addEventListener('mouseleave', () => { manageBtn.style.borderColor = 'var(--tp-border)'; manageBtn.style.color = 'var(--tp-text)'; });
+  }
 }
 
 function handlePlanSelect(planNickname) {

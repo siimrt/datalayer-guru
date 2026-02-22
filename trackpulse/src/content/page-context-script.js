@@ -325,7 +325,7 @@
       // Inline endpoint matching (can't import modules in MAIN world IIFE)
       var _TP_TRACKING_PATTERNS = [
         { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
-        { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$/ },
+        { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel/ },
         { platform: 'tiktok',    re: /analytics\.tiktok\.com/ },
         { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\// },
         { platform: 'snapchat',  re: /tr\.snapchat\.com\// },

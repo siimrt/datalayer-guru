@@ -83,7 +83,10 @@ function parseGA4Request(url, body) {
 
 /**
  * Meta/Facebook Pixel parser.
- * Decodes: ev=EventName, cd=JSON_custom_data, id=pixel_id
+ * Handles two formats:
+ *   1. Classic: ev=EventName, cd=JSON_custom_data, id=pixel_id
+ *   2. Privacy Sandbox / bracket notation: ev=ViewContent, cd[content_type]=product, cd[currency]=EUR, ...
+ * Also parses ap[key]=value (auto parameters) the same way.
  */
 function parseMetaRequest(url, body) {
   const urlObj = new URL(url);
@@ -92,11 +95,45 @@ function parseMetaRequest(url, body) {
   const eventName = params.ev || null;
   const eventParams = {};
 
+  // Try classic JSON cd parameter first
+  if (params.cd && !params.cd.startsWith('[') && !params.cd.startsWith('{') === false) {
+    // Looks like a JSON blob
+  }
+
+  // Check if cd is a single JSON value (classic format)
+  let parsedCdJson = false;
   if (params.cd) {
     try {
       const customData = JSON.parse(decodeURIComponent(params.cd));
-      Object.assign(eventParams, customData);
+      if (typeof customData === 'object' && customData !== null) {
+        Object.assign(eventParams, customData);
+        parsedCdJson = true;
+      }
     } catch (e) {}
+  }
+
+  // Parse bracket notation: cd[key]=value, ap[key]=value, pmd[key]=value
+  if (!parsedCdJson) {
+    const searchStr = urlObj.search;
+    const bracketRegex = /(?:^|&)(cd|ap|pmd)\[([^\]]+)\]=([^&]*)/g;
+    let match;
+    while ((match = bracketRegex.exec(searchStr)) !== null) {
+      const prefix = match[1]; // cd, ap, or pmd
+      const key = decodeURIComponent(match[2]);
+      let value = decodeURIComponent(match[3]);
+
+      // Try to parse JSON values (e.g. cd[contents]=[{...}])
+      if (value.startsWith('[') || value.startsWith('{')) {
+        try { value = JSON.parse(value); } catch (e) {}
+      }
+
+      if (prefix === 'cd') {
+        eventParams[key] = value;
+      } else if (prefix === 'ap') {
+        eventParams[`ap_${key}`] = value;
+      }
+      // Skip pmd (page metadata) — too verbose
+    }
   }
 
   return {

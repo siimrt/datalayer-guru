@@ -59,6 +59,11 @@ export function renderSettingsPanel(container, state, actions) {
             padding: 10px 0; border-radius: 8px; width: 100%;
             font-size: 13px; cursor: pointer; transition: all 0.2s;
           ">Manage Subscription</button>
+          <button id="settings-view-plans-btn" style="
+            background: none; border: none; color: var(--tp-text-muted);
+            font-size: 12px; cursor: pointer; width: 100%; padding: 8px 0;
+            text-decoration: underline; transition: color 0.2s;
+          ">View Plans &amp; Pricing</button>
         `}
       </div>
 
@@ -158,6 +163,16 @@ export function renderSettingsPanel(container, state, actions) {
     });
     manageBtn.addEventListener('mouseenter', () => { manageBtn.style.borderColor = 'var(--tp-primary)'; });
     manageBtn.addEventListener('mouseleave', () => { manageBtn.style.borderColor = 'var(--tp-border)'; });
+  }
+
+  // View Plans button (paid users)
+  const viewPlansBtn = container.querySelector('#settings-view-plans-btn');
+  if (viewPlansBtn) {
+    viewPlansBtn.addEventListener('click', () => {
+      if (actions?.navigateToPricing) actions.navigateToPricing();
+    });
+    viewPlansBtn.addEventListener('mouseenter', () => { viewPlansBtn.style.color = 'var(--tp-primary)'; });
+    viewPlansBtn.addEventListener('mouseleave', () => { viewPlansBtn.style.color = 'var(--tp-text-muted)'; });
   }
 
   // Force refresh button

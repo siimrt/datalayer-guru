@@ -6,6 +6,7 @@
 
 import { MSG } from '../shared/messaging.js';
 import { getPlanCapabilities } from '../licensing/feature-gates.js';
+import { initAnalytics, trackEvent, identifyUser } from '../shared/analytics.js';
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
 
@@ -19,6 +20,11 @@ import { renderTabNav } from './components/TabNav.js';
     }
   } catch (e) {}
 })();
+
+// ---- Analytics Initialization ----
+initAnalytics();
+trackEvent('sidepanel_opened');
+
 import { renderEventGenerator } from './components/EventGenerator.js';
 import { renderAuditPanel } from './components/AuditPanel.js';
 import { renderDataLayerLive, appendDataLayerEntry, appendNetworkEntry } from './components/DataLayerLive.js';
@@ -111,6 +117,7 @@ const actions = {
       return;
     }
 
+    trackEvent('code_copied');
     try {
       const textarea = document.createElement('textarea');
       textarea.innerHTML = code;
@@ -140,6 +147,7 @@ const actions = {
       return;
     }
 
+    trackEvent('code_pushed_to_datalayer');
     const textarea = document.createElement('textarea');
     textarea.innerHTML = code;
     const decoded = textarea.value;
@@ -198,6 +206,7 @@ const actions = {
       return;
     }
 
+    trackEvent('pdf_exported');
     // Dynamic import for PDF generation
     const { generateAuditReport } = await import('../export/pdf-report.js');
     const filename = await generateAuditReport(state, {
@@ -211,6 +220,7 @@ const actions = {
       actions.navigateToPricing();
       return;
     }
+    trackEvent('synthetic_event_pushed', { target: target === 'top' ? 'top' : 'custom_pixel' });
 
     if (target && target !== 'top') {
       // Push to a specific Shopify custom pixel sandbox frame
@@ -273,6 +283,7 @@ const actions = {
   },
 
   toggleTheme(theme) {
+    trackEvent('theme_toggled', { theme });
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
@@ -297,6 +308,8 @@ async function initPlan() {
     state.planDebug = response?.debug || null;
     state.planLoading = false;
     state.capabilities = resolvePlanCapabilities(state.plan);
+    identifyUser(state.plan, state.userEmail);
+    trackEvent('plan_loaded', { plan: state.plan });
     console.log('[TrackPulse Sidepanel] Initial plan:', state.plan, 'debug:', JSON.stringify(state.planDebug));
 
     // If we already have detection data, render with initial plan
@@ -358,6 +371,8 @@ async function refreshPlanQuietly() {
       state.plan = refreshed.plan;
       state.userEmail = refreshed.email || state.userEmail;
       state.capabilities = resolvePlanCapabilities(state.plan);
+      identifyUser(state.plan, state.userEmail);
+      trackEvent('plan_upgraded', { from: oldPlan, to: state.plan });
 
       // If on pricing page and plan upgraded, show success animation + redirect
       if (state.activeTab === 'pricing' && state.plan !== 'free' && state.plan !== oldPlan) {
@@ -399,6 +414,11 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.url = payload.url || '';
       state.timestamp = payload.timestamp;
       state.loading = false;
+      trackEvent('page_detected', {
+        cms: state.cms?.cms || 'unknown',
+        pageType: state.pageType?.pageType || 'unknown',
+        eventsCount: Object.values(state.generatedEvents).flat().length,
+      });
 
       // Add initial dataLayer entries from the snapshot
       if (payload.audit?.existingEvents) {
@@ -507,6 +527,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 function handleTabChange(tab) {
   state.activeTab = tab;
+  trackEvent('tab_changed', { tab });
   renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
   renderActiveTab();
 }
