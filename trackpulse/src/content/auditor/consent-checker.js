@@ -29,6 +29,7 @@ export class ConsentChecker {
   _detectCMP(pageContext) {
     const consent = pageContext.consent || {};
 
+    if (consent.cookieyes) return 'cookieyes';
     if (consent.cookiebot) return 'cookiebot';
     if (consent.oneTrust) return 'onetrust';
     if (consent.didomi) return 'didomi';
@@ -38,6 +39,7 @@ export class ConsentChecker {
 
     // Fallback: check DOM for known CMP elements
     const cmpSelectors = {
+      cookieyes: '#cky-consent, .cky-consent-container',
       cookiebot: '#CybotCookiebotDialog, [data-cookieconsent]',
       onetrust: '#onetrust-banner-sdk, .onetrust-pc-dark-filter',
       didomi: '#didomi-host, .didomi-popup-container',

@@ -1,5 +1,14 @@
 /**
  * Pixel Detector — Detects tracking pixels/tags installed on the page.
+ *
+ * Each platform uses a funnel/cascade approach:
+ * 1. Script tags (fastest) — check <script src="..."> for known CDN URLs
+ * 2. Inline scripts — scan <script> blocks for SDK init calls
+ * 3. DataLayer / pageContext — check dataLayer entries and pageContext.pixels globals
+ * 4. Noscript / img fallbacks — check <noscript> and <img> for tracking pixel URLs
+ *
+ * If a pixel is detected (script present, global exists) but no ID can be
+ * extracted, id: null is returned with active: true.
  */
 
 export class PixelDetector {
@@ -12,48 +21,37 @@ export class PixelDetector {
   detect(pageContext = {}) {
     const pixels = [];
 
-    // --- Google Tag Manager ---
-    const gtmPixels = this._detectGTM();
-    pixels.push(...gtmPixels);
+    // Query DOM collections once for performance — reused by all sub-methods
+    // instead of querying the DOM separately in each detector.
+    const domCache = {
+      inlineScripts: document.querySelectorAll('script:not([src])'),
+      noscripts: document.querySelectorAll('noscript'),
+      imgs: document.querySelectorAll('img'),
+    };
 
-    // --- Google Analytics 4 ---
-    const ga4Pixels = this._detectGA4(pageContext);
-    pixels.push(...ga4Pixels);
-
-    // --- Universal Analytics (legacy) ---
-    const uaPixels = this._detectUA();
-    pixels.push(...uaPixels);
-
-    // --- Meta/Facebook Pixel ---
-    const metaPixels = this._detectMeta(pageContext);
-    pixels.push(...metaPixels);
-
-    // --- TikTok Pixel ---
-    const tiktokPixels = this._detectTikTok(pageContext);
-    pixels.push(...tiktokPixels);
-
-    // --- Pinterest Tag ---
-    const pinterestPixels = this._detectPinterest(pageContext);
-    pixels.push(...pinterestPixels);
-
-    // --- Snapchat Pixel ---
-    const snapchatPixels = this._detectSnapchat(pageContext);
-    pixels.push(...snapchatPixels);
-
-    // --- LinkedIn Insight Tag ---
-    const linkedinPixels = this._detectLinkedIn(pageContext);
-    pixels.push(...linkedinPixels);
-
-    // --- Twitter/X Pixel ---
-    const twitterPixels = this._detectTwitter(pageContext);
-    pixels.push(...twitterPixels);
+    pixels.push(...this._detectGTM(domCache));
+    pixels.push(...this._detectGA4(pageContext, domCache));
+    pixels.push(...this._detectUA(domCache));
+    pixels.push(...this._detectMeta(pageContext, domCache));
+    pixels.push(...this._detectTikTok(pageContext, domCache));
+    pixels.push(...this._detectPinterest(pageContext, domCache));
+    pixels.push(...this._detectSnapchat(pageContext, domCache));
+    pixels.push(...this._detectLinkedIn(pageContext, domCache));
+    pixels.push(...this._detectTwitter(pageContext, domCache));
 
     return pixels;
   }
 
-  _detectGTM() {
+  /* ------------------------------------------------------------------ */
+  /*  Google Tag Manager                                                 */
+  /* ------------------------------------------------------------------ */
+
+  _detectGTM(domCache) {
     const results = [];
-    const scripts = document.querySelectorAll('script[src*="googletagmanager.com/gtm.js"]');
+
+    const scripts = document.querySelectorAll(
+      'script[src*="googletagmanager.com/gtm.js"]',
+    );
     for (const script of scripts) {
       const match = script.src.match(/[?&]id=(GTM-[A-Z0-9]+)/);
       if (match) {
@@ -67,7 +65,9 @@ export class PixelDetector {
     }
 
     // Also check noscript iframes
-    const iframes = document.querySelectorAll('iframe[src*="googletagmanager.com/ns.html"]');
+    const iframes = document.querySelectorAll(
+      'iframe[src*="googletagmanager.com/ns.html"]',
+    );
     for (const iframe of iframes) {
       const match = iframe.src.match(/[?&]id=(GTM-[A-Z0-9]+)/);
       if (match && !results.some((r) => r.id === match[1])) {
@@ -82,8 +82,7 @@ export class PixelDetector {
 
     // Check inline scripts for GTM container IDs
     if (results.length === 0) {
-      const allScripts = document.querySelectorAll('script:not([src])');
-      for (const script of allScripts) {
+      for (const script of domCache.inlineScripts) {
         const content = script.textContent || '';
         const matches = content.match(/GTM-[A-Z0-9]+/g);
         if (matches) {
@@ -104,20 +103,48 @@ export class PixelDetector {
     return results;
   }
 
-  _detectGA4(pageContext) {
+  /* ------------------------------------------------------------------ */
+  /*  Google Analytics 4                                                 */
+  /* ------------------------------------------------------------------ */
+
+  _detectGA4(pageContext, domCache) {
     const results = [];
     const ids = new Set();
 
-    // Check script tags
-    const scripts = document.querySelectorAll('script[src*="googletagmanager.com/gtag"]');
+    // 1. Script tags — googletagmanager.com/gtag pattern
+    const scripts = document.querySelectorAll(
+      'script[src*="googletagmanager.com/gtag"]',
+    );
+    let hasGtagScript = scripts.length > 0;
     for (const script of scripts) {
       const match = script.src.match(/[?&]id=(G-[A-Z0-9]+)/);
       if (match) ids.add(match[1]);
     }
 
-    // Check inline scripts for G- measurement IDs
-    const allScripts = document.querySelectorAll('script:not([src])');
-    for (const script of allScripts) {
+    // 1b. Shorter gtag/js pattern (some implementations use shortened URLs)
+    if (!hasGtagScript) {
+      const gtagJsScripts = document.querySelectorAll(
+        'script[src*="gtag/js"]',
+      );
+      if (gtagJsScripts.length > 0) hasGtagScript = true;
+      for (const script of gtagJsScripts) {
+        const match = script.src.match(/[?&]id=(G-[A-Z0-9]+)/);
+        if (match) ids.add(match[1]);
+      }
+    }
+
+    // 1c. gtag/destination pattern that may contain measurement IDs
+    const destScripts = document.querySelectorAll(
+      'script[src*="gtag/destination"]',
+    );
+    for (const script of destScripts) {
+      hasGtagScript = true;
+      const match = script.src.match(/[?&]id=(G-[A-Z0-9]+)/);
+      if (match) ids.add(match[1]);
+    }
+
+    // 2. Inline scripts — G- measurement IDs
+    for (const script of domCache.inlineScripts) {
       const content = script.textContent || '';
       const matches = content.match(/G-[A-Z0-9]{8,12}/g);
       if (matches) {
@@ -125,11 +152,24 @@ export class PixelDetector {
       }
     }
 
-    // Check dataLayer for gtag config events
+    // 3. dataLayer — gtag config events
     if (pageContext.dataLayer) {
       for (const entry of pageContext.dataLayer) {
+        // Array form: ['config', 'G-XXXX']
         if (Array.isArray(entry) && entry[0] === 'config') {
           const id = entry[1];
+          if (typeof id === 'string' && id.startsWith('G-')) {
+            ids.add(id);
+          }
+        }
+        // Arguments-object form: {0: 'config', 1: 'G-XXXX'}
+        if (
+          entry &&
+          typeof entry === 'object' &&
+          !Array.isArray(entry) &&
+          entry['0'] === 'config'
+        ) {
+          const id = entry['1'];
           if (typeof id === 'string' && id.startsWith('G-')) {
             ids.add(id);
           }
@@ -137,27 +177,48 @@ export class PixelDetector {
       }
     }
 
-    for (const id of ids) {
+    // 4. pageContext globals — gtag / google_tag_data
+    const hasGtagGlobal = pageContext.pixels?.gtag || false;
+    const hasGoogleTagData = pageContext.pixels?.googleTagData || false;
+    const isActive = hasGtagGlobal || hasGoogleTagData || hasGtagScript;
+
+    // Build results
+    if (ids.size > 0) {
+      for (const id of ids) {
+        results.push({
+          platform: 'ga4',
+          id,
+          method: hasGtagScript ? 'script' : 'dataLayer',
+          active: isActive,
+        });
+      }
+    } else if (isActive) {
+      // gtag global or google_tag_data exists but no measurement ID found —
+      // still report as detected so it shows in the UI
       results.push({
         platform: 'ga4',
-        id,
-        method: pageContext.pixels?.gtag ? 'script' : 'script',
-        active: pageContext.pixels?.gtag || scripts.length > 0,
+        id: null,
+        method: hasGtagScript ? 'script' : 'global',
+        active: true,
       });
     }
 
     return results;
   }
 
-  _detectUA() {
+  /* ------------------------------------------------------------------ */
+  /*  Universal Analytics (legacy)                                       */
+  /* ------------------------------------------------------------------ */
+
+  _detectUA(domCache) {
     const results = [];
     const ids = new Set();
 
-    const scripts = document.querySelectorAll('script[src*="google-analytics.com/analytics.js"]');
+    const scripts = document.querySelectorAll(
+      'script[src*="google-analytics.com/analytics.js"]',
+    );
     if (scripts.length > 0) {
-      // Try to find UA IDs in inline scripts
-      const allScripts = document.querySelectorAll('script:not([src])');
-      for (const script of allScripts) {
+      for (const script of domCache.inlineScripts) {
         const content = script.textContent || '';
         const matches = content.match(/UA-\d+-\d+/g);
         if (matches) {
@@ -178,15 +239,21 @@ export class PixelDetector {
     return results;
   }
 
-  _detectMeta(pageContext) {
+  /* ------------------------------------------------------------------ */
+  /*  Meta / Facebook Pixel                                              */
+  /* ------------------------------------------------------------------ */
+
+  _detectMeta(pageContext, domCache) {
     const results = [];
     const ids = new Set();
 
-    // Check for fbevents.js script
-    const scripts = document.querySelectorAll('script[src*="connect.facebook.net"]');
+    // 1. Script tag — connect.facebook.net
+    const scripts = document.querySelectorAll(
+      'script[src*="connect.facebook.net"]',
+    );
     const hasFbScript = scripts.length > 0;
 
-    // Try to get pixel ID from pageContext
+    // 2. pageContext — fbq.getState / fbq.instance
     if (pageContext.pixels?.fbPixelId) {
       ids.add(pageContext.pixels.fbPixelId);
     }
@@ -194,11 +261,12 @@ export class PixelDetector {
       for (const id of pageContext.pixels.fbPixelIds) ids.add(id);
     }
 
-    // Search inline scripts for fbq('init', 'XXXX')
-    const allScripts = document.querySelectorAll('script:not([src])');
-    for (const script of allScripts) {
+    // 3. Inline scripts — fbq('init', 'XXXX')
+    for (const script of domCache.inlineScripts) {
       const content = script.textContent || '';
-      const matches = content.match(/fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{15,16})['"]/g);
+      const matches = content.match(
+        /fbq\s*\(\s*['"]init['"]\s*,\s*['"](\d{15,16})['"]/g,
+      );
       if (matches) {
         for (const m of matches) {
           const idMatch = m.match(/['"](\d{15,16})['"]/);
@@ -207,13 +275,38 @@ export class PixelDetector {
       }
     }
 
+    // 4. <noscript> — facebook.com/tr?id= pattern
+    for (const ns of domCache.noscripts) {
+      const html = ns.innerHTML || '';
+      const noscriptMatches = html.match(
+        /facebook\.com\/tr\?id=(\d{15,16})/g,
+      );
+      if (noscriptMatches) {
+        for (const m of noscriptMatches) {
+          const idMatch = m.match(/id=(\d{15,16})/);
+          if (idMatch) ids.add(idMatch[1]);
+        }
+      }
+    }
+
+    // 5. <img> — facebook.com/tr src
+    for (const img of domCache.imgs) {
+      const src = img.src || img.getAttribute('data-src') || '';
+      if (src.includes('facebook.com/tr')) {
+        const idMatch = src.match(/[?&]id=(\d{15,16})/);
+        if (idMatch) ids.add(idMatch[1]);
+      }
+    }
+
+    const isActive = pageContext.pixels?.fbq || hasFbScript;
+
     if (ids.size > 0 || hasFbScript || pageContext.pixels?.fbq) {
       if (ids.size === 0) {
         results.push({
           platform: 'meta',
           id: null,
           method: 'script',
-          active: pageContext.pixels?.fbq || hasFbScript,
+          active: isActive,
         });
       } else {
         for (const id of ids) {
@@ -221,7 +314,7 @@ export class PixelDetector {
             platform: 'meta',
             id,
             method: 'script',
-            active: pageContext.pixels?.fbq || hasFbScript,
+            active: isActive,
           });
         }
       }
@@ -230,77 +323,184 @@ export class PixelDetector {
     return results;
   }
 
-  _detectTikTok(pageContext) {
-    const results = [];
+  /* ------------------------------------------------------------------ */
+  /*  TikTok Pixel                                                       */
+  /* ------------------------------------------------------------------ */
 
-    const scripts = document.querySelectorAll('script[src*="analytics.tiktok.com"]');
+  _detectTikTok(pageContext, domCache) {
+    const results = [];
+    const ids = new Set();
+
+    // 1. Script tag — analytics.tiktok.com
+    const scripts = document.querySelectorAll(
+      'script[src*="analytics.tiktok.com"]',
+    );
     const hasTtScript = scripts.length > 0;
 
     if (hasTtScript || pageContext.pixels?.ttq) {
-      // Try to find pixel ID
-      let pixelId = null;
-      const allScripts = document.querySelectorAll('script:not([src])');
-      for (const script of allScripts) {
+      // 2. Inline scripts — ttq.load('XXXX')
+      for (const script of domCache.inlineScripts) {
         const content = script.textContent || '';
-        const match = content.match(/ttq\.load\s*\(\s*['"]([A-Z0-9]+)['"]/);
+        const match = content.match(
+          /ttq\.load\s*\(\s*['"]([A-Z0-9]+)['"]/,
+        );
         if (match) {
-          pixelId = match[1];
-          break;
+          ids.add(match[1]);
         }
       }
 
-      results.push({
-        platform: 'tiktok',
-        id: pixelId,
-        method: 'script',
-        active: pageContext.pixels?.ttq || hasTtScript,
-      });
+      // 3. pageContext — ttq._t pixel map
+      if (pageContext.pixels?.ttqPixelIds) {
+        for (const id of pageContext.pixels.ttqPixelIds) ids.add(id);
+      }
+
+      // 4. Script src — sdkid parameter
+      for (const script of scripts) {
+        const srcMatch = script.src.match(/sdkid=([A-Z0-9]+)/);
+        if (srcMatch) ids.add(srcMatch[1]);
+      }
+
+      if (ids.size === 0) {
+        results.push({
+          platform: 'tiktok',
+          id: null,
+          method: 'script',
+          active: pageContext.pixels?.ttq || hasTtScript,
+        });
+      } else {
+        for (const id of ids) {
+          results.push({
+            platform: 'tiktok',
+            id,
+            method: 'script',
+            active: pageContext.pixels?.ttq || hasTtScript,
+          });
+        }
+      }
+
+      return results;
+    }
+
+    // 5. <img> fallback — analytics.tiktok.com
+    for (const img of domCache.imgs) {
+      const src = img.src || img.getAttribute('data-src') || '';
+      if (src.includes('analytics.tiktok.com')) {
+        results.push({
+          platform: 'tiktok',
+          id: null,
+          method: 'img',
+          active: true,
+        });
+        return results;
+      }
     }
 
     return results;
   }
 
-  _detectPinterest(pageContext) {
-    const results = [];
+  /* ------------------------------------------------------------------ */
+  /*  Pinterest Tag                                                      */
+  /* ------------------------------------------------------------------ */
 
-    const scripts = document.querySelectorAll('script[src*="s.pinimg.com/ct/core.js"]');
+  _detectPinterest(pageContext, domCache) {
+    const results = [];
+    let pixelId = null;
+
+    // 1. Script tags — s.pinimg.com/ct/core.js and pintrk pattern
+    const scripts = document.querySelectorAll(
+      'script[src*="s.pinimg.com/ct/core.js"], script[src*="pintrk"]',
+    );
     const hasPinScript = scripts.length > 0;
 
+    // 2. Inline scripts — pintrk('load', 'XXXX')
     if (hasPinScript || pageContext.pixels?.pintrk) {
-      let pixelId = null;
-      const allScripts = document.querySelectorAll('script:not([src])');
-      for (const script of allScripts) {
+      for (const script of domCache.inlineScripts) {
         const content = script.textContent || '';
-        const match = content.match(/pintrk\s*\(\s*['"]load['"]\s*,\s*['"](\d+)['"]/);
+        const match = content.match(
+          /pintrk\s*\(\s*['"]load['"]\s*,\s*['"](\d+)['"]/,
+        );
         if (match) {
           pixelId = match[1];
           break;
         }
       }
+    }
 
+    // 3. <noscript> / <img> — ct.pinterest.com
+    if (!pixelId) {
+      for (const ns of domCache.noscripts) {
+        const html = ns.innerHTML || '';
+        if (html.includes('ct.pinterest.com')) {
+          const idMatch = html.match(/[?&]tid=(\d+)/);
+          if (idMatch) pixelId = idMatch[1];
+          if (!hasPinScript && !pageContext.pixels?.pintrk && !pixelId) {
+            results.push({
+              platform: 'pinterest',
+              id: null,
+              method: 'noscript',
+              active: true,
+            });
+            return results;
+          }
+          break;
+        }
+      }
+    }
+
+    if (!pixelId) {
+      for (const img of domCache.imgs) {
+        const src = img.src || img.getAttribute('data-src') || '';
+        if (src.includes('ct.pinterest.com')) {
+          const idMatch = src.match(/[?&]tid=(\d+)/);
+          if (idMatch) pixelId = idMatch[1];
+          if (!hasPinScript && !pageContext.pixels?.pintrk && !pixelId) {
+            results.push({
+              platform: 'pinterest',
+              id: null,
+              method: 'img',
+              active: true,
+            });
+            return results;
+          }
+          break;
+        }
+      }
+    }
+
+    if (hasPinScript || pageContext.pixels?.pintrk || pixelId) {
       results.push({
         platform: 'pinterest',
         id: pixelId,
         method: 'script',
-        active: pageContext.pixels?.pintrk || hasPinScript,
+        active: pageContext.pixels?.pintrk || hasPinScript || !!pixelId,
       });
     }
 
     return results;
   }
 
-  _detectSnapchat(pageContext) {
+  /* ------------------------------------------------------------------ */
+  /*  Snapchat Pixel                                                     */
+  /* ------------------------------------------------------------------ */
+
+  _detectSnapchat(pageContext, domCache) {
     const results = [];
 
-    const scripts = document.querySelectorAll('script[src*="sc-static.net/scevent"]');
+    // 1. Broader script src — sc-static.net (not just /scevent)
+    const scripts = document.querySelectorAll(
+      'script[src*="sc-static.net"]',
+    );
     const hasSnapScript = scripts.length > 0;
 
     if (hasSnapScript || pageContext.pixels?.snaptr) {
       let pixelId = null;
-      const allScripts = document.querySelectorAll('script:not([src])');
-      for (const script of allScripts) {
+
+      // 2. Inline scripts — snaptr('init', 'UUID')
+      for (const script of domCache.inlineScripts) {
         const content = script.textContent || '';
-        const match = content.match(/snaptr\s*\(\s*['"]init['"]\s*,\s*['"]([a-f0-9-]+)['"]/);
+        const match = content.match(
+          /snaptr\s*\(\s*['"]init['"]\s*,\s*['"]([a-f0-9-]+)['"]/,
+        );
         if (match) {
           pixelId = match[1];
           break;
@@ -318,18 +518,28 @@ export class PixelDetector {
     return results;
   }
 
-  _detectLinkedIn(pageContext) {
+  /* ------------------------------------------------------------------ */
+  /*  LinkedIn Insight Tag                                               */
+  /* ------------------------------------------------------------------ */
+
+  _detectLinkedIn(pageContext, domCache) {
     const results = [];
 
-    const scripts = document.querySelectorAll('script[src*="snap.licdn.com"]');
+    // 1. Broader script src — snap.licdn.com + linkedin.com/li/track
+    const scripts = document.querySelectorAll(
+      'script[src*="snap.licdn.com"], script[src*="linkedin.com/li/track"]',
+    );
     const hasLiScript = scripts.length > 0;
 
+    let pixelId = null;
+
     if (hasLiScript || pageContext.pixels?.lintrk) {
-      let pixelId = null;
-      const allScripts = document.querySelectorAll('script:not([src])');
-      for (const script of allScripts) {
+      // 2. Inline scripts — _linkedin_partner_id
+      for (const script of domCache.inlineScripts) {
         const content = script.textContent || '';
-        const match = content.match(/_linkedin_partner_id\s*=\s*['"]?(\d+)/);
+        const match = content.match(
+          /_linkedin_partner_id\s*=\s*['"]?(\d+)/,
+        );
         if (match) {
           pixelId = match[1];
           break;
@@ -342,23 +552,53 @@ export class PixelDetector {
         method: 'script',
         active: pageContext.pixels?.lintrk || hasLiScript,
       });
+
+      return results;
+    }
+
+    // 3. <img> fallback — px.ads.linkedin.com / dc.ads.linkedin.com
+    for (const img of domCache.imgs) {
+      const src = img.src || img.getAttribute('data-src') || '';
+      if (
+        src.includes('px.ads.linkedin.com') ||
+        src.includes('dc.ads.linkedin.com')
+      ) {
+        const idMatch = src.match(/[?&]pid=(\d+)/);
+        results.push({
+          platform: 'linkedin',
+          id: idMatch ? idMatch[1] : null,
+          method: 'img',
+          active: true,
+        });
+        return results;
+      }
     }
 
     return results;
   }
 
-  _detectTwitter(pageContext) {
+  /* ------------------------------------------------------------------ */
+  /*  Twitter / X Pixel                                                  */
+  /* ------------------------------------------------------------------ */
+
+  _detectTwitter(pageContext, domCache) {
     const results = [];
 
-    const scripts = document.querySelectorAll('script[src*="static.ads-twitter.com"]');
+    // 1. Script src — static.ads-twitter.com
+    const scripts = document.querySelectorAll(
+      'script[src*="static.ads-twitter.com"]',
+    );
     const hasTwScript = scripts.length > 0;
 
+    let pixelId = null;
+
     if (hasTwScript || pageContext.pixels?.twq) {
-      let pixelId = null;
-      const allScripts = document.querySelectorAll('script:not([src])');
-      for (const script of allScripts) {
+      // 2. Inline scripts — twq('init', 'XXXX')
+      for (const script of domCache.inlineScripts) {
         const content = script.textContent || '';
-        const match = content.match(/twq\s*\(\s*['"]init['"]\s*,\s*['"]([a-z0-9]+)['"]/);
+        const match = content.match(
+          /twq\s*\(\s*['"]init['"]\s*,\s*['"]([a-z0-9]+)['"]/,
+        );
         if (match) {
           pixelId = match[1];
           break;
@@ -371,6 +611,26 @@ export class PixelDetector {
         method: 'script',
         active: pageContext.pixels?.twq || hasTwScript,
       });
+
+      return results;
+    }
+
+    // 3. <img> fallback — Twitter tracking pixels
+    for (const img of domCache.imgs) {
+      const src = img.src || img.getAttribute('data-src') || '';
+      if (
+        src.includes('ads-twitter.com') ||
+        src.includes('t.co/i/adsct') ||
+        src.includes('analytics.twitter.com')
+      ) {
+        results.push({
+          platform: 'twitter',
+          id: null,
+          method: 'img',
+          active: true,
+        });
+        return results;
+      }
     }
 
     return results;

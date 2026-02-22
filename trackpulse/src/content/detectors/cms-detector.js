@@ -20,6 +20,16 @@ export function detectCMS(pageContext = {}) {
   const scores = {};
   const matchedSignals = {};
 
+  // Cache expensive DOM serializations outside the CMS loop.
+  // These are only computed on first access (lazy) because not every page
+  // needs them — but they must NOT be re-computed per CMS.
+  let _outerHTML = null;
+  let _innerHTML = null;
+  const getOuterHTML = () => (_outerHTML ??= document.documentElement.outerHTML);
+  const getInnerHTML = () => (_innerHTML ??= document.documentElement.innerHTML);
+
+  const pageUrl = window.location.href;
+
   for (const [cmsKey, signals] of Object.entries(CMS_SIGNALS)) {
     scores[cmsKey] = 0;
     matchedSignals[cmsKey] = [];
@@ -80,10 +90,10 @@ export function detectCMS(pageContext = {}) {
 
     // 4. URL Patterns — check against all script/link sources and the page URL
     if (signals.urlPatterns) {
-      const html = document.documentElement.outerHTML;
+      const html = getOuterHTML();
       for (const pattern of signals.urlPatterns) {
         if (
-          pattern.test(window.location.href) ||
+          pattern.test(pageUrl) ||
           pattern.test(html)
         ) {
           scores[cmsKey] += SIGNAL_WEIGHTS.urlPatterns;
@@ -104,7 +114,7 @@ export function detectCMS(pageContext = {}) {
 
     // 6. HTML Patterns — search the full HTML
     if (signals.htmlPatterns) {
-      const html = document.documentElement.innerHTML;
+      const html = getInnerHTML();
       for (const pattern of signals.htmlPatterns) {
         if (pattern.test(html)) {
           scores[cmsKey] += SIGNAL_WEIGHTS.htmlPatterns;
@@ -150,49 +160,34 @@ export function detectCMS(pageContext = {}) {
  * Try to detect the CMS version from available data.
  */
 function detectVersion(cms, pageContext) {
+  if (cms === CMS.SHOPIFY) {
+    // Shopify doesn't really expose version, but we can get theme info
+    if (pageContext.shopify?.theme?.name) {
+      return `Theme: ${pageContext.shopify.theme.name}`;
+    }
+    return null;
+  }
+
+  // For WooCommerce, PrestaShop, Magento, and Webflow, version lives in
+  // meta[name="generator"]. Query it once instead of per-CMS.
+  const genContent = document.querySelector('meta[name="generator"]')?.content;
+  if (!genContent) return null;
+
   switch (cms) {
-    case CMS.SHOPIFY:
-      // Shopify doesn't really expose version, but we can get theme info
-      if (pageContext.shopify?.theme?.name) {
-        return `Theme: ${pageContext.shopify.theme.name}`;
-      }
-      return null;
-
     case CMS.WOOCOMMERCE: {
-      const gen = document.querySelector('meta[name="generator"]');
-      if (gen?.content) {
-        const match = gen.content.match(/WooCommerce\s+([\d.]+)/i);
-        if (match) return match[1];
-      }
-      return null;
+      const match = genContent.match(/WooCommerce\s+([\d.]+)/i);
+      return match ? match[1] : null;
     }
-
     case CMS.PRESTASHOP: {
-      const gen = document.querySelector('meta[name="generator"]');
-      if (gen?.content) {
-        const match = gen.content.match(/PrestaShop\s+([\d.]+)/i);
-        if (match) return match[1];
-      }
-      return null;
+      const match = genContent.match(/PrestaShop\s+([\d.]+)/i);
+      return match ? match[1] : null;
     }
-
     case CMS.MAGENTO: {
-      const gen = document.querySelector('meta[name="generator"]');
-      if (gen?.content) {
-        const match = gen.content.match(/Magento\s+([\d.]+)/i);
-        if (match) return match[1];
-      }
-      return null;
+      const match = genContent.match(/Magento\s+([\d.]+)/i);
+      return match ? match[1] : null;
     }
-
-    case CMS.WEBFLOW: {
-      const gen = document.querySelector('meta[name="generator"]');
-      if (gen?.content) {
-        return gen.content.replace('Webflow', '').trim() || null;
-      }
-      return null;
-    }
-
+    case CMS.WEBFLOW:
+      return genContent.replace('Webflow', '').trim() || null;
     default:
       return null;
   }

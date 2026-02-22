@@ -56,24 +56,26 @@ export class ShopifyExtractor extends BaseExtractor {
     // Source 1: ShopifyAnalytics.meta.product
     if (pageContext.shopifyAnalytics?.product) {
       const p = pageContext.shopifyAnalytics.product;
+      const rawPrice = p.price || p.variants?.[0]?.price;
       result.product = this._normalizeProduct({
         id: p.id || p.gid,
         name: p.title || p.name,
-        price: p.price ? p.price / 100 : 0, // Shopify prices are in cents
+        price: rawPrice ? rawPrice / 100 : 0, // Shopify prices are in cents
         brand: p.vendor,
         category: p.type,
-        variant: p.variant,
-        sku: p.sku,
+        variant: p.variant || p.variants?.[0]?.title,
+        sku: p.sku || p.variants?.[0]?.sku,
       });
     }
 
     // Source 2: window.meta.product
     if (pageContext.shopifyProduct && !result.product) {
       const p = pageContext.shopifyProduct;
+      const rawPrice = p.price || p.variants?.[0]?.price;
       result.product = this._normalizeProduct({
         id: p.id || p.gid,
         name: p.title || p.name,
-        price: p.price ? p.price / 100 : 0,
+        price: rawPrice ? rawPrice / 100 : 0,
         brand: p.vendor,
         category: p.type,
         variant: p.variants?.[0]?.title,
@@ -131,6 +133,11 @@ export class ShopifyExtractor extends BaseExtractor {
       }
     }
 
+    // Source 5: Rescue from dataLayer — scan for view_item events with real price
+    if (result.product && !result.product.price && pageContext.dataLayer) {
+      this._rescuePriceFromDataLayer(result.product, pageContext.dataLayer);
+    }
+
     // Set currency
     result.currency =
       pageContext.shopify?.currency ||
@@ -157,7 +164,7 @@ export class ShopifyExtractor extends BaseExtractor {
     // Try to get collection name from the URL or page title
     const collectionName = this._getCollectionName();
 
-    // Parse product cards from DOM
+    // Source 1: Parse product cards from DOM
     const productCards = document.querySelectorAll(
       '[data-product-id], .product-card, .product-item, .grid-product, .product-grid-item, .product'
     );
@@ -168,6 +175,35 @@ export class ShopifyExtractor extends BaseExtractor {
       const product = this._extractProductFromCard(card, i, collectionName);
       if (product && product.name) {
         impressions.push(product);
+      }
+    }
+
+    // Source 2: Fallback to dataLayer — if DOM extraction found nothing,
+    // check for an existing view_item_list event with items
+    if (impressions.length === 0 && pageContext.dataLayer) {
+      for (const entry of pageContext.dataLayer) {
+        const evt = entry?.event || (entry?.['0'] === 'event' ? entry['1'] : null);
+        const ecom = entry?.ecommerce || entry?.['2']?.ecommerce || entry?.['2'];
+        if (evt === 'view_item_list' && ecom?.items?.length > 0) {
+          for (let i = 0; i < ecom.items.length && i < 50; i++) {
+            const item = ecom.items[i];
+            impressions.push(this._normalizeProduct({
+              id: item.item_id || item.id,
+              name: item.item_name || item.name,
+              price: item.price,
+              brand: item.item_brand || item.brand,
+              category: item.item_category || item.category,
+              variant: item.item_variant || item.variant,
+              sku: item.sku || item.item_id,
+              quantity: item.quantity,
+              url: item.url,
+              position: item.index ?? i,
+              listName: ecom.item_list_name || collectionName,
+              discount: item.discount,
+            }));
+          }
+          break;
+        }
       }
     }
 
@@ -316,6 +352,37 @@ export class ShopifyExtractor extends BaseExtractor {
     }
 
     return result;
+  }
+
+  /**
+   * Rescue price from dataLayer when CMS sources failed.
+   * Scans for view_item / detail events that contain item price.
+   */
+  _rescuePriceFromDataLayer(product, dataLayer) {
+    for (const entry of dataLayer) {
+      try {
+        // Standard dataLayer push: { event: 'view_item', ecommerce: { items: [...] } }
+        const evt = entry?.event || (entry?.['0'] === 'event' ? entry['1'] : null);
+        if (evt !== 'view_item' && evt !== 'view_item_list' && evt !== 'add_to_cart') continue;
+
+        const ecom = entry?.ecommerce || entry?.['2']?.ecommerce || entry?.['2'];
+        const items = ecom?.items || ecom?.products || [];
+        if (!items.length) continue;
+
+        // Find an item with a real price
+        const item = items.find((i) => i.price > 0) || items[0];
+        if (item?.price > 0) {
+          product.price = parsePrice(item.price);
+          // Also fill other missing fields from DL
+          if (!product.name) product.name = item.item_name || item.name || product.name;
+          if (!product.brand) product.brand = item.item_brand || item.brand || product.brand;
+          if (!product.category) product.category = item.item_category || item.category || product.category;
+          if (!product.variant) product.variant = item.item_variant || item.variant || product.variant;
+          if (!product.id) product.id = String(item.item_id || item.id || product.id);
+          break;
+        }
+      } catch (e) {}
+    }
   }
 
   _extractSearch(pageContext) {

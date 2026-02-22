@@ -71,6 +71,10 @@ export class BaseExtractor {
               result.product[key] = value;
             }
           }
+          // Price rescue: if current price is 0 but source has a real price, use it
+          if (!result.product.price && source.product.price > 0) {
+            result.product.price = source.product.price;
+          }
         }
       }
 
