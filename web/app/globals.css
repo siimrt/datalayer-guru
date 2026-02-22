@@ -1,0 +1,221 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #000000;
+  --color-foreground: #ffffff;
+  --color-surface: #0A0A0B;
+  --color-surface-elevated: #111113;
+  --color-primary: #6C5CE7;
+  --color-primary-light: #A29BFE;
+  --color-primary-dark: #5A4BD1;
+  --color-success: #00B894;
+  --color-text: #FFFFFF;
+  --color-text-secondary: #B4B4C0;
+  --color-text-muted: #7A7A8C;
+  --color-text-dim: #4A4A58;
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-hover: rgba(255, 255, 255, 0.1);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: #000000;
+  color: #ffffff;
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+}
+
+::selection {
+  background: rgba(108, 92, 231, 0.3);
+  color: #fff;
+}
+
+/* ── Hero glow (neon.com-style radial) ─────────────────── */
+.hero-glow {
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  translate: -50% 0;
+  width: 1000px;
+  height: 700px;
+  background: radial-gradient(
+    50% 50% at 50% 50%,
+    rgba(108, 92, 231, 0.18) 0%,
+    rgba(108, 92, 231, 0.06) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.cta-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  width: 700px;
+  height: 400px;
+  background: radial-gradient(
+    50% 50% at 50% 50%,
+    rgba(108, 92, 231, 0.15) 0%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* ── Grid pattern (neon-style dot grid) ────────────────── */
+.grid-pattern {
+  background-image: radial-gradient(
+    rgba(255, 255, 255, 0.04) 1px,
+    transparent 1px
+  );
+  background-size: 32px 32px;
+}
+
+/* ── Cards (neon.com style) ────────────────────────────── */
+.card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+}
+
+.card-hover {
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+.card-hover:hover {
+  border-color: rgba(108, 92, 231, 0.25);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ── Gradient text ─────────────────────────────────────── */
+.text-gradient {
+  background: linear-gradient(135deg, #A29BFE 0%, #6C5CE7 50%, #A29BFE 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.text-gradient-subtle {
+  background: linear-gradient(135deg, #ffffff 0%, #B4B4C0 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Scroll fade-in (progressive enhancement) ─────────── */
+.js-animations .fade-in {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.js-animations .fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Browser mockup (neon-style) ───────────────────────── */
+.browser-frame {
+  background: #0A0A0B;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 20px 60px -15px rgba(0, 0, 0, 0.5);
+}
+
+.browser-frame-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.browser-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* ── FAQ accordion ─────────────────────────────────────── */
+.faq-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.faq-content.open {
+  grid-template-rows: 1fr;
+}
+
+.faq-content > div {
+  overflow: hidden;
+}
+
+/* ── Logo cloud ────────────────────────────────────────── */
+.logo-cloud svg {
+  opacity: 0.35;
+  transition: opacity 0.3s ease;
+}
+
+.logo-cloud svg:hover {
+  opacity: 0.8;
+}
+
+/* ── Popular badge pulse ───────────────────────────────── */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(108, 92, 231, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(108, 92, 231, 0.3);
+  }
+}
+
+.popular-card {
+  animation: glow-pulse 3s ease-in-out infinite;
+}
+
+/* ── Primary button glow ───────────────────────────────── */
+.btn-primary {
+  background: #6C5CE7;
+  color: #fff;
+  border: none;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 0 20px rgba(108, 92, 231, 0.2);
+}
+
+.btn-primary:hover {
+  background: #5A4BD1;
+  box-shadow: 0 0 30px rgba(108, 92, 231, 0.35);
+}
+
+/* ── Ghost button ──────────────────────────────────────── */
+.btn-ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.btn-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── Section divider ───────────────────────────────────── */
+.section-divider {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
