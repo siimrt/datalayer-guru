@@ -5,6 +5,7 @@
  */
 
 import { syntaxHighlight, escapeHtml } from '../../shared/utils.js';
+import { platformIconHtml } from '../../shared/platform-icons.js';
 import { renderDataExtracted } from './DataExtracted.js';
 import { applyCodePaywall, renderLockedButton, renderCMSGateBanner } from './Paywall.js';
 import { getSyntheticEvents } from '../../content/generators/synthetic-events.js';
@@ -19,9 +20,36 @@ const PLATFORM_LABELS = {
 const PLATFORM_COLORS = {
   ga4: '#4285F4',
   meta: '#1877F2',
-  tiktok: '#00F2EA',
+  tiktok: '#1A1A1A',
   pinterest: '#E60023',
 };
+
+/**
+ * Generate mock/placeholder code for gated platforms.
+ * Looks structurally correct but contains redacted values.
+ * This is what free-tier users see in the DOM — real code never touches the DOM.
+ */
+function generateMockCode(platform, eventName) {
+  const mock = {
+    content_type: 'product',
+    content_ids: ['XXXXX', 'XXXXX'],
+    content_name: '••••••••••',
+    currency: '•••',
+    value: 0.00,
+    num_items: 0,
+  };
+
+  switch (platform) {
+    case 'meta':
+      return `fbq('track', '${eventName}', ${JSON.stringify(mock, null, 2)});`;
+    case 'tiktok':
+      return `ttq.track('${eventName}', ${JSON.stringify(mock, null, 2)});`;
+    case 'pinterest':
+      return `pintrk('track', '${eventName}', ${JSON.stringify(mock, null, 2)});`;
+    default:
+      return `// ${eventName} — upgrade to view full code`;
+  }
+}
 
 export function renderEventGenerator(container, state, actions) {
   const events = state.generatedEvents || {};
@@ -33,21 +61,28 @@ export function renderEventGenerator(container, state, actions) {
   // Check CMS support
   const cmsSupported = !capabilities || capabilities.supportedCMS.includes(detectedCMS) || detectedCMS === 'unknown';
 
+  // Platforms that get a blurred preview in free (not fully locked)
+  const isFreeUser = capabilities?.plan === 'free';
+  const previewPlatforms = ['meta']; // Meta: visible but blurred in free
+
   // Render platform toggles — show all platforms, mark unsupported ones
+  // Meta is NOT locked for free users (shown as preview), only TikTok/Pinterest are locked
   const toggles = Object.keys(PLATFORM_LABELS)
     .map((platform) => {
       const isActive = activePlatforms.includes(platform);
       const isSupported = supportedPlatforms.includes(platform);
-      const isLocked = !isSupported;
+      const isPreview = isFreeUser && previewPlatforms.includes(platform);
+      const isLocked = !isSupported && !isPreview;
       return `
       <button
-        class="tp-platform-toggle ${isActive && isSupported ? 'active' : ''} ${isLocked ? 'locked' : ''}"
+        class="tp-platform-toggle ${isActive && (isSupported || isPreview) ? 'active' : ''} ${isLocked ? 'locked' : ''}"
         data-platform="${platform}"
         data-locked="${isLocked}"
-        style="${isActive && isSupported ? `border-color: ${PLATFORM_COLORS[platform]}40; color: ${PLATFORM_COLORS[platform]};` : ''}
+        style="${isActive && (isSupported || isPreview) ? `border-color: ${PLATFORM_COLORS[platform]}40; color: ${PLATFORM_COLORS[platform]};` : ''}
                ${isLocked ? 'opacity: 0.5; cursor: pointer;' : ''}"
         title="${isLocked ? `${PLATFORM_LABELS[platform]} — requires upgrade` : PLATFORM_LABELS[platform]}"
       >
+        ${platformIconHtml(platform, 14)}
         ${isLocked ? '&#128274; ' : ''}${PLATFORM_LABELS[platform]}
       </button>
     `;
@@ -61,17 +96,20 @@ export function renderEventGenerator(container, state, actions) {
   );
 
   // Collect all events for active + supported platforms
+  // Meta in free: goes into allEvents (blurred preview, not locked card)
+  // TikTok/Pinterest in free: stay in lockedPlatformEvents (opaque locked cards)
   const allEvents = [];
   const lockedPlatformEvents = [];
 
   for (const platform of activePlatforms) {
     const platformEvents = events[platform] || [];
-    if (supportedPlatforms.includes(platform)) {
+    const isPreviewPlatform = isFreeUser && previewPlatforms.includes(platform);
+    if (supportedPlatforms.includes(platform) || isPreviewPlatform) {
       for (const event of platformEvents) {
         allEvents.push(event);
       }
     } else {
-      // Show locked cards for unsupported platforms
+      // Show locked cards for unsupported platforms (TikTok, Pinterest)
       for (const event of platformEvents) {
         lockedPlatformEvents.push(event);
       }
@@ -324,9 +362,15 @@ export function renderEventGenerator(container, state, actions) {
 function createEventCard(event, index, collapsed, capabilities, actions) {
   const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
   const platformColor = PLATFORM_COLORS[event.platform] || '#6C5CE7';
-  const highlighted = syntaxHighlight(event.code);
-  const escapedCode = escapeHtml(event.code);
   const isFree = capabilities?.plan === 'free';
+  const isGatedPlatform = isFree && event.platform !== 'ga4';
+
+  // For gated platforms: render mock code in DOM, never expose real code
+  const displayCode = isGatedPlatform
+    ? generateMockCode(event.platform, event.eventName)
+    : event.code;
+  const highlighted = syntaxHighlight(displayCode);
+  const escapedCode = escapeHtml(displayCode);
 
   // Create card element
   const card = document.createElement('div');
@@ -335,8 +379,10 @@ function createEventCard(event, index, collapsed, capabilities, actions) {
   // Header
   const header = document.createElement('div');
   header.className = 'tp-event-header';
+  const cardIcon = platformIconHtml(event.platform, 14);
   header.innerHTML = `
     <div class="flex items-center gap-2">
+      ${cardIcon}
       <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ${platformColor};">${platformLabel}</span>
       <span class="text-[12px] font-medium text-tp-text">${event.eventName}</span>
     </div>
@@ -354,11 +400,14 @@ function createEventCard(event, index, collapsed, capabilities, actions) {
   // Code block
   const codeBlock = document.createElement('div');
   codeBlock.className = 'code-block';
+  codeBlock.style.userSelect = 'none';
+  codeBlock.style.webkitUserSelect = 'none';
   codeBlock.innerHTML = highlighted;
   body.appendChild(codeBlock);
 
-  // If FREE plan: apply blur paywall to code
-  if (isFree) {
+  // If FREE plan + gated platform: apply blur paywall over mock code
+  // Real code is never in the DOM — the blur is purely a visual indicator
+  if (isGatedPlatform) {
     applyCodePaywall(codeBlock, 'eventGeneration', 'starter');
   }
 
@@ -426,9 +475,11 @@ function createLockedPlatformCard(event, actions) {
   card.className = 'tp-event-card animate-slide-in';
   card.style.cursor = 'pointer';
   card.style.opacity = '0.6';
+  const lockedIcon = platformIconHtml(event.platform, 14, 'opacity: 0.5;');
   card.innerHTML = `
     <div class="tp-event-header" style="opacity: 0.7;">
       <div class="flex items-center gap-2">
+        ${lockedIcon}
         <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ${platformColor};">${platformLabel}</span>
         <span class="text-[12px] font-medium text-tp-text">${event.eventName}</span>
       </div>

@@ -10,14 +10,34 @@ import { initAnalytics, trackEvent, identifyUser } from '../shared/analytics.js'
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
 
+// ---- Popup Mode Detection ----
+const IS_POPUP = new URLSearchParams(window.location.search).get('popup') === '1';
+
+if (IS_POPUP) {
+  // Fixed dimensions for extension popup dropdown
+  document.documentElement.style.width = '400px';
+  document.documentElement.style.height = '600px';
+  document.body.style.width = '400px';
+  document.body.style.height = '600px';
+  document.body.style.overflow = 'hidden';
+
+  // Close button bar
+  const closeBar = document.createElement('div');
+  closeBar.className = 'tp-popup-close-bar';
+  closeBar.innerHTML = `<button title="Close" class="tp-popup-close-btn">&times;</button>`;
+  document.getElementById('app').prepend(closeBar);
+  closeBar.querySelector('.tp-popup-close-btn').addEventListener('click', () => window.close());
+}
+
 // ---- Theme Initialization ----
 // Apply saved theme before first paint to avoid flash
 (async function initTheme() {
   try {
-    const data = await chrome.storage.local.get('tp_theme');
+    const data = await chrome.storage.local.get(['tp_theme', 'tp_auto_switch_tab']);
     if ((data.tp_theme || 'light') === 'dark') {
       document.documentElement.classList.add('dark');
     }
+    state.autoSwitchTab = !!data.tp_auto_switch_tab;
   } catch (e) {}
 })();
 
@@ -72,6 +92,12 @@ const state = {
 
   // V2 Network request monitoring
   networkRequests: [],      // Captured tracking platform network requests
+
+  // V2 Custom pixel frame monitoring
+  monitoredFrames: new Set(),  // frameIds where monitoring has been injected
+
+  // V2 Settings
+  autoSwitchTab: false,  // Auto-reload detection on tab switch
 };
 
 // Funnel session singleton
@@ -272,6 +298,17 @@ const actions = {
         );
         if (!exists) state.quickPushTarget = 'top';
       }
+
+      // Auto-start continuous monitoring in custom pixel frames with dataLayer
+      for (const frame of state.customPixelFrames) {
+        if (frame.hasDataLayer && !state.monitoredFrames.has(frame.frameId)) {
+          state.monitoredFrames.add(frame.frameId);
+          chrome.runtime.sendMessage({
+            type: MSG.START_FRAME_MONITORING,
+            payload: { frameId: frame.frameId },
+          }).catch(() => {});
+        }
+      }
     } catch (e) {
       state.customPixelFrames = [];
     }
@@ -291,6 +328,12 @@ const actions = {
     }
     chrome.storage.local.set({ tp_theme: theme });
     renderActiveTab();
+  },
+
+  toggleAutoSwitchTab(enabled) {
+    state.autoSwitchTab = enabled;
+    chrome.storage.local.set({ tp_auto_switch_tab: enabled });
+    trackEvent('auto_switch_tab_toggled', { enabled });
   },
 };
 
@@ -402,6 +445,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.cms = payload.cms;
       state.pageType = payload.pageType;
       state.ecommerceData = payload.ecommerceData;
+      state.monitoredFrames = new Set(); // Reset for new page
       state.generatedEvents = payload.generatedEvents || {
         ga4: [],
         meta: [],
@@ -414,23 +458,19 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.url = payload.url || '';
       state.timestamp = payload.timestamp;
       state.loading = false;
+
       trackEvent('page_detected', {
         cms: state.cms?.cms || 'unknown',
         pageType: state.pageType?.pageType || 'unknown',
         eventsCount: Object.values(state.generatedEvents).flat().length,
       });
 
-      // Add initial dataLayer entries from the snapshot
-      if (payload.audit?.existingEvents) {
-        // Don't replace stream — these are the snapshot events
-      }
-
       // If funnel recording is active, add this step
       if (funnelSession.isRecording) {
         funnelSession.addStep(payload);
       }
 
-      render();
+      render({ preserveContent: true });
 
       // Detect custom pixel frames for Quick Push targeting
       // Always detect on Shopify; also on checkout/thank_you pages (Shopify checkout may be on checkout.shopify.com)
@@ -452,6 +492,7 @@ chrome.runtime.onMessage.addListener((msg) => {
         id: Date.now() + Math.random(),
         timestamp: new Date(payload.timestamp || Date.now()),
         data: payload.data,
+        source: payload.source || 'top',
       };
       state.dataLayerStream.unshift(entry);
 
@@ -481,6 +522,7 @@ chrome.runtime.onMessage.addListener((msg) => {
         items: parsed.items,
         measurementId: parsed.measurementId || null,
         pixelId: parsed.pixelId || null,
+        source: netPayload.source || 'top',
       };
       state.networkRequests.unshift(netEntry);
 
@@ -498,6 +540,27 @@ chrome.runtime.onMessage.addListener((msg) => {
       if (state.activeTab === 'datalayer') {
         appendNetworkEntry(tabContentEl, netEntry, state.networkRequests.length);
       }
+      break;
+    }
+
+    case 'TRACKPULSE_PAGE_NAVIGATED': {
+      // Clear live streams on navigation (URL change or tab switch).
+      // Fired by the service worker BEFORE new page scripts run,
+      // so new dataLayer events won't be wiped.
+      state.dataLayerStream = [];
+      state.networkRequests = [];
+      if (state.activeTab === 'datalayer') renderActiveTab();
+      break;
+    }
+
+    case MSG.FRAME_PIXELS: {
+      const framePixels = msg.payload?.pixels || [];
+      for (const fp of framePixels) {
+        if (!state.pixels.some((p) => p.platform === fp.platform && p.id === fp.id)) {
+          state.pixels.push({ ...fp, source: 'custom_pixel' });
+        }
+      }
+      if (state.activeTab === 'pixels') renderActiveTab();
       break;
     }
 
@@ -537,7 +600,7 @@ function handleTabChange(tab) {
   renderActiveTab();
 }
 
-function render() {
+function render(options = {}) {
   if (state.loading) {
     showLoading();
     return;
@@ -563,6 +626,13 @@ function render() {
 
   renderHeader(headerEl, state, actions.refresh, actions.handleUpgrade);
   renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
+
+  // Skip re-rendering content when detection fires but DataLayer tab is already mounted
+  if (options.preserveContent && state.activeTab === 'datalayer'
+      && tabContentEl.querySelector('#dl-entries')) {
+    return;
+  }
+
   renderActiveTab();
 }
 
@@ -662,7 +732,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           state.consent = response.consent;
           state.url = response.url || '';
           state.loading = false;
-          render();
+          render({ preserveContent: true });
         } else {
           chrome.tabs.sendMessage(
             tabs[0].id,

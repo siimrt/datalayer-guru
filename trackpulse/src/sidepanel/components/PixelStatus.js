@@ -3,6 +3,7 @@
  */
 
 import { escapeHtml } from '../../shared/utils.js';
+import { platformIconHtml } from '../../shared/platform-icons.js';
 
 const PLATFORM_NAMES = {
   gtm: 'Google Tag Manager',
@@ -24,6 +25,7 @@ const CONSENT_LABELS = {
 };
 
 const CMP_NAMES = {
+  cookieyes: 'CookieYes',
   cookiebot: 'Cookiebot',
   onetrust: 'OneTrust',
   didomi: 'Didomi',
@@ -68,20 +70,50 @@ export function renderPixelStatus(container, state) {
     ${consentHtml}
     <div class="h-4"></div>
   `;
+
+  // Bind click-to-copy on pixel IDs
+  container.querySelectorAll('.tp-pixel-id-copy').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pixelId = el.dataset.pixelId;
+      navigator.clipboard.writeText(pixelId).then(() => {
+        const original = el.textContent;
+        el.textContent = 'Copied!';
+        el.style.color = 'var(--tp-success)';
+        setTimeout(() => {
+          el.textContent = original;
+          el.style.color = '';
+        }, 1000);
+      }).catch(() => {});
+    });
+  });
 }
 
 function renderPixelRow(pixel, detected) {
   const name = PLATFORM_NAMES[pixel.platform] || pixel.platform;
   const dotClass = detected && pixel.active ? 'tp-dot-green' : 'tp-dot-gray';
 
+  let idHtml;
+  if (!detected) {
+    idHtml = 'Not detected';
+  } else if (pixel.id) {
+    idHtml = `<span class="tp-pixel-id-copy" data-pixel-id="${escapeHtml(pixel.id)}" style="cursor: pointer; border-bottom: 1px dashed currentColor;" title="Click to copy">${escapeHtml(pixel.id)}</span>`;
+  } else {
+    idHtml = 'Detected';
+  }
+
+  const icon = platformIconHtml(pixel.platform, 16);
+
   return `
     <div class="tp-pixel-row">
       <span class="tp-dot ${dotClass}"></span>
+      ${icon}
       <span class="flex-1 ${detected ? 'text-tp-text' : 'text-tp-text-muted'}">
         ${escapeHtml(name)}
       </span>
       <span class="text-[11px] ${detected ? 'text-tp-text-secondary' : 'text-tp-text-muted'}">
-        ${detected ? (pixel.id ? escapeHtml(pixel.id) : 'Detected') : 'Not detected'}
+        ${idHtml}
+        ${pixel.source === 'custom_pixel' ? '<span style="font-size: 9px; color: #6C5CE7; margin-left: 4px;">via Custom Pixel</span>' : ''}
       </span>
     </div>
   `;

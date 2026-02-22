@@ -10,6 +10,7 @@ export function renderSettingsPanel(container, state, actions) {
   const email = state.userEmail;
   const capabilities = state.capabilities;
   const isDark = document.documentElement.classList.contains('dark');
+  const autoSwitch = state.autoSwitchTab || false;
 
   container.innerHTML = `
     <div style="padding: 16px;">
@@ -19,6 +20,25 @@ export function renderSettingsPanel(container, state, actions) {
         <div class="tp-theme-toggle">
           <button id="theme-light" class="${!isDark ? 'active' : ''}">&#9728; Light</button>
           <button id="theme-dark" class="${isDark ? 'active' : ''}">&#9790; Dark</button>
+        </div>
+      </div>
+
+      <!-- Behavior Section -->
+      <div style="margin-bottom: 24px;">
+        <h3 style="color: var(--tp-text); font-size: 14px; margin-bottom: 12px;">Behavior</h3>
+        <div style="
+          background: var(--tp-surface); border-radius: 8px; padding: 12px; border: 1px solid var(--tp-border);
+        ">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="color: var(--tp-text); font-size: 12px; font-weight: 500;">Auto-switch on tab change</div>
+              <div style="color: var(--tp-text-muted); font-size: 11px; margin-top: 2px;">Reload detection when switching browser tabs</div>
+            </div>
+            <label class="tp-switch">
+              <input type="checkbox" id="auto-switch-tab" ${autoSwitch ? 'checked' : ''} />
+              <span class="tp-switch-slider"></span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -173,6 +193,14 @@ export function renderSettingsPanel(container, state, actions) {
     });
     viewPlansBtn.addEventListener('mouseenter', () => { viewPlansBtn.style.color = 'var(--tp-primary)'; });
     viewPlansBtn.addEventListener('mouseleave', () => { viewPlansBtn.style.color = 'var(--tp-text-muted)'; });
+  }
+
+  // Auto-switch tab toggle
+  const autoSwitchCheckbox = container.querySelector('#auto-switch-tab');
+  if (autoSwitchCheckbox) {
+    autoSwitchCheckbox.addEventListener('change', (e) => {
+      if (actions.toggleAutoSwitchTab) actions.toggleAutoSwitchTab(e.target.checked);
+    });
   }
 
   // Force refresh button

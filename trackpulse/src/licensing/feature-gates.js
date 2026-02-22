@@ -25,7 +25,7 @@ export const FEATURES = {
   // === Event Generation (gated) ===
   eventGeneration: {
     minPlan: 'free',
-    freeMode: 'preview', // show blurred code
+    freeMode: 'ga4_full', // GA4: full code visible; Meta: blurred preview; TikTok/Pinterest: locked cards
   },
   eventCopy: {
     minPlan: 'starter',
