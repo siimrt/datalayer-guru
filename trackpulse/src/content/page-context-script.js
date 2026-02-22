@@ -163,6 +163,7 @@
         fbq: typeof window.fbq === 'function',
         fbPixelId: null,
         gtag: typeof window.gtag === 'function',
+        googleTagData: typeof window.google_tag_data === 'object' && window.google_tag_data !== null,
         ttq: typeof window.ttq === 'object' && window.ttq !== null,
         pintrk: typeof window.pintrk === 'function',
         snaptr: typeof window.snaptr === 'function',
@@ -186,11 +187,18 @@
           );
         }
       } catch (e) {}
+      // Try to get TikTok pixel IDs from ttq._t
+      try {
+        if (window.ttq && window.ttq._t) {
+          context.pixels.ttqPixelIds = Object.keys(window.ttq._t);
+        }
+      } catch (e) {}
     } catch (e) {}
 
     // --- Consent ---
     try {
       context.consent = {
+        cookieyes: false,
         cookiebot: null,
         oneTrust: null,
         axeptio: false,
@@ -198,6 +206,8 @@
         tarteaucitron: false,
         complianz: false,
       };
+
+      context.consent.cookieyes = !!(window.CookieYes || window.ckyConsent);
 
       if (window.Cookiebot) {
         try {
@@ -291,6 +301,7 @@
       const originalPush = window.dataLayer.push.bind(window.dataLayer);
       window.dataLayer.push = function (...args) {
         const result = originalPush(...args);
+        window.__TRACKPULSE_DL_LAST_LEN__ = window.dataLayer.length;
         try {
           window.postMessage(
             {
@@ -302,6 +313,50 @@
         } catch (e) {}
         return result;
       };
+
+      // Replay existing entries so they appear in the live stream
+      // (events pushed before the hook was installed, e.g. view_item on initial load)
+      for (var i = 0; i < window.dataLayer.length; i++) {
+        try {
+          window.postMessage(
+            {
+              type: 'TRACKPULSE_DATALAYER_PUSH',
+              payload: JSON.parse(JSON.stringify([window.dataLayer[i]])),
+            },
+            '*'
+          );
+        } catch (e) {}
+      }
+
+      // Track current length for polling safety net
+      window.__TRACKPULSE_DL_LAST_LEN__ = window.dataLayer.length;
+
+      // Polling safety net: check every 10s for entries that bypassed the hook
+      if (!window.__TRACKPULSE_DL_POLL__) {
+        window.__TRACKPULSE_DL_POLL__ = true;
+        setInterval(function () {
+          try {
+            if (!window.dataLayer || !Array.isArray(window.dataLayer)) return;
+            var lastLen = window.__TRACKPULSE_DL_LAST_LEN__ || 0;
+            var curLen = window.dataLayer.length;
+            if (curLen > lastLen) {
+              for (var j = lastLen; j < curLen; j++) {
+                try {
+                  window.postMessage(
+                    {
+                      type: 'TRACKPULSE_DATALAYER_PUSH',
+                      payload: JSON.parse(JSON.stringify([window.dataLayer[j]])),
+                    },
+                    '*'
+                  );
+                } catch (e) {}
+              }
+              window.__TRACKPULSE_DL_LAST_LEN__ = curLen;
+            }
+          } catch (e) {}
+        }, 10000);
+      }
+
       return true;
     }
 

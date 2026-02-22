@@ -20,6 +20,12 @@ export const MSG = {
 
   // SidePanel -> Background: execute code in a specific frame
   EXECUTE_IN_FRAME: 'TRACKPULSE_EXECUTE_IN_FRAME',
+
+  // SidePanel -> Background: start continuous monitoring in a custom pixel frame
+  START_FRAME_MONITORING: 'TRACKPULSE_START_FRAME_MONITORING',
+
+  // Custom Pixel Frame -> Background -> SidePanel: detected pixels in frame
+  FRAME_PIXELS: 'TRACKPULSE_FRAME_PIXELS',
 };
 
 /**

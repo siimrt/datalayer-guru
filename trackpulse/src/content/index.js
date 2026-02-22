@@ -57,29 +57,35 @@ async function init() {
  */
 async function runPipeline(pageContext) {
   try {
-    // 3. Detect CMS
+    // --- Phase 1: CMS + page type detection (synchronous, fast) ---
     const cmsResult = detectCMS(pageContext);
-
-    // 4. Detect page type
     const pageTypeResult = detectPageType(cmsResult.cms, pageContext);
 
-    // 5. Extract ecommerce data
+    // --- Phase 2: Run independent work in parallel ---
+    // Extraction is async (may do DOM reads / fetch). Pixel detection and
+    // consent checking only need pageContext and are independent of extraction,
+    // so run them concurrently.
     const extractor = getExtractor(cmsResult.cms, pageTypeResult.pageType);
-    let ecommerceData;
-    try {
-      ecommerceData = await extractor.extract(pageContext);
-    } catch (e) {
-      console.debug('[TrackPulse] Extraction error:', e);
-      ecommerceData = {
-        currency: null,
-        product: null,
-        productImpressions: [],
-        cart: null,
-        order: null,
-      };
-    }
 
-    // 6. Generate events for all platforms
+    const [ecommerceData, pixels, consent] = await Promise.all([
+      // Ecommerce data extraction (async)
+      extractor.extract(pageContext).catch((e) => {
+        console.debug('[TrackPulse] Extraction error:', e);
+        return {
+          currency: null,
+          product: null,
+          productImpressions: [],
+          cart: null,
+          order: null,
+        };
+      }),
+      // Pixel detection (sync, wrapped in resolved promise for Promise.all)
+      Promise.resolve(new PixelDetector().detect(pageContext)),
+      // Consent check (sync, wrapped in resolved promise for Promise.all)
+      Promise.resolve(new ConsentChecker().check(pageContext)),
+    ]);
+
+    // --- Phase 3: Generate events + audit (depends on extraction) ---
     const ga4Events = new GA4Generator().generate(
       pageTypeResult.pageType,
       ecommerceData
@@ -97,7 +103,6 @@ async function runPipeline(pageContext) {
       ecommerceData
     );
 
-    // 7. Audit existing tracking
     const auditor = new DataLayerAuditor(pageContext);
     const existingEvents = auditor.getEcommerceEvents();
     const diffEngine = new DiffEngine();
@@ -106,15 +111,7 @@ async function runPipeline(pageContext) {
       existingEvents
     );
 
-    // 8. Detect pixels
-    const pixelDetector = new PixelDetector();
-    const pixels = pixelDetector.detect(pageContext);
-
-    // 9. Check consent
-    const consentChecker = new ConsentChecker();
-    const consent = consentChecker.check(pageContext);
-
-    // 10. Send everything to background/sidepanel
+    // --- Phase 4: Send everything to background/sidepanel ---
     sendMessage(MSG.DETECTION_RESULT, {
       cms: cmsResult,
       pageType: pageTypeResult,
@@ -202,14 +199,17 @@ function setupSPANavigationWatcher() {
     checkUrlChange();
   });
 
+  let debounceTimer = null;
   function checkUrlChange() {
     const currentUrl = window.location.href;
     if (currentUrl !== lastUrl) {
       lastUrl = currentUrl;
-      // Debounce: wait a bit for the page to update
-      setTimeout(() => {
+      // Debounce: wait briefly for the page to update DOM after SPA navigation.
+      // 200ms is enough for most frameworks to flush their render.
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
         handleRedetect();
-      }, 500);
+      }, 200);
     }
   }
 }

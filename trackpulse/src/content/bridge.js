@@ -7,7 +7,7 @@ import { MSG, sendMessage } from '../shared/messaging.js';
 
 let pageContext = null;
 let pageContextResolve = null;
-const pageContextPromise = new Promise((resolve) => {
+let pageContextPromise = new Promise((resolve) => {
   pageContextResolve = resolve;
 });
 
@@ -16,8 +16,13 @@ const pageContextPromise = new Promise((resolve) => {
  * This gives it access to window.Shopify, window.dataLayer, etc.
  */
 export function injectPageScript() {
-  // Reset the context promise for re-detection
+  // Reset the context for re-detection. Create a fresh promise so
+  // waitForPageContext() blocks until the NEW context message arrives
+  // instead of resolving instantly with stale data from the old promise.
   pageContext = null;
+  pageContextPromise = new Promise((resolve) => {
+    pageContextResolve = resolve;
+  });
 
   const script = document.createElement('script');
   script.src = chrome.runtime.getURL('src/content/page-context-script.js');
