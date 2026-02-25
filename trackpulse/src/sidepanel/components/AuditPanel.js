@@ -281,7 +281,7 @@ function generateTextAuditReport(state) {
   const pageType = state.pageType?.pageType || 'unknown';
   const cms = state.cms?.cms || 'unknown';
 
-  lines.push(`TrackPulse Audit Report`);
+  lines.push(`Traacky Audit Report`);
   lines.push(`========================`);
   lines.push(`URL: ${state.url || ''}`);
   lines.push(`CMS: ${cms} (${state.cms?.confidence || 0}% confidence)`);

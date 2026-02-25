@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "TrackPulse",
+  "name": "Traacky",
   "version": "2.0.0",
   "description": "Tracking inspector & event generator for ecommerce — Detect CMS, extract data, generate & audit GA4/Meta/TikTok events.",
   "permissions": [
@@ -41,7 +41,7 @@
       "48": "src/assets/icons/icon-48.png",
       "128": "src/assets/icons/icon-128.png"
     },
-    "default_title": "TrackPulse"
+    "default_title": "Traacky"
   },
   "icons": {
     "16": "src/assets/icons/icon-16.png",

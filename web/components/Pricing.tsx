@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import ChromeIcon from "./ChromeIcon";
 
-const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/trackpulse/";
+const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/";
 
 const PLANS = [
   {
@@ -74,15 +74,24 @@ export default function Pricing() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("visible"); }),
+      (entries) =>
+        entries.forEach((e) => {
+          if (e.isIntersecting) e.target.classList.add("visible");
+        }),
       { threshold: 0.08 }
     );
-    ref.current?.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
+    ref.current
+      ?.querySelectorAll(".fade-in")
+      .forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, []);
 
   return (
-    <section id="pricing" ref={ref} className="section-divider py-24 sm:py-28 md:py-32">
+    <section
+      id="pricing"
+      ref={ref}
+      className="section-divider py-24 sm:py-28 md:py-32"
+    >
       <div className="mx-auto max-w-[1100px] px-5 sm:px-8">
         <div className="fade-in mb-14 text-center sm:mb-16">
           <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.5rem]">
@@ -112,7 +121,9 @@ export default function Pricing() {
               )}
 
               <h3 className="text-[15px] font-bold text-white">{plan.name}</h3>
-              <p className="mt-1 text-[13px] text-text-dim">{plan.description}</p>
+              <p className="mt-1 text-[13px] text-text-dim">
+                {plan.description}
+              </p>
 
               <div className="mt-5 mb-6">
                 <span className="text-[2rem] font-extrabold tracking-tight text-white">
@@ -123,8 +134,15 @@ export default function Pricing() {
 
               <ul className="mb-7 flex-1 space-y-2.5">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-[13px] text-text-secondary">
-                    <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" viewBox="0 0 16 16" fill="currentColor">
+                  <li
+                    key={f}
+                    className="flex items-start gap-2.5 text-[13px] text-text-secondary"
+                  >
+                    <svg
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                    >
                       <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 1 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z" />
                     </svg>
                     {f}
@@ -137,12 +155,10 @@ export default function Pricing() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-[13px] font-semibold transition-all ${
-                  plan.highlighted
-                    ? "btn-primary"
-                    : "btn-ghost"
+                  plan.highlighted ? "btn-primary" : "btn-ghost"
                 }`}
               >
-                {(plan.name === "Free") && <ChromeIcon size={14} />}
+                {plan.name === "Free" && <ChromeIcon size={14} />}
                 {plan.cta}
               </a>
             </div>

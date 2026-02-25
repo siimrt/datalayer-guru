@@ -1,20 +1,20 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #000000;
+  --color-background: #0a0a0a;
   --color-foreground: #ffffff;
-  --color-surface: #0A0A0B;
-  --color-surface-elevated: #111113;
+  --color-surface: #0d0d0f;
+  --color-surface-elevated: #131316;
   --color-primary: #6C5CE7;
   --color-primary-light: #A29BFE;
   --color-primary-dark: #5A4BD1;
-  --color-success: #00B894;
+  --color-success: #00E599;
   --color-text: #FFFFFF;
-  --color-text-secondary: #B4B4C0;
-  --color-text-muted: #7A7A8C;
-  --color-text-dim: #4A4A58;
+  --color-text-secondary: #ADB5BD;
+  --color-text-muted: #6C7280;
+  --color-text-dim: #3E4451;
   --color-border: rgba(255, 255, 255, 0.06);
-  --color-border-hover: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.12);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jetbrains-mono);
 }
@@ -27,9 +27,9 @@ html {
 }
 
 body {
-  background: #000000;
+  background: #0a0a0a;
   color: #ffffff;
-  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
 
 ::selection {
@@ -37,7 +37,44 @@ body {
   color: #fff;
 }
 
-/* ── Hero glow (neon.com-style radial) ─────────────────── */
+/* ── Aurora / Matrix vertical lines ────────────────────── */
+.aurora {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 700px;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, white 0%, white 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, white 0%, white 40%, transparent 100%);
+}
+
+.aurora-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 1px;
+}
+
+.aurora-glow {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 500px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(108, 92, 231, 0.10) 0%,
+    rgba(108, 92, 231, 0.03) 45%,
+    transparent 70%
+  );
+  filter: blur(50px);
+  pointer-events: none;
+}
+
+/* ── Hero glow (radial behind text) ────────────────────── */
 .hero-glow {
   position: absolute;
   top: -120px;
@@ -47,14 +84,59 @@ body {
   height: 700px;
   background: radial-gradient(
     50% 50% at 50% 50%,
-    rgba(108, 92, 231, 0.18) 0%,
-    rgba(108, 92, 231, 0.06) 50%,
+    rgba(108, 92, 231, 0.14) 0%,
+    rgba(108, 92, 231, 0.04) 50%,
     transparent 100%
   );
   pointer-events: none;
   z-index: 0;
 }
 
+/* ── Code block (terminal style) ───────────────────────── */
+.code-block {
+  background: #0d0d0f;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  overflow: hidden;
+  font-family: var(--font-mono), monospace;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02),
+    0 24px 70px -15px rgba(0, 0, 0, 0.6);
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.code-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.code-content {
+  padding: 20px 24px;
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-x: auto;
+  color: #EEFFFF;
+}
+
+.syn-keyword  { color: #C792EA; }
+.syn-func     { color: #82AAFF; }
+.syn-string   { color: #C3E88D; }
+.syn-prop     { color: #FFCB6B; }
+.syn-comment  { color: #546E7A; font-style: italic; }
+.syn-punct    { color: #89DDFF; }
+.syn-number   { color: #F78C6C; }
+.syn-check    { color: #00E599; }
+
+/* ── CTA glow ──────────────────────────────────────────── */
 .cta-glow {
   position: absolute;
   top: 50%;
@@ -64,22 +146,13 @@ body {
   height: 400px;
   background: radial-gradient(
     50% 50% at 50% 50%,
-    rgba(108, 92, 231, 0.15) 0%,
+    rgba(108, 92, 231, 0.12) 0%,
     transparent 100%
   );
   pointer-events: none;
 }
 
-/* ── Grid pattern (neon-style dot grid) ────────────────── */
-.grid-pattern {
-  background-image: radial-gradient(
-    rgba(255, 255, 255, 0.04) 1px,
-    transparent 1px
-  );
-  background-size: 32px 32px;
-}
-
-/* ── Cards (neon.com style) ────────────────────────────── */
+/* ── Cards ─────────────────────────────────────────────── */
 .card {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -91,20 +164,13 @@ body {
 }
 
 .card-hover:hover {
-  border-color: rgba(108, 92, 231, 0.25);
+  border-color: rgba(108, 92, 231, 0.2);
   background: rgba(255, 255, 255, 0.03);
 }
 
 /* ── Gradient text ─────────────────────────────────────── */
 .text-gradient {
   background: linear-gradient(135deg, #A29BFE 0%, #6C5CE7 50%, #A29BFE 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.text-gradient-subtle {
-  background: linear-gradient(135deg, #ffffff 0%, #B4B4C0 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -123,14 +189,14 @@ body {
   transform: translateY(0);
 }
 
-/* ── Browser mockup (neon-style) ───────────────────────── */
+/* ── Browser mockup ────────────────────────────────────── */
 .browser-frame {
-  background: #0A0A0B;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0d0d0f;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
   overflow: hidden;
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 0 0 1px rgba(255, 255, 255, 0.02),
     0 20px 60px -15px rgba(0, 0, 0, 0.5);
 }
 
@@ -140,7 +206,7 @@ body {
   gap: 6px;
   padding: 12px 16px;
   background: rgba(255, 255, 255, 0.02);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .browser-dot {
@@ -166,29 +232,25 @@ body {
 
 /* ── Logo cloud ────────────────────────────────────────── */
 .logo-cloud svg {
-  opacity: 0.35;
+  opacity: 0.3;
   transition: opacity 0.3s ease;
 }
 
 .logo-cloud svg:hover {
-  opacity: 0.8;
+  opacity: 0.7;
 }
 
 /* ── Popular badge pulse ───────────────────────────────── */
 @keyframes glow-pulse {
-  0%, 100% {
-    box-shadow: 0 0 20px rgba(108, 92, 231, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(108, 92, 231, 0.3);
-  }
+  0%, 100% { box-shadow: 0 0 20px rgba(108, 92, 231, 0.15); }
+  50% { box-shadow: 0 0 30px rgba(108, 92, 231, 0.3); }
 }
 
 .popular-card {
   animation: glow-pulse 3s ease-in-out infinite;
 }
 
-/* ── Primary button glow ───────────────────────────────── */
+/* ── Primary button ────────────────────────────────────── */
 .btn-primary {
   background: #6C5CE7;
   color: #fff;
@@ -205,13 +267,13 @@ body {
 /* ── Ghost button ──────────────────────────────────────── */
 .btn-ghost {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .btn-ghost:hover {
-  border-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.04);
 }
 

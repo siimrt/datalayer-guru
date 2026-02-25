@@ -16,12 +16,12 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-const title = "TrackPulse — Ecommerce Tracking Inspector & Event Generator";
+const title = "Traacky — Ecommerce Tracking Inspector & Event Generator";
 const description =
   "Detect CMS, extract ecommerce data, generate & audit GA4, Meta, TikTok and Pinterest tracking events — all from one Chrome side panel. Free Chrome extension.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://trackpulse.dev"),
+  metadataBase: new URL("https://traacky.com"),
   title,
   description,
   keywords: [
@@ -38,13 +38,13 @@ export const metadata: Metadata = {
     "GTM debugger",
     "tracking inspector",
   ],
-  authors: [{ name: "TrackPulse" }],
-  creator: "TrackPulse",
+  authors: [{ name: "Traacky" }],
+  creator: "Traacky",
   openGraph: {
     title,
     description,
-    url: "https://trackpulse.dev",
-    siteName: "TrackPulse",
+    url: "https://traacky.com",
+    siteName: "Traacky",
     images: [{ url: "/og-image.png", width: 920, height: 680, alt: title }],
     locale: "en_US",
     type: "website",
@@ -68,7 +68,7 @@ export const metadata: Metadata = {
     googleBot: { index: true, follow: true },
   },
   alternates: {
-    canonical: "https://trackpulse.dev",
+    canonical: "https://traacky.com",
   },
 };
 
@@ -86,11 +86,11 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              name: "TrackPulse",
+              name: "Traacky",
               applicationCategory: "BrowserApplication",
               operatingSystem: "Chrome",
               description,
-              url: "https://trackpulse.dev",
+              url: "https://traacky.com",
               offers: [
                 {
                   "@type": "Offer",
@@ -120,7 +120,7 @@ export default function RootLayout({
                   billingIncrement: "P1M",
                 },
               ],
-              screenshot: "https://trackpulse.dev/og-image.png",
+              screenshot: "https://traacky.com/og-image.png",
               featureList:
                 "CMS Detection, Event Generation, DataLayer Live, Pixel Detection, Event Audit, Funnel Mode, Push to Custom Pixel",
               softwareVersion: "2.0.0",
@@ -137,7 +137,7 @@ export default function RootLayout({
               mainEntity: [
                 {
                   "@type": "Question",
-                  name: "Is TrackPulse free?",
+                  name: "Is Traacky free?",
                   acceptedAnswer: {
                     "@type": "Answer",
                     text: "Yes! The free plan includes CMS detection, basic GA4 event generation, dataLayer live view, pixel detection, and 5 audits per day.",
@@ -148,7 +148,7 @@ export default function RootLayout({
                   name: "Which CMS platforms are supported?",
                   acceptedAnswer: {
                     "@type": "Answer",
-                    text: "TrackPulse auto-detects Shopify, WooCommerce, PrestaShop, Magento, and Webflow.",
+                    text: "Traacky auto-detects Shopify, WooCommerce, PrestaShop, Magento, and Webflow.",
                   },
                 },
                 {
@@ -156,7 +156,7 @@ export default function RootLayout({
                   name: "Is my data safe?",
                   acceptedAnswer: {
                     "@type": "Answer",
-                    text: "TrackPulse runs entirely in your browser. No data is sent to external servers.",
+                    text: "Traacky runs entirely in your browser. No data is sent to external servers.",
                   },
                 },
               ],

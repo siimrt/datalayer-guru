@@ -1,5 +1,5 @@
 /**
- * TrackPulse Background Service Worker
+ * Traacky Background Service Worker
  * Handles extension icon clicks, badge management, message routing, tab tracking,
  * and ExtensionPay license management (V2).
  */
@@ -11,9 +11,9 @@ import { resolvePlanFromId } from '../shared/plans.js';
 
 // Initialize ExtensionPay on extension startup
 planManager.init().then(() => {
-  console.log('[TrackPulse] Plan:', planManager.getPlan());
+  console.log('[Traacky] Plan:', planManager.getPlan());
 }).catch((err) => {
-  console.error('[TrackPulse] Plan init error:', err);
+  console.error('[Traacky] Plan init error:', err);
 });
 
 // Listen for plan changes and notify all extension contexts
@@ -133,7 +133,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // Wait for planManager to finish initializing, then return live state
       planManager.waitForInit().then((plan) => {
         const user = planManager.user;
-        console.log('[TrackPulse] GET_PLAN responding with live plan:', plan, 'user:', JSON.stringify(user));
+        console.log('[Traacky] GET_PLAN responding with live plan:', plan, 'user:', JSON.stringify(user));
         sendResponse({
           plan: planManager.getPlan(),
           email: user?.email || null,
@@ -149,7 +149,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           },
         });
       }).catch((err) => {
-        console.error('[TrackPulse] GET_PLAN error, falling back to cache:', err);
+        console.error('[Traacky] GET_PLAN error, falling back to cache:', err);
         chrome.storage.local.get(['tp_plan', 'tp_user_email', 'tp_paid'], (data) => {
           sendResponse({
             plan: data.tp_plan || 'free',
@@ -195,10 +195,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
     case 'TRACKPULSE_REFRESH_PLAN': {
       planManager.refreshPlan().then((plan) => {
-        console.log('[TrackPulse] REFRESH_PLAN responded with:', plan);
+        console.log('[Traacky] REFRESH_PLAN responded with:', plan);
         sendResponse({ plan: plan, email: planManager.user?.email || null });
       }).catch((err) => {
-        console.error('[TrackPulse] REFRESH_PLAN error:', err);
+        console.error('[Traacky] REFRESH_PLAN error:', err);
         sendResponse({ plan: planManager.getPlan() });
       });
       return true; // Async sendResponse
@@ -276,7 +276,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
           sendResponse({ frames: probeResults });
         } catch (err) {
-          console.debug('[TrackPulse] LIST_FRAMES error:', err);
+          console.debug('[Traacky] LIST_FRAMES error:', err);
           sendResponse({ frames: [] });
         }
       });
@@ -551,7 +551,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
           sendResponse({ success: true });
         } catch (err) {
-          console.debug('[TrackPulse] START_FRAME_MONITORING error:', err);
+          console.debug('[Traacky] START_FRAME_MONITORING error:', err);
           sendResponse({ success: false, error: err.message });
         }
       });
@@ -577,7 +577,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           });
           sendResponse({ success: true });
         } catch (err) {
-          console.debug('[TrackPulse] EXECUTE_IN_FRAME error:', err);
+          console.debug('[Traacky] EXECUTE_IN_FRAME error:', err);
           sendResponse({ success: false, error: err.message });
         }
       });

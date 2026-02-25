@@ -3,22 +3,22 @@ import Link from "next/link";
 import AppIcon from "@/components/AppIcon";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — TrackPulse",
+  title: "Privacy Policy — Traacky",
   description:
-    "TrackPulse privacy policy. Learn how we handle your data — spoiler: everything stays in your browser.",
+    "Traacky privacy policy. Learn how we handle your data — spoiler: everything stays in your browser.",
 };
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-black text-white">
+    <div className="min-h-screen bg-[#0a0a0a] text-white">
       {/* Nav */}
-      <nav className="border-b border-white/[0.04] bg-black/60 backdrop-blur-xl">
+      <nav className="border-b border-white/[0.04] bg-[#0a0a0a]/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[800px] items-center gap-2.5 px-5 py-4 sm:px-8">
           <Link href="/" className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-[#1A1A2E] to-[#0F0F10]">
               <AppIcon size={18} />
             </div>
-            <span className="text-[14px] font-semibold text-white">TrackPulse</span>
+            <span className="text-[14px] font-semibold text-white">Traacky</span>
           </Link>
           <span className="text-text-dim">/</span>
           <span className="text-[14px] text-text-muted">Privacy Policy</span>
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="mb-3 text-lg font-semibold text-white">Overview</h2>
             <p>
-              TrackPulse is a Chrome extension that helps ecommerce professionals
+              Traacky is a Chrome extension that helps ecommerce professionals
               inspect, generate, and audit tracking events. We are committed to
               protecting your privacy. This policy explains what data we collect (very
               little) and how we handle it.
@@ -49,7 +49,7 @@ export default function PrivacyPage() {
               Data Collection
             </h2>
             <p>
-              <strong className="text-white">TrackPulse runs entirely in your browser.</strong>{" "}
+              <strong className="text-white">Traacky runs entirely in your browser.</strong>{" "}
               We do not collect, transmit, or store any of the following:
             </p>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-text-muted">
@@ -100,7 +100,7 @@ export default function PrivacyPage() {
             <h2 className="mb-3 text-lg font-semibold text-white">
               Permissions
             </h2>
-            <p>TrackPulse requests the following Chrome permissions:</p>
+            <p>Traacky requests the following Chrome permissions:</p>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-text-muted">
               <li>
                 <code className="rounded bg-white/5 px-1.5 py-0.5 text-[13px] font-mono text-primary-light">activeTab</code>{" "}
@@ -112,7 +112,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <code className="rounded bg-white/5 px-1.5 py-0.5 text-[13px] font-mono text-primary-light">sidePanel</code>{" "}
-                — To display the TrackPulse interface
+                — To display the Traacky interface
               </li>
               <li>
                 <code className="rounded bg-white/5 px-1.5 py-0.5 text-[13px] font-mono text-primary-light">scripting</code>{" "}
@@ -152,10 +152,10 @@ export default function PrivacyPage() {
               If you have any questions about this privacy policy, please contact
               us at{" "}
               <a
-                href="mailto:contact@trackpulse.dev"
+                href="mailto:contact@traacky.com"
                 className="text-primary-light underline underline-offset-2 hover:text-white"
               >
-                contact@trackpulse.dev
+                contact@traacky.com
               </a>
               .
             </p>
@@ -168,7 +168,7 @@ export default function PrivacyPage() {
             className="inline-flex items-center gap-2 text-[14px] font-medium text-primary-light transition-colors hover:text-white"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 12l-4-4 4-4"/></svg>
-            Back to TrackPulse
+            Back to Traacky
           </Link>
         </div>
       </main>

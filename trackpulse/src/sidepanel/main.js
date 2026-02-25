@@ -1,5 +1,5 @@
 /**
- * TrackPulse Side Panel — Main entry point (V2).
+ * Traacky Side Panel — Main entry point (V2).
  * Manages state, listens for messages from the background/content script,
  * orchestrates rendering of all components, and manages plan/licensing state.
  */
@@ -353,7 +353,7 @@ async function initPlan() {
     state.capabilities = resolvePlanCapabilities(state.plan);
     identifyUser(state.plan, state.userEmail);
     trackEvent('plan_loaded', { plan: state.plan });
-    console.log('[TrackPulse Sidepanel] Initial plan:', state.plan, 'debug:', JSON.stringify(state.planDebug));
+    console.log('[Traacky Sidepanel] Initial plan:', state.plan, 'debug:', JSON.stringify(state.planDebug));
 
     // If we already have detection data, render with initial plan
     if (!state.loading) {
@@ -364,17 +364,17 @@ async function initPlan() {
     try {
       const refreshed = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_REFRESH_PLAN' });
       if (refreshed?.plan) {
-        console.log('[TrackPulse Sidepanel] Plan after refresh:', refreshed.plan);
+        console.log('[Traacky Sidepanel] Plan after refresh:', refreshed.plan);
         state.plan = refreshed.plan;
         state.userEmail = refreshed.email || state.userEmail;
         state.capabilities = resolvePlanCapabilities(state.plan);
         render();
       }
     } catch (refreshErr) {
-      console.warn('[TrackPulse Sidepanel] Refresh failed (non-blocking):', refreshErr);
+      console.warn('[Traacky Sidepanel] Refresh failed (non-blocking):', refreshErr);
     }
   } catch (err) {
-    console.error('[TrackPulse Sidepanel] initPlan error:', err);
+    console.error('[Traacky Sidepanel] initPlan error:', err);
     // Fallback: check chrome.storage directly
     const data = await chrome.storage.local.get(['tp_plan']);
     state.plan = data.tp_plan || 'free';
@@ -410,7 +410,7 @@ async function refreshPlanQuietly() {
     const refreshed = await chrome.runtime.sendMessage({ type: 'TRACKPULSE_REFRESH_PLAN' });
     if (refreshed?.plan && refreshed.plan !== state.plan) {
       const oldPlan = state.plan;
-      console.log('[TrackPulse Sidepanel] Plan updated via refresh:', oldPlan, '->', refreshed.plan);
+      console.log('[Traacky Sidepanel] Plan updated via refresh:', oldPlan, '->', refreshed.plan);
       state.plan = refreshed.plan;
       state.userEmail = refreshed.email || state.userEmail;
       state.capabilities = resolvePlanCapabilities(state.plan);

@@ -1,5 +1,5 @@
 /**
- * PostHog Analytics Module for TrackPulse Extension.
+ * PostHog Analytics Module for Traacky Extension.
  * Uses posthog-js-lite (MV3 compatible, no remote code execution).
  *
  * Setup:
@@ -27,7 +27,7 @@ let posthog = null;
 export function initAnalytics() {
   if (posthog) return; // Already initialized
   if (!POSTHOG_API_KEY) {
-    console.debug('[TrackPulse Analytics] VITE_POSTHOG_KEY not set — analytics disabled.');
+    console.debug('[Traacky Analytics] VITE_POSTHOG_KEY not set — analytics disabled.');
     return;
   }
 
@@ -48,9 +48,9 @@ export function initAnalytics() {
       posthog.identify(anonId);
     });
 
-    console.debug('[TrackPulse Analytics] PostHog initialized.');
+    console.debug('[Traacky Analytics] PostHog initialized.');
   } catch (e) {
-    console.warn('[TrackPulse Analytics] Init failed:', e);
+    console.warn('[Traacky Analytics] Init failed:', e);
     posthog = null;
   }
 }

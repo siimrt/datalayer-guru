@@ -1,6 +1,6 @@
 import AppIcon from "./AppIcon";
 
-const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/trackpulse/";
+const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/";
 
 export default function Footer() {
   return (
@@ -12,7 +12,9 @@ export default function Footer() {
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-[#1A1A2E] to-[#0F0F10]">
               <AppIcon size={16} />
             </div>
-            <span className="text-[13px] font-semibold text-white">TrackPulse</span>
+            <span className="text-[13px] font-semibold text-white">
+              Traacky
+            </span>
           </div>
           <p className="text-[12px] text-text-dim">
             Made for tracking professionals
@@ -36,7 +38,7 @@ export default function Footer() {
             Privacy Policy
           </a>
           <a
-            href="mailto:contact@trackpulse.dev"
+            href="mailto:contact@traacky.com"
             className="text-[13px] text-text-muted transition-colors hover:text-white"
           >
             Contact
@@ -45,7 +47,7 @@ export default function Footer() {
 
         {/* Copyright */}
         <p className="text-[12px] text-text-dim">
-          &copy; {new Date().getFullYear()} TrackPulse
+          &copy; {new Date().getFullYear()} Traacky
         </p>
       </div>
     </footer>

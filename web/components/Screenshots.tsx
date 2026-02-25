@@ -4,11 +4,31 @@ import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 
 const TABS = [
-  { title: "Event Generation", screenshot: "/screenshots/screenshot-1-events.png", alt: "TrackPulse generating tracking events" },
-  { title: "Event Audit", screenshot: "/screenshots/screenshot-2-audit.png", alt: "TrackPulse auditing tracking events" },
-  { title: "Pixel & DataLayer", screenshot: "/screenshots/screenshot-3-pixels-datalayer.png", alt: "TrackPulse pixel detection and dataLayer monitoring" },
-  { title: "Funnel & Pricing", screenshot: "/screenshots/screenshot-4-funnel-pricing.png", alt: "TrackPulse funnel mode" },
-  { title: "Push to Pixel", screenshot: "/screenshots/screenshot-5-push-purchase.png", alt: "TrackPulse pushing events to custom pixels" },
+  {
+    title: "Event Generation",
+    screenshot: "/screenshots/screenshot-1-events.png",
+    alt: "Traacky generating tracking events",
+  },
+  {
+    title: "Event Audit",
+    screenshot: "/screenshots/screenshot-2-audit.png",
+    alt: "Traacky auditing tracking events",
+  },
+  {
+    title: "Pixel & DataLayer",
+    screenshot: "/screenshots/screenshot-3-pixels-datalayer.png",
+    alt: "Traacky pixel detection and dataLayer monitoring",
+  },
+  {
+    title: "Funnel & Pricing",
+    screenshot: "/screenshots/screenshot-4-funnel-pricing.png",
+    alt: "Traacky funnel mode",
+  },
+  {
+    title: "Push to Pixel",
+    screenshot: "/screenshots/screenshot-5-push-purchase.png",
+    alt: "Traacky pushing events to custom pixels",
+  },
 ];
 
 export default function Screenshots() {
@@ -17,10 +37,15 @@ export default function Screenshots() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("visible"); }),
+      (entries) =>
+        entries.forEach((e) => {
+          if (e.isIntersecting) e.target.classList.add("visible");
+        }),
       { threshold: 0.08 }
     );
-    ref.current?.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
+    ref.current
+      ?.querySelectorAll(".fade-in")
+      .forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, []);
 
@@ -29,7 +54,7 @@ export default function Screenshots() {
       <div className="mx-auto max-w-[960px] px-5 sm:px-8">
         <div className="fade-in mb-10 text-center sm:mb-12">
           <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.5rem]">
-            See TrackPulse in action
+            See Traacky in action
           </h2>
           <p className="mx-auto mt-4 max-w-[480px] text-text-secondary">
             A full tracking audit toolkit — right in your browser side panel.
@@ -61,7 +86,7 @@ export default function Screenshots() {
               <div className="browser-dot bg-[#FEBC2E]" />
               <div className="browser-dot bg-[#28C840]" />
               <span className="ml-4 text-[11px] text-text-dim font-mono">
-                chrome-extension://trackpulse
+                chrome-extension://traacky
               </span>
             </div>
             <Image

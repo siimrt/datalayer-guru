@@ -144,7 +144,7 @@ export function renderSettingsPanel(container, state, actions) {
       <div>
         <h3 style="color: var(--tp-text); font-size: 14px; margin-bottom: 12px;">About</h3>
         <div style="color: var(--tp-text-secondary); font-size: 12px; line-height: 1.6;">
-          TrackPulse v2.0.0<br>
+          Traacky v2.0.0<br>
           Made for tracking professionals
         </div>
       </div>

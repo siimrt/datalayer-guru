@@ -1,72 +1,48 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Image from "next/image";
 
 const FEATURES = [
   {
-    title: "CMS Detection",
+    title: "Real-time DataLayer inspector.",
+    tagline: "See every push as it happens — structured, syntax-highlighted, live.",
     description:
-      "Instantly detects Shopify, WooCommerce, PrestaShop, Magento and Webflow — auto-extracting product, collection and order data.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <path d="M8 21h8M12 17v4" />
-      </svg>
-    ),
+      "Monitor every dataLayer.push in real time as events flow through GTM. Structured output with full payload inspection, filtering, and auto-scroll. No more console.log debugging.",
+    visual: "/screenshots/screenshot-3-pixels-datalayer.png",
+    alt: "Traacky DataLayer live inspector",
   },
   {
-    title: "Event Generation",
+    title: "One-click event generation.",
+    tagline: "From page data to tracking events — automatically.",
     description:
-      "Auto-generates properly structured GA4, Meta, TikTok and Pinterest tracking events from detected ecommerce data.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" />
-        <path d="M2 17l10 5 10-5" />
-        <path d="M2 12l10 5 10-5" />
-      </svg>
-    ),
+      "Traacky detects your CMS, extracts product, collection, cart and order data, then generates properly structured GA4, Meta, TikTok and Pinterest events. Zero manual mapping.",
+    visual: "/screenshots/screenshot-1-events.png",
+    alt: "Traacky generating tracking events",
   },
   {
-    title: "DataLayer Live",
+    title: "Smart pixel detection.",
+    tagline: "Every active pixel on the page — found in seconds.",
     description:
-      "Real-time monitoring of every dataLayer push — see events flow through GTM with structured, syntax-highlighted output.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-      </svg>
-    ),
+      "Finds GA4, Meta Pixel, TikTok Pixel, Pinterest Tag, Snap Pixel, LinkedIn Insight Tag and GTM containers on any page. See pixel IDs, load status, and detected events at a glance.",
+    visual: null,
+    alt: "",
   },
   {
-    title: "Pixel Detection",
+    title: "Push to custom pixels.",
+    tagline: "Bridge the gap between events and Shopify sandboxes.",
     description:
-      "Finds active GA4, Meta Pixel, TikTok Pixel, Pinterest Tag, Snap Pixel and LinkedIn Insight tags on any page.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <path d="M21 21l-4.35-4.35" />
-      </svg>
-    ),
+      "Auto-detects Shopify custom pixel sandbox iframes and pushes real purchase events directly into them — no code, no configuration. The only tool that bridges generated events and Shopify's sandboxed pixel environment.",
+    visual: "/screenshots/screenshot-5-push-purchase.png",
+    alt: "Traacky pushing events to Shopify custom pixels",
   },
   {
-    title: "Event Audit",
+    title: "Zero configuration.",
+    tagline: "Install. Open any ecommerce site. It just works.",
     description:
-      "Compares generated events against what your pixels actually fire — instantly spot missing or misconfigured parameters.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9 11l3 3L22 4" />
-        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-      </svg>
-    ),
-  },
-  {
-    title: "Funnel Mode",
-    description:
-      "Navigate Home → Collection → Product → Cart → Checkout and generate the complete tracking event sequence automatically.",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
-      </svg>
-    ),
+      "Auto-detects Shopify, WooCommerce, PrestaShop, Magento and Webflow. Extracts page type, product data, cart contents and order details automatically. No setup, no tokens, no permissions.",
+    visual: null,
+    alt: "",
   },
 ];
 
@@ -75,41 +51,81 @@ export default function Features() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("visible"); }),
+      (entries) =>
+        entries.forEach((e) => {
+          if (e.isIntersecting) e.target.classList.add("visible");
+        }),
       { threshold: 0.08 }
     );
-    ref.current?.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
+    ref.current
+      ?.querySelectorAll(".fade-in")
+      .forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, []);
 
   return (
     <section id="features" ref={ref} className="py-24 sm:py-28 md:py-32">
       <div className="mx-auto max-w-[1100px] px-5 sm:px-8">
-        <div className="fade-in mb-14 text-center sm:mb-16">
-          <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.5rem]">
-            Everything you need to audit ecommerce tracking
+        {/* Heading */}
+        <div className="fade-in mb-6 sm:mb-8">
+          <p className="mb-4 text-[13px] font-semibold tracking-[0.1em] text-primary-light uppercase">
+            Features
+          </p>
+          <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.75rem] md:leading-[1.1]">
+            Tracking tools for the{" "}
+            <span className="text-gradient">modern ecommerce stack</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-[540px] text-text-secondary">
-            From CMS detection to pixel validation — TrackPulse covers the full tracking audit workflow.
+          <p className="mt-4 max-w-[580px] text-[16px] leading-relaxed text-text-secondary">
+            From CMS detection to pixel validation — Traacky covers the full
+            tracking audit workflow in one side panel.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Feature list (editorial, neon-style) */}
+        <div>
           {FEATURES.map((f, i) => (
             <div
               key={f.title}
-              className="fade-in card card-hover p-6 sm:p-7"
-              style={{ transitionDelay: `${i * 60}ms` }}
+              className={`fade-in border-b border-white/[0.04] py-12 last:border-b-0 md:py-16 ${
+                f.visual ? "grid items-center gap-8 md:grid-cols-2 md:gap-12" : ""
+              }`}
+              style={{ transitionDelay: `${i * 80}ms` }}
             >
-              <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/8 text-primary-light">
-                {f.icon}
+              {/* Text */}
+              <div className={!f.visual ? "max-w-[680px]" : ""}>
+                <h3 className="text-[1.25rem] font-bold tracking-tight text-white sm:text-[1.5rem] md:text-[1.75rem]">
+                  <span className="text-gradient">{f.title}</span>{" "}
+                  <span className="text-text-secondary font-normal">
+                    {f.tagline}
+                  </span>
+                </h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-text-muted">
+                  {f.description}
+                </p>
               </div>
-              <h3 className="mb-2 text-[15px] font-semibold text-white">
-                {f.title}
-              </h3>
-              <p className="text-[14px] leading-relaxed text-text-muted">
-                {f.description}
-              </p>
+
+              {/* Visual */}
+              {f.visual && (
+                <div
+                  className={`browser-frame ${i % 2 === 0 ? "" : "md:order-first"}`}
+                >
+                  <div className="browser-frame-bar">
+                    <div className="browser-dot bg-[#FF5F57]" />
+                    <div className="browser-dot bg-[#FEBC2E]" />
+                    <div className="browser-dot bg-[#28C840]" />
+                    <span className="ml-4 text-[11px] text-text-dim font-mono">
+                      traacky
+                    </span>
+                  </div>
+                  <Image
+                    src={f.visual}
+                    alt={f.alt}
+                    width={1280}
+                    height={800}
+                    className="w-full"
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>

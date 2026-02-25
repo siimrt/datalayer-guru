@@ -36,7 +36,7 @@ export function sendMessage(type, payload) {
     chrome.runtime.sendMessage({ type, payload });
   } catch (e) {
     // Extension context may have been invalidated (e.g., after update)
-    console.debug('[TrackPulse] sendMessage failed:', e.message);
+    console.debug('[Traacky] sendMessage failed:', e.message);
   }
 }
 
@@ -50,7 +50,7 @@ export function sendTabMessage(tabId, type, payload) {
         resolve(response);
       });
     } catch (e) {
-      console.debug('[TrackPulse] sendTabMessage failed:', e.message);
+      console.debug('[Traacky] sendTabMessage failed:', e.message);
       resolve(null);
     }
   });

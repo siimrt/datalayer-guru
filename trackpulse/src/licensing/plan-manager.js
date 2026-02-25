@@ -42,16 +42,16 @@ class PlanManager {
 
       // Get current user
       this.user = await extpay.getUser();
-      console.log('[TrackPulse] ExtPay user:', JSON.stringify(this.user));
+      console.log('[Traacky] ExtPay user:', JSON.stringify(this.user));
       this._resolvePlan();
-      console.log('[TrackPulse] Resolved plan:', this.currentPlan);
+      console.log('[Traacky] Resolved plan:', this.currentPlan);
 
       // Listen for payment events
       extpay.onPaid.addListener((user) => {
-        console.log('[TrackPulse] onPaid fired:', JSON.stringify(user));
+        console.log('[Traacky] onPaid fired:', JSON.stringify(user));
         this.user = user;
         this._resolvePlan();
-        console.log('[TrackPulse] Plan after payment:', this.currentPlan);
+        console.log('[Traacky] Plan after payment:', this.currentPlan);
         this._persistPlanCache();
         this._notifyListeners();
         this._broadcastPlanChanged();
@@ -62,7 +62,7 @@ class PlanManager {
 
       this._initialized = true;
     } catch (err) {
-      console.error('[TrackPulse] ExtensionPay init error:', err);
+      console.error('[Traacky] ExtensionPay init error:', err);
       // Fallback to cached plan
       await this._loadCachedPlan();
       this._initialized = true; // Mark as initialized even on error to avoid retry loops
@@ -87,10 +87,10 @@ class PlanManager {
     }
 
     // Log ALL user properties for debugging
-    console.log('[TrackPulse] _resolvePlan user keys:', Object.keys(this.user));
-    console.log('[TrackPulse] user.paid:', this.user.paid, typeof this.user.paid);
-    console.log('[TrackPulse] user.subscriptionStatus:', this.user.subscriptionStatus);
-    console.log('[TrackPulse] user.paidAt:', this.user.paidAt);
+    console.log('[Traacky] _resolvePlan user keys:', Object.keys(this.user));
+    console.log('[Traacky] user.paid:', this.user.paid, typeof this.user.paid);
+    console.log('[Traacky] user.subscriptionStatus:', this.user.subscriptionStatus);
+    console.log('[Traacky] user.paidAt:', this.user.paidAt);
 
     // Multiple ways to detect paid status:
     // 1. user.paid === true (standard ExtensionPay)
@@ -100,7 +100,7 @@ class PlanManager {
       || this.user.subscriptionStatus === 'active'
       || !!this.user.paidAt;
 
-    console.log('[TrackPulse] isPaid resolved to:', isPaid);
+    console.log('[Traacky] isPaid resolved to:', isPaid);
 
     if (!isPaid) {
       this.currentPlan = 'free';
@@ -115,14 +115,14 @@ class PlanManager {
       || this.user.subscription_plan_id
       || '';
 
-    console.log('[TrackPulse] User isPaid=true, planId="' + planId + '"');
+    console.log('[Traacky] User isPaid=true, planId="' + planId + '"');
 
     const resolved = resolvePlanFromId(planId);
     if (resolved) {
       this.currentPlan = resolved;
     } else if (this._storedPlan) {
       // ExtensionPay doesn't return planId — use locally stored selection from checkout
-      console.log('[TrackPulse] Using stored plan selection:', this._storedPlan);
+      console.log('[Traacky] Using stored plan selection:', this._storedPlan);
       this.currentPlan = this._storedPlan;
     } else {
       // Paid but no recognizable plan ID and no stored selection — default to 'starter'
@@ -140,7 +140,7 @@ class PlanManager {
       tp_user_email: this.user?.email || null,
       tp_paid: !!this.user?.paid,
     };
-    console.log('[TrackPulse] Persisting plan cache:', JSON.stringify(data));
+    console.log('[Traacky] Persisting plan cache:', JSON.stringify(data));
     await chrome.storage.local.set(data);
   }
 
@@ -151,7 +151,7 @@ class PlanManager {
     const data = await chrome.storage.local.get(['tp_plan', 'tp_plan_updated']);
     if (data.tp_plan) {
       this.currentPlan = data.tp_plan;
-      console.log('[TrackPulse] Loaded cached plan:', this.currentPlan);
+      console.log('[Traacky] Loaded cached plan:', this.currentPlan);
       // If cache is older than 24h, try to refresh
       if (Date.now() - (data.tp_plan_updated || 0) > 86400000) {
         this.refreshPlan();
@@ -170,15 +170,15 @@ class PlanManager {
       this._storedPlan = stored.tp_selected_plan || this._storedPlan;
 
       this.user = await extpay.getUser();
-      console.log('[TrackPulse] Refresh - ExtPay user:', JSON.stringify(this.user));
+      console.log('[Traacky] Refresh - ExtPay user:', JSON.stringify(this.user));
       this._resolvePlan();
-      console.log('[TrackPulse] Refresh - resolved plan:', this.currentPlan);
+      console.log('[Traacky] Refresh - resolved plan:', this.currentPlan);
       await this._persistPlanCache();
       this._notifyListeners();
       this._broadcastPlanChanged();
       return this.currentPlan;
     } catch (e) {
-      console.error('[TrackPulse] Refresh failed:', e);
+      console.error('[Traacky] Refresh failed:', e);
       return this.currentPlan;
     }
   }

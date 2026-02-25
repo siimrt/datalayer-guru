@@ -1,5 +1,5 @@
 /**
- * TrackPulse Content Script — Entry point.
+ * Traacky Content Script — Entry point.
  * Runs in the content script isolated world on every page.
  * Orchestrates CMS detection, data extraction, event generation, and auditing.
  */
@@ -70,7 +70,7 @@ async function runPipeline(pageContext) {
     const [ecommerceData, pixels, consent] = await Promise.all([
       // Ecommerce data extraction (async)
       extractor.extract(pageContext).catch((e) => {
-        console.debug('[TrackPulse] Extraction error:', e);
+        console.debug('[Traacky] Extraction error:', e);
         return {
           currency: null,
           product: null,
@@ -132,7 +132,7 @@ async function runPipeline(pageContext) {
       timestamp: Date.now(),
     });
   } catch (e) {
-    console.debug('[TrackPulse] Pipeline error:', e);
+    console.debug('[Traacky] Pipeline error:', e);
     // Send error state so the UI doesn't stay in loading
     sendMessage(MSG.DETECTION_RESULT, {
       cms: { cms: 'unknown', confidence: 0, signals: [], version: null },

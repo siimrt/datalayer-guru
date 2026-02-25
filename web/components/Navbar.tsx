@@ -3,11 +3,11 @@
 import AppIcon from "./AppIcon";
 import ChromeIcon from "./ChromeIcon";
 
-const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/trackpulse/";
+const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/";
 
 export default function Navbar() {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-black/60 backdrop-blur-xl border-b border-white/[0.04]">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/[0.04]">
       <div className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-3 sm:px-8 sm:py-4">
         {/* Logo */}
         <a href="#" className="flex shrink-0 items-center gap-2.5">
@@ -15,7 +15,7 @@ export default function Navbar() {
             <AppIcon size={22} />
           </div>
           <span className="text-[15px] font-semibold tracking-tight text-white">
-            TrackPulse
+            Traacky
           </span>
         </a>
 

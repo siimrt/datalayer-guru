@@ -4,7 +4,7 @@
  * How it works:
  * 1. User clicks "Start Funnel" -> enters recording mode
  * 2. User navigates through pages normally
- * 3. On each page, TrackPulse captures: page type, detected events, diff
+ * 3. On each page, Traacky captures: page type, detected events, diff
  * 4. User clicks "Stop Funnel" -> shows funnel summary
  * 5. Can export as PDF report
  *
@@ -167,7 +167,7 @@ function renderIdleState(container, funnelSession, capabilities) {
       </div>
       <div style="color: var(--tp-text-secondary); font-size: 12px; margin-bottom: 16px; line-height: 1.5;">
         Record your navigation through a purchase funnel.<br>
-        TrackPulse will audit tracking on each step.
+        Traacky will audit tracking on each step.
       </div>
       <button id="funnel-start-btn" style="
         background: var(--tp-primary); color: white; border: none;

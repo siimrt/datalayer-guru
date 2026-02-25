@@ -28,7 +28,7 @@ export function injectPageScript() {
   script.src = chrome.runtime.getURL('src/content/page-context-script.js');
   script.onload = () => script.remove();
   script.onerror = () => {
-    console.debug('[TrackPulse] Failed to inject page context script');
+    console.debug('[Traacky] Failed to inject page context script');
     script.remove();
   };
   (document.head || document.documentElement).appendChild(script);

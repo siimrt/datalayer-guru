@@ -4,36 +4,36 @@ import { useState, useEffect, useRef } from "react";
 
 const FAQS = [
   {
-    q: "Is TrackPulse free?",
+    q: "Is Traacky free?",
     a: "Yes! The free plan gives you CMS detection, basic GA4 event generation, dataLayer live view, pixel detection, and 5 audits per day. Upgrade anytime for access to all platforms, funnel mode, and push to custom pixel.",
   },
   {
     q: "Which CMS platforms are supported?",
-    a: "TrackPulse auto-detects Shopify, WooCommerce, PrestaShop, Magento, and Webflow. It extracts product, collection, cart, and order data automatically from each platform.",
+    a: "Traacky auto-detects Shopify, WooCommerce, PrestaShop, Magento, and Webflow. It extracts product, collection, cart, and order data automatically from each platform.",
   },
   {
-    q: "Which tracking platforms does TrackPulse support?",
-    a: "TrackPulse generates and audits events for Google Analytics 4 (GA4), Meta Pixel (Facebook), TikTok Pixel, Pinterest Tag, and more coming soon. It also detects GTM, Snap Pixel, and LinkedIn Insight Tag.",
+    q: "Which tracking platforms does Traacky support?",
+    a: "Traacky generates and audits events for Google Analytics 4 (GA4), Meta Pixel (Facebook), TikTok Pixel, Pinterest Tag, and more coming soon. It also detects GTM, Snap Pixel, and LinkedIn Insight Tag.",
   },
   {
     q: "How does push to custom pixel work?",
-    a: "TrackPulse detects Shopify custom pixel sandbox iframes on checkout and thank-you pages. It then pushes properly formatted purchase events directly into those sandboxes — no code required. This bridges the gap between your generated events and Shopify's sandboxed pixel environment.",
+    a: "Traacky detects Shopify custom pixel sandbox iframes on checkout and thank-you pages. It then pushes properly formatted purchase events directly into those sandboxes — no code required. This bridges the gap between your generated events and Shopify's sandboxed pixel environment.",
   },
   {
     q: "Is my data safe?",
-    a: "TrackPulse runs entirely in your browser. No ecommerce data, page content, or tracking events are sent to any external server. Everything stays local in your Chrome session.",
+    a: "Traacky runs entirely in your browser. No ecommerce data, page content, or tracking events are sent to any external server. Everything stays local in your Chrome session.",
   },
   {
     q: "Does it work with headless / custom storefronts?",
-    a: "TrackPulse works best with standard CMS themes (Shopify Liquid, WooCommerce templates, etc.). Headless storefronts with custom frontends may not be fully detected, but pixel detection and dataLayer monitoring work on any site.",
+    a: "Traacky works best with standard CMS themes (Shopify Liquid, WooCommerce templates, etc.). Headless storefronts with custom frontends may not be fully detected, but pixel detection and dataLayer monitoring work on any site.",
   },
   {
-    q: "Can I use TrackPulse for client audits?",
+    q: "Can I use Traacky for client audits?",
     a: "Absolutely. The Pro and Agency plans include export features (JSON, CSV) and funnel mode, making it easy to generate comprehensive tracking audit reports for clients.",
   },
   {
-    q: "How do I install TrackPulse?",
-    a: "Click 'Add to Chrome' to install from the Chrome Web Store. Once installed, click the TrackPulse icon in your toolbar to open the side panel on any ecommerce site.",
+    q: "How do I install Traacky?",
+    a: "Click 'Add to Chrome' to install from the Chrome Web Store. Once installed, click the Traacky icon in your toolbar to open the side panel on any ecommerce site.",
   },
 ];
 
@@ -43,10 +43,15 @@ export default function FAQ() {
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      (entries) => entries.forEach((e) => { if (e.isIntersecting) e.target.classList.add("visible"); }),
+      (entries) =>
+        entries.forEach((e) => {
+          if (e.isIntersecting) e.target.classList.add("visible");
+        }),
       { threshold: 0.08 }
     );
-    ref.current?.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
+    ref.current
+      ?.querySelectorAll(".fade-in")
+      .forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, []);
 

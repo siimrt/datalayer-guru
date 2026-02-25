@@ -60,7 +60,7 @@ export function renderPricingPage(container, state, onBack) {
       <!-- Hero -->
       <div style="text-align: center; margin-bottom: 16px;">
         <div style="font-size: 18px; font-weight: 700; color: var(--tp-text); margin-bottom: 4px;">
-          Unlock TrackPulse
+          Unlock Traacky
         </div>
         <div style="font-size: 12px; color: var(--tp-text-secondary);">
           Stop wasting 4h/week on manual tracking audits.
