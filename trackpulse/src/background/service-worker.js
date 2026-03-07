@@ -27,6 +27,145 @@ planManager.onChange((newPlan) => {
 // Store per-tab context data
 const tabContexts = {};
 
+// --- WebRequest-based network detection ---
+// Catches tracking requests that bypass JS hooks (iframes, Privacy Sandbox, etc.)
+
+const WEB_REQUEST_TRACKING_PATTERNS = [
+  { platform: 'ga4',       pattern: '*://google-analytics.com/g/collect*' },
+  { platform: 'ga4',       pattern: '*://analytics.google.com/g/collect*' },
+  { platform: 'meta',      pattern: '*://*.facebook.com/tr*' },
+  { platform: 'meta',      pattern: '*://*.facebook.com/privacy_sandbox/*' },
+  { platform: 'meta',      pattern: '*://graph.facebook.com/*' },
+  { platform: 'tiktok',    pattern: '*://analytics.tiktok.com/*' },
+  { platform: 'tiktok',    pattern: '*://mon.tiktok.com/*' },
+  { platform: 'pinterest', pattern: '*://ct.pinterest.com/*' },
+  { platform: 'pinterest', pattern: '*://*.pinimg.com/ct/*' },
+  { platform: 'pinterest', pattern: '*://trk.pinterest.com/*' },
+  { platform: 'snapchat',  pattern: '*://tr.snapchat.com/*' },
+  { platform: 'snapchat',  pattern: '*://tr-shadow.snapchat.com/*' },
+  { platform: 'linkedin',  pattern: '*://px.ads.linkedin.com/*' },
+  { platform: 'linkedin',  pattern: '*://px4.ads.linkedin.com/*' },
+  { platform: 'linkedin',  pattern: '*://dc.ads.linkedin.com/*' },
+];
+
+const webRequestUrls = WEB_REQUEST_TRACKING_PATTERNS.map(p => p.pattern);
+
+function matchPlatformFromUrl(url) {
+  const MATCHERS = [
+    { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
+    { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/|graph\.facebook\.com/ },
+    { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
+    { platform: 'pinterest', re: /ct\.pinterest\.com|pinimg\.com\/ct\/|trk\.pinterest\.com/ },
+    { platform: 'snapchat',  re: /tr\.snapchat\.com|tr-shadow\.snapchat\.com/ },
+    { platform: 'linkedin',  re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com/ },
+  ];
+  for (const m of MATCHERS) {
+    if (m.re.test(url)) return m.platform;
+  }
+  return null;
+}
+
+function extractPixelIdFromUrl(platform, url) {
+  try {
+    const u = new URL(url);
+    const params = u.searchParams;
+    switch (platform) {
+      case 'ga4': return params.get('tid') || null;
+      case 'meta': return params.get('id') || null;
+      case 'pinterest': return params.get('tid') || null;
+      case 'tiktok': return params.get('sdkid') || null;
+      case 'snapchat': {
+        const id = params.get('id') || params.get('pid');
+        if (id) return id;
+        const pathMatch = u.pathname.match(/\/v\d+\/([a-f0-9-]+)\/events/);
+        return pathMatch ? pathMatch[1] : null;
+      }
+      case 'linkedin': return params.get('pid') || null;
+      default: return null;
+    }
+  } catch (e) { return null; }
+}
+
+function extractEventNameFromUrl(platform, url) {
+  try {
+    const u = new URL(url);
+    const params = u.searchParams;
+    switch (platform) {
+      case 'ga4': return params.get('en') || null;
+      case 'meta': return params.get('ev') || null;
+      case 'pinterest': return params.get('event') || null;
+      case 'tiktok': return params.get('event') || params.get('ev') || null;
+      case 'snapchat': return params.get('ev') || params.get('event') || null;
+      case 'linkedin': {
+        if (params.get('conversionId')) return 'conversion';
+        return 'pageview';
+      }
+      default: return null;
+    }
+  } catch (e) { return null; }
+}
+
+const _recentWebRequests = new Map();
+const WEBREQUEST_DEDUP_WINDOW = 2000;
+const _seenWebRequestPixels = new Set(); // Track pixel IDs already forwarded as FRAME_PIXELS
+
+if (chrome.webRequest?.onCompleted) {
+  chrome.webRequest.onCompleted.addListener(
+    (details) => {
+      if (details.tabId < 0) return;
+
+      const url = details.url;
+      const platform = matchPlatformFromUrl(url);
+      if (!platform) return;
+
+      const urlKey = url.slice(0, 200);
+      const now = Date.now();
+      const lastSeen = _recentWebRequests.get(urlKey);
+      if (lastSeen && now - lastSeen < WEBREQUEST_DEDUP_WINDOW) return;
+      _recentWebRequests.set(urlKey, now);
+
+      if (_recentWebRequests.size > 500) {
+        for (const [key, ts] of _recentWebRequests) {
+          if (now - ts > 10000) _recentWebRequests.delete(key);
+        }
+      }
+
+      const eventName = extractEventNameFromUrl(platform, url);
+      const pixelId = extractPixelIdFromUrl(platform, url);
+
+      forwardToExtensionPages({
+        type: MSG.NETWORK_REQUEST,
+        payload: {
+          platform,
+          url: url.slice(0, 4000),
+          method: details.method || 'GET',
+          body: null,
+          timestamp: now,
+          source: 'webRequest',
+          pixelId,
+          eventName,
+        },
+      });
+
+      // Forward newly discovered pixels to sidepanel for PixelStatus
+      if (pixelId) {
+        const pixelKey = `${platform}:${pixelId}`;
+        if (!_seenWebRequestPixels.has(pixelKey)) {
+          _seenWebRequestPixels.add(pixelKey);
+          forwardToExtensionPages({
+            type: MSG.FRAME_PIXELS,
+            payload: {
+              pixels: [{ platform, id: pixelId, active: true, source: 'webRequest' }],
+            },
+          });
+        }
+      }
+    },
+    { urls: webRequestUrls },
+    []
+  );
+}
+
 // --- Side Panel / Popup Fallback ---
 
 // Chrome supports side panel natively. Other Chromium browsers (Arc, etc.) define
@@ -361,8 +500,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               // --- Hook fetch / XHR / sendBeacon ---
               var _TP_TRACKING_PATTERNS = [
                 { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
-                { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel/ },
-                { platform: 'tiktok',    re: /analytics\.tiktok\.com|mon\.tiktok\.com/ },
+                { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel|graph\.facebook\.com/ },
+                { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
                 { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\/|trk\.pinterest\.com/ },
                 { platform: 'snapchat',  re: /tr\.snapchat\.com\/|tr-shadow\.snapchat\.com/ },
                 { platform: 'linkedin',  re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com|www\.linkedin\.com\/px\/|www\.linkedin\.com\/li\/track|p\.adsymptotic\.com|sjs\.bizographics\.com|linkedin\.oribi\.io/ },
@@ -446,6 +585,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                   return _origBeacon.apply(navigator, arguments);
                 };
               }
+
+              // Hook Image.src for pixel-based tracking (Meta, LinkedIn, Pinterest, etc.)
+              try {
+                var _origImgSrcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+                if (_origImgSrcDesc && _origImgSrcDesc.set) {
+                  Object.defineProperty(HTMLImageElement.prototype, 'src', {
+                    set: function (val) {
+                      if (val && typeof val === 'string') {
+                        var p = _tpMatchUrl(val);
+                        if (p) _tpPostNetworkHit(p, val, 'IMG', null);
+                      }
+                      return _origImgSrcDesc.set.call(this, val);
+                    },
+                    get: _origImgSrcDesc.get,
+                    enumerable: true,
+                    configurable: true,
+                  });
+                }
+              } catch (e) {}
+
+              // Also hook setAttribute('src', ...) on images
+              try {
+                var _origImgSetAttr = HTMLImageElement.prototype.setAttribute;
+                HTMLImageElement.prototype.setAttribute = function (name, value) {
+                  if (name === 'src' && value && typeof value === 'string') {
+                    var p = _tpMatchUrl(value);
+                    if (p) _tpPostNetworkHit(p, value, 'IMG', null);
+                  }
+                  return _origImgSetAttr.call(this, name, value);
+                };
+              } catch (e) {}
 
               // --- Replay existing dataLayer entries ---
               try {
@@ -635,6 +805,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     // do NOT need to send REQUEST_REDETECT here — that would cause a
     // redundant second pipeline run.
     delete tabContexts[tabId];
+    // Reset webRequest pixel tracking so pixels are re-detected on new pages
+    _seenWebRequestPixels.clear();
   }
 });
 

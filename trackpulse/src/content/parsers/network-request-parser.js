@@ -1,6 +1,9 @@
 /**
  * Network Request Parser
  * Extracts event names and key parameters from tracking platform HTTP requests.
+ *
+ * All parsers merge URL query params with POST body params (URL-encoded or JSON)
+ * so that events are detected regardless of whether data is in the URL or body.
  */
 
 export function parseNetworkRequest(platform, url, body) {
@@ -21,16 +24,16 @@ export function parseNetworkRequest(platform, url, body) {
   }
 }
 
+// ---- Shared Helpers ----
+
 /**
- * GA4 Measurement Protocol parser.
- * Decodes compact parameter format: en=event_name, ep.*=event_params,
- * epn.*=numeric params, pr{N}id/nm/pr/qt=items, tr=revenue, tt=transaction_id, cu=currency
+ * Merge URL query params with POST body (URL-encoded).
+ * Body params take precedence over URL params when keys overlap.
  */
-function parseGA4Request(url, body) {
+function mergeUrlAndBodyParams(url, body) {
   const urlObj = new URL(url);
   const urlParams = Object.fromEntries(urlObj.searchParams);
 
-  // POST body may contain URL-encoded params (same format as query string)
   let bodyParams = {};
   if (body && typeof body === 'string') {
     try {
@@ -38,7 +41,30 @@ function parseGA4Request(url, body) {
     } catch (e) {}
   }
 
-  const allParams = { ...urlParams, ...bodyParams };
+  return { urlObj, params: { ...urlParams, ...bodyParams } };
+}
+
+/**
+ * Try to parse body as JSON. Returns parsed object or null.
+ */
+function tryParseJsonBody(body) {
+  if (!body) return null;
+  try {
+    return typeof body === 'string' ? JSON.parse(body) : body;
+  } catch (e) {
+    return null;
+  }
+}
+
+// ---- Platform Parsers ----
+
+/**
+ * GA4 Measurement Protocol parser.
+ * Decodes compact parameter format: en=event_name, ep.*=event_params,
+ * epn.*=numeric params, pr{N}id/nm/pr/qt=items, tr=revenue, tt=transaction_id, cu=currency
+ */
+function parseGA4Request(url, body) {
+  const { params: allParams } = mergeUrlAndBodyParams(url, body);
 
   const eventName = allParams.en || null;
 
@@ -87,10 +113,10 @@ function parseGA4Request(url, body) {
  *   1. Classic: ev=EventName, cd=JSON_custom_data, id=pixel_id
  *   2. Privacy Sandbox / bracket notation: ev=ViewContent, cd[content_type]=product, cd[currency]=EUR, ...
  * Also parses ap[key]=value (auto parameters) the same way.
+ * Merges URL + POST body params.
  */
 function parseMetaRequest(url, body) {
-  const urlObj = new URL(url);
-  const params = Object.fromEntries(urlObj.searchParams);
+  const { urlObj, params } = mergeUrlAndBodyParams(url, body);
 
   const eventName = params.ev || null;
   const eventParams = {};
@@ -107,27 +133,31 @@ function parseMetaRequest(url, body) {
     } catch (e) {}
   }
 
-  // Parse bracket notation: cd[key]=value, ap[key]=value, pmd[key]=value
+  // Parse bracket notation from both URL and body: cd[key]=value, ap[key]=value, pmd[key]=value
+  const searchSources = [urlObj.search];
+  if (body && typeof body === 'string') searchSources.push('&' + body);
+
   if (!parsedCdJson) {
-    const searchStr = urlObj.search;
-    const bracketRegex = /(?:^|&)(cd|ap|pmd)\[([^\]]+)\]=([^&]*)/g;
-    let match;
-    while ((match = bracketRegex.exec(searchStr)) !== null) {
-      const prefix = match[1]; // cd, ap, or pmd
-      const key = decodeURIComponent(match[2]);
-      let value = decodeURIComponent(match[3]);
+    for (const searchStr of searchSources) {
+      const bracketRegex = /(?:^|&)(cd|ap|pmd)\[([^\]]+)\]=([^&]*)/g;
+      let match;
+      while ((match = bracketRegex.exec(searchStr)) !== null) {
+        const prefix = match[1]; // cd, ap, or pmd
+        const key = decodeURIComponent(match[2]);
+        let value = decodeURIComponent(match[3]);
 
-      // Try to parse JSON values (e.g. cd[contents]=[{...}])
-      if (value.startsWith('[') || value.startsWith('{')) {
-        try { value = JSON.parse(value); } catch (e) {}
-      }
+        // Try to parse JSON values (e.g. cd[contents]=[{...}])
+        if (value.startsWith('[') || value.startsWith('{')) {
+          try { value = JSON.parse(value); } catch (e) {}
+        }
 
-      if (prefix === 'cd') {
-        eventParams[key] = value;
-      } else if (prefix === 'ap') {
-        eventParams[`ap_${key}`] = value;
+        if (prefix === 'cd') {
+          eventParams[key] = value;
+        } else if (prefix === 'ap') {
+          eventParams[`ap_${key}`] = value;
+        }
+        // Skip pmd (page metadata) — too verbose
       }
-      // Skip pmd (page metadata) — too verbose
     }
   }
 
@@ -143,6 +173,7 @@ function parseMetaRequest(url, body) {
  * TikTok Pixel parser.
  * Handles:
  *   - JSON POST body with event/properties (analytics.tiktok.com)
+ *   - URL-encoded POST body params
  *   - URL params: event, sdkid (mon.tiktok.com and analytics.tiktok.com)
  *   - Batch events array in POST body
  */
@@ -150,42 +181,56 @@ function parseTikTokRequest(url, body) {
   let eventName = null;
   const eventParams = {};
 
-  // Try JSON body first (primary analytics.tiktok.com format)
-  if (body) {
-    try {
-      const data = typeof body === 'string' ? JSON.parse(body) : body;
-
-      // Single event format
-      if (data.event || data.type) {
-        eventName = data.event || data.type;
-        if (data.properties) Object.assign(eventParams, data.properties);
-      }
-
-      // Batch format: { batch: [{ type: 'track', event: 'ViewContent', ... }] }
-      if (!eventName && Array.isArray(data.batch) && data.batch.length > 0) {
-        const first = data.batch[0];
-        eventName = first.event || first.type || null;
-        if (first.properties) Object.assign(eventParams, first.properties);
-        if (data.batch.length > 1) {
-          eventParams._batchCount = data.batch.length;
-        }
-      }
-
-      // Context data (pixel ID, page info)
-      if (data.context?.pixel?.code) {
-        eventParams.pixelId = data.context.pixel.code;
-      }
-    } catch (e) {}
+  // Helper: extract event from an object trying multiple field names
+  function pickEvent(obj) {
+    return obj.event || obj.type || obj.action || obj.event_name || obj.eventType || null;
+  }
+  function pickProps(obj) {
+    if (obj.properties) Object.assign(eventParams, obj.properties);
+    if (obj.params) Object.assign(eventParams, obj.params);
+    if (obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)) Object.assign(eventParams, obj.data);
   }
 
-  // Fallback: URL params (mon.tiktok.com and pixel events.js calls)
+  // Try JSON body first (primary analytics.tiktok.com format)
+  const jsonData = tryParseJsonBody(body);
+  if (jsonData) {
+    // Single event format
+    eventName = pickEvent(jsonData);
+    if (eventName) pickProps(jsonData);
+
+    // Batch format: { batch: [{ type: 'track', event: 'ViewContent', ... }] }
+    if (!eventName && Array.isArray(jsonData.batch) && jsonData.batch.length > 0) {
+      const first = jsonData.batch[0];
+      eventName = pickEvent(first);
+      pickProps(first);
+      if (jsonData.batch.length > 1) eventParams._batchCount = jsonData.batch.length;
+    }
+
+    // Data array format: { data: [{ event: '...', ... }] }
+    if (!eventName && Array.isArray(jsonData.data) && jsonData.data.length > 0) {
+      const first = jsonData.data[0];
+      eventName = pickEvent(first);
+      pickProps(first);
+    }
+
+    // Events array format: { events: [{ type: '...', ... }] }
+    if (!eventName && Array.isArray(jsonData.events) && jsonData.events.length > 0) {
+      const first = jsonData.events[0];
+      eventName = pickEvent(first);
+      pickProps(first);
+    }
+
+    // Context data (pixel ID, page info)
+    if (jsonData.context?.pixel?.code) eventParams.pixelId = jsonData.context.pixel.code;
+    if (!eventParams.pixelId && jsonData.pixel_code) eventParams.pixelId = jsonData.pixel_code;
+  }
+
+  // Fallback: merge URL params + URL-encoded body params
   if (!eventName) {
-    try {
-      const urlObj = new URL(url);
-      eventName = urlObj.searchParams.get('event') || urlObj.searchParams.get('ev') || null;
-      const sdkid = urlObj.searchParams.get('sdkid');
-      if (sdkid) eventParams.pixelId = sdkid;
-    } catch (e) {}
+    const { params: allParams } = mergeUrlAndBodyParams(url, body);
+    eventName = allParams.event || allParams.ev || allParams.type || allParams.action || null;
+    const sdkid = allParams.sdkid || allParams.pixel_id;
+    if (sdkid) eventParams.pixelId = sdkid;
   }
 
   return { eventName, params: eventParams, items: null };
@@ -193,14 +238,23 @@ function parseTikTokRequest(url, body) {
 
 /**
  * Pinterest Tag parser.
- * event param or ed JSON param.
+ * Merges URL + POST body params. Checks event param and ed JSON param.
  */
 function parsePinterestRequest(url, body) {
-  const urlObj = new URL(url);
-  const params = Object.fromEntries(urlObj.searchParams);
+  const { params } = mergeUrlAndBodyParams(url, body);
   const eventParams = {};
 
   let eventName = params.event || null;
+
+  // Also try JSON body (Pinterest CAPI can POST JSON)
+  if (!eventName) {
+    const jsonData = tryParseJsonBody(body);
+    if (jsonData) {
+      eventName = jsonData.event || jsonData.event_name || null;
+      if (jsonData.custom_data) Object.assign(eventParams, jsonData.custom_data);
+    }
+  }
+
   if (params.ed) {
     try {
       const ed = JSON.parse(decodeURIComponent(params.ed));
@@ -209,7 +263,8 @@ function parsePinterestRequest(url, body) {
     } catch (e) {}
   }
 
-  return { eventName, params: eventParams, items: null };
+  const pixelId = params.tid || null;
+  return { eventName, params: eventParams, items: null, pixelId };
 }
 
 /**
@@ -218,6 +273,7 @@ function parsePinterestRequest(url, body) {
  *   - tr.snapchat.com/p?id=PIXEL_ID&ev=EVENT_NAME&...
  *   - tr.snapchat.com/v3/PIXEL_ID/events (Conversions API)
  *   - tr.snapchat.com/cm/i (cookie matching — detected but minimal data)
+ * Merges URL + POST body params.
  */
 function parseSnapchatRequest(url, body) {
   let eventName = null;
@@ -225,16 +281,15 @@ function parseSnapchatRequest(url, body) {
   let pixelId = null;
 
   try {
-    const urlObj = new URL(url);
-    const qp = Object.fromEntries(urlObj.searchParams);
+    const { urlObj, params: allParams } = mergeUrlAndBodyParams(url, body);
 
     // Cookie matching endpoint — flag it
     if (urlObj.pathname.includes('/cm/')) {
       return { eventName: 'cookie_match', params: {}, items: null };
     }
 
-    eventName = qp.ev || qp.event || qp.type || null;
-    pixelId = qp.id || qp.pid || null;
+    eventName = allParams.ev || allParams.event || allParams.type || null;
+    pixelId = allParams.id || allParams.pid || null;
 
     // Extract pixel ID from Conversions API URL path: /v3/{pixelId}/events
     if (!pixelId) {
@@ -243,7 +298,7 @@ function parseSnapchatRequest(url, body) {
     }
 
     // Copy relevant params
-    for (const [key, value] of Object.entries(qp)) {
+    for (const [key, value] of Object.entries(allParams)) {
       if (!['id', 'pid', 'ev', 'event', 'type', 'v', 'if', 'ts'].includes(key)) {
         eventParams[key] = value;
       }
@@ -251,14 +306,14 @@ function parseSnapchatRequest(url, body) {
   } catch (e) {}
 
   // Try JSON body (Conversions API v3)
-  if (body && !eventName) {
-    try {
-      const data = typeof body === 'string' ? JSON.parse(body) : body;
-      eventName = data.event_type || data.event_name || null;
-      if (data.event_conversion_type) eventParams.conversion_type = data.event_conversion_type;
-      if (data.price) eventParams.price = data.price;
-      if (data.currency) eventParams.currency = data.currency;
-    } catch (e) {}
+  if (!eventName) {
+    const jsonData = tryParseJsonBody(body);
+    if (jsonData) {
+      eventName = jsonData.event_type || jsonData.event_name || jsonData.event || null;
+      if (jsonData.event_conversion_type) eventParams.conversion_type = jsonData.event_conversion_type;
+      if (jsonData.price) eventParams.price = jsonData.price;
+      if (jsonData.currency) eventParams.currency = jsonData.currency;
+    }
   }
 
   const result = { eventName, params: eventParams, items: null };
@@ -276,15 +331,15 @@ function parseSnapchatRequest(url, body) {
  *   - www.linkedin.com/px/li_sync (cookie sync — detected but minimal data)
  *   - sjs.bizographics.com (firmographic enrichment)
  *   - p.adsymptotic.com (redirect in cookie sync chain)
+ * Merges URL + POST body params.
  */
 function parseLinkedInRequest(url, body) {
   let eventName = null;
   const eventParams = {};
 
   try {
-    const urlObj = new URL(url);
+    const { urlObj, params: allParams } = mergeUrlAndBodyParams(url, body);
     const host = urlObj.hostname;
-    const qp = Object.fromEntries(urlObj.searchParams);
 
     // Cookie sync endpoints
     if (host === 'p.adsymptotic.com' || urlObj.pathname.includes('/px/li_sync')) {
@@ -293,12 +348,12 @@ function parseLinkedInRequest(url, body) {
 
     // Firmographic enrichment
     if (host === 'sjs.bizographics.com') {
-      return { eventName: 'firmographic_enrichment', params: { pid: qp.pid || null }, items: null };
+      return { eventName: 'firmographic_enrichment', params: { pid: allParams.pid || null }, items: null };
     }
 
     // Main tracking endpoints (px.ads.linkedin.com, px4, dc)
-    const partnerId = qp.pid || qp.partner_id || null;
-    const conversionId = qp.conversionId || qp.conversion_id || null;
+    const partnerId = allParams.pid || allParams.partner_id || null;
+    const conversionId = allParams.conversionId || allParams.conversion_id || null;
 
     if (conversionId) {
       eventName = 'conversion';
@@ -308,36 +363,44 @@ function parseLinkedInRequest(url, body) {
     }
 
     if (partnerId) eventParams.partnerId = partnerId;
-    if (qp.url) eventParams.pageUrl = decodeURIComponent(qp.url);
-    if (qp.fmt) eventParams.format = qp.fmt;
+    if (allParams.url) eventParams.pageUrl = decodeURIComponent(allParams.url);
+    if (allParams.fmt) eventParams.format = allParams.fmt;
   } catch (e) {}
 
   // Try JSON body (www.linkedin.com/li/track may POST JSON)
-  if (body && !eventName) {
-    try {
-      const data = typeof body === 'string' ? JSON.parse(body) : body;
-      eventName = data.eventType || data.event || 'track';
-      if (data.partnerId) eventParams.partnerId = data.partnerId;
-      if (data.conversionId) eventParams.conversionId = data.conversionId;
-    } catch (e) {}
+  if (body && (!eventName || eventName === 'pageview')) {
+    const jsonData = tryParseJsonBody(body);
+    if (jsonData) {
+      const jsonEvent = jsonData.eventType || jsonData.event || null;
+      if (jsonEvent) eventName = jsonEvent;
+      if (jsonData.partnerId) eventParams.partnerId = jsonData.partnerId;
+      if (jsonData.conversionId) {
+        eventParams.conversionId = jsonData.conversionId;
+        if (!eventName || eventName === 'pageview') eventName = 'conversion';
+      }
+    }
   }
 
-  return { eventName, params: eventParams, items: null };
+  const result = { eventName, params: eventParams, items: null };
+  if (eventParams.partnerId) result.pixelId = eventParams.partnerId;
+  return result;
 }
 
 /**
  * Generic fallback parser for unknown platforms.
+ * Merges URL + POST body params, also tries JSON body.
  */
 function parseGenericRequest(url, body) {
-  let eventName = null;
-  const params = {};
+  const { params: allParams } = mergeUrlAndBodyParams(url, body);
+  let eventName = allParams.event || allParams.ev || allParams.type || null;
 
-  try {
-    const urlObj = new URL(url);
-    const qp = Object.fromEntries(urlObj.searchParams);
-    eventName = qp.event || qp.ev || qp.type || null;
-    Object.assign(params, qp);
-  } catch (e) {}
+  // Try JSON body as fallback
+  if (!eventName) {
+    const jsonData = tryParseJsonBody(body);
+    if (jsonData) {
+      eventName = jsonData.event || jsonData.event_name || jsonData.eventType || jsonData.type || null;
+    }
+  }
 
-  return { eventName, params, items: null };
+  return { eventName, params: allParams, items: null };
 }

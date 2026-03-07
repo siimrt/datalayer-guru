@@ -193,6 +193,36 @@
           context.pixels.ttqPixelIds = Object.keys(window.ttq._t);
         }
       } catch (e) {}
+      // Try to get Pinterest pixel ID from pintrk queue
+      try {
+        if (window.pintrk?.queue) {
+          for (const q of window.pintrk.queue) {
+            if (q[0] === 'load' && q[1]) {
+              context.pixels.pinterestPixelId = q[1];
+              break;
+            }
+          }
+        }
+      } catch (e) {}
+      // Try to get Snapchat pixel ID from snaptr queue or _pids
+      try {
+        if (window.snaptr?._pids && window.snaptr._pids.length > 0) {
+          context.pixels.snapchatPixelId = window.snaptr._pids[0];
+        } else if (window.snaptr?.queue) {
+          for (const q of window.snaptr.queue) {
+            if (q[0] === 'init' && q[1]) {
+              context.pixels.snapchatPixelId = q[1];
+              break;
+            }
+          }
+        }
+      } catch (e) {}
+      // Try to get LinkedIn partner ID
+      try {
+        if (window._linkedin_partner_id) {
+          context.pixels.linkedInPartnerId = String(window._linkedin_partner_id);
+        }
+      } catch (e) {}
     } catch (e) {}
 
     // --- Consent ---
@@ -318,10 +348,12 @@
       // (events pushed before the hook was installed, e.g. view_item on initial load)
       for (var i = 0; i < window.dataLayer.length; i++) {
         try {
+          var replayEntry = JSON.parse(JSON.stringify(window.dataLayer[i]));
+          replayEntry._replay = true;
           window.postMessage(
             {
               type: 'TRACKPULSE_DATALAYER_PUSH',
-              payload: JSON.parse(JSON.stringify([window.dataLayer[i]])),
+              payload: [replayEntry],
             },
             '*'
           );
@@ -380,8 +412,8 @@
       // Inline endpoint matching (can't import modules in MAIN world IIFE)
       var _TP_TRACKING_PATTERNS = [
         { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
-        { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel/ },
-        { platform: 'tiktok',    re: /analytics\.tiktok\.com|mon\.tiktok\.com/ },
+        { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel|graph\.facebook\.com/ },
+        { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
         { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\/|trk\.pinterest\.com/ },
         { platform: 'snapchat',  re: /tr\.snapchat\.com\/|tr-shadow\.snapchat\.com/ },
         { platform: 'linkedin',  re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com|www\.linkedin\.com\/px\/|www\.linkedin\.com\/li\/track|p\.adsymptotic\.com|sjs\.bizographics\.com|linkedin\.oribi\.io/ },
@@ -471,6 +503,39 @@
           return _origBeacon.apply(navigator, arguments);
         };
       }
+
+      // Hook Image.src for pixel-based tracking (Meta, LinkedIn, Pinterest, etc.)
+      // Many tracking platforms (especially Facebook/Meta) fire events via new Image().src
+      // which bypasses fetch/XHR/sendBeacon hooks but is visible in browser Network tab.
+      try {
+        var _origImgSrcDesc = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+        if (_origImgSrcDesc && _origImgSrcDesc.set) {
+          Object.defineProperty(HTMLImageElement.prototype, 'src', {
+            set: function (val) {
+              if (val && typeof val === 'string') {
+                var p = _tpMatchUrl(val);
+                if (p) _tpPostNetworkHit(p, val, 'IMG', null);
+              }
+              return _origImgSrcDesc.set.call(this, val);
+            },
+            get: _origImgSrcDesc.get,
+            enumerable: true,
+            configurable: true,
+          });
+        }
+      } catch (e) {}
+
+      // Also hook setAttribute('src', ...) on images (some SDKs use this)
+      try {
+        var _origImgSetAttr = HTMLImageElement.prototype.setAttribute;
+        HTMLImageElement.prototype.setAttribute = function (name, value) {
+          if (name === 'src' && value && typeof value === 'string') {
+            var p = _tpMatchUrl(value);
+            if (p) _tpPostNetworkHit(p, value, 'IMG', null);
+          }
+          return _origImgSetAttr.call(this, name, value);
+        };
+      } catch (e) {}
     }
   } catch (e) {}
 

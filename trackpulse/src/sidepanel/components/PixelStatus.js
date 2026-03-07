@@ -1,9 +1,12 @@
 /**
  * PixelStatus Component — Shows detected pixels and consent status.
+ * V2.1: Network-enhanced pixel detection — shows pixels detected via
+ *        network requests when DOM scanning fails (checkout sandboxes).
  */
 
 import { escapeHtml } from '../../shared/utils.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
+import { enhancePixelsWithNetworkData } from '../utils/network-pixel-enhancer.js';
 
 const PLATFORM_NAMES = {
   gtm: 'Google Tag Manager',
@@ -36,8 +39,11 @@ const CMP_NAMES = {
 };
 
 export function renderPixelStatus(container, state) {
-  const pixels = state.pixels || [];
+  const rawPixels = state.pixels || [];
   const consent = state.consent || {};
+
+  // Enhance pixels with network request data
+  const pixels = enhancePixelsWithNetworkData(rawPixels, state.networkRequests || []);
 
   // All possible platforms (to show "not detected" for missing ones)
   const knownPlatforms = ['gtm', 'ga4', 'meta', 'tiktok', 'pinterest', 'snapchat', 'linkedin', 'twitter'];
@@ -91,6 +97,7 @@ export function renderPixelStatus(container, state) {
 
 function renderPixelRow(pixel, detected) {
   const name = PLATFORM_NAMES[pixel.platform] || pixel.platform;
+  const isNetwork = pixel.method === 'network';
   const dotClass = detected && pixel.active ? 'tp-dot-green' : 'tp-dot-gray';
 
   let idHtml;
@@ -113,7 +120,8 @@ function renderPixelRow(pixel, detected) {
       </span>
       <span class="text-[11px] ${detected ? 'text-tp-text-secondary' : 'text-tp-text-muted'}">
         ${idHtml}
-        ${pixel.source === 'custom_pixel' ? '<span style="font-size: 9px; color: #6C5CE7; margin-left: 4px;">via Custom Pixel</span>' : ''}
+        ${isNetwork ? '<span style="font-size: 9px; color: #00CEC9; margin-left: 4px;">via network</span>' : ''}
+        ${pixel.source === 'custom_pixel' && !isNetwork ? '<span style="font-size: 9px; color: #6C5CE7; margin-left: 4px;">via Custom Pixel</span>' : ''}
       </span>
     </div>
   `;

@@ -200,19 +200,37 @@ export class DiffEngine {
       const actualItem = this._findMatchingItem(expectedItem, actual);
 
       if (actualItem) {
+        // GA4-to-Shopify field aliases (expected key -> alternative actual key)
+        const ITEM_ALIASES = {
+          item_id: 'id', item_name: 'name', item_brand: 'brand',
+          item_category: 'category', item_variant: 'variant',
+        };
+
+        // Fields that are auto-generated and rarely present in actual implementations
+        const OPTIONAL_ITEM_FIELDS = new Set(['index']);
+
         // Compare matched items field by field
         for (const [key, value] of Object.entries(expectedItem)) {
           const fieldPath = `${itemPath}.${key}`;
           if (value == null) continue;
 
-          if (key in actualItem) {
-            if (this._valuesMatch(value, actualItem[key])) {
-              fields.push({ path: fieldPath, expected: value, actual: actualItem[key], status: 'match' });
+          // Check direct key, then alias
+          const alias = ITEM_ALIASES[key];
+          const actualVal = (key in actualItem) ? actualItem[key]
+            : (alias && alias in actualItem) ? actualItem[alias]
+            : undefined;
+
+          if (actualVal !== undefined) {
+            if (this._valuesMatch(value, actualVal)) {
+              fields.push({ path: fieldPath, expected: value, actual: actualVal, status: 'match' });
             } else {
-              fields.push({ path: fieldPath, expected: value, actual: actualItem[key], status: 'mismatch' });
+              fields.push({ path: fieldPath, expected: value, actual: actualVal, status: 'mismatch' });
             }
           } else {
-            fields.push({ path: fieldPath, expected: value, actual: undefined, status: 'missing' });
+            // Skip optional fields that are rarely in actual implementations
+            if (!OPTIONAL_ITEM_FIELDS.has(key)) {
+              fields.push({ path: fieldPath, expected: value, actual: undefined, status: 'missing' });
+            }
           }
         }
       } else {
@@ -233,24 +251,29 @@ export class DiffEngine {
   _findMatchingItem(expectedItem, actualArray) {
     if (!Array.isArray(actualArray)) return null;
 
-    // Try matching by item_id first
+    // Try matching by item_id first (also check 'id' — Shopify/gtag shorthand)
     if (expectedItem.item_id) {
+      const expectedId = String(expectedItem.item_id);
       const match = actualArray.find(
-        (a) => a && String(a.item_id) === String(expectedItem.item_id)
+        (a) => a && (String(a.item_id) === expectedId || String(a.id) === expectedId)
       );
       if (match) return match;
     }
 
-    // Then by item_name
+    // Then by item_name (also check 'name' — Shopify/gtag shorthand)
     if (expectedItem.item_name) {
+      const expectedName = expectedItem.item_name.toLowerCase();
       const match = actualArray.find(
-        (a) =>
-          a &&
-          a.item_name &&
-          a.item_name.toLowerCase() === expectedItem.item_name.toLowerCase()
+        (a) => a && (
+          (a.item_name && a.item_name.toLowerCase() === expectedName) ||
+          (a.name && a.name.toLowerCase() === expectedName)
+        )
       );
       if (match) return match;
     }
+
+    // Fallback: match by index 0 if only one item in each
+    if (actualArray.length === 1) return actualArray[0];
 
     return null;
   }

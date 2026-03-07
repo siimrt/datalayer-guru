@@ -45,8 +45,8 @@ if (IS_POPUP) {
 initAnalytics();
 trackEvent('sidepanel_opened');
 
-import { renderEventGenerator } from './components/EventGenerator.js';
-import { renderAuditPanel } from './components/AuditPanel.js';
+import { renderEventGenerator, resetEventGeneratorState } from './components/EventGenerator.js';
+import { renderAuditPanel, resetAuditPanelState } from './components/AuditPanel.js';
 import { renderDataLayerLive, appendDataLayerEntry, appendNetworkEntry } from './components/DataLayerLive.js';
 import { parseNetworkRequest } from '../content/parsers/network-request-parser.js';
 import { renderPixelStatus } from './components/PixelStatus.js';
@@ -93,6 +93,9 @@ const state = {
   // V2 Network request monitoring
   networkRequests: [],      // Captured tracking platform network requests
 
+  // Detected platforms (computed from pixels + network requests)
+  detectedPlatforms: new Set(['ga4']),
+
   // V2 Custom pixel frame monitoring
   monitoredFrames: new Set(),  // frameIds where monitoring has been injected
 
@@ -100,8 +103,22 @@ const state = {
   autoSwitchTab: false,  // Auto-reload detection on tab switch
 };
 
+/** Recompute detectedPlatforms from pixels + networkRequests and sync activePlatforms */
+function recomputeDetectedPlatforms() {
+  const detected = new Set();
+  detected.add('ga4'); // GA4 always shown (dataLayer is always relevant)
+  for (const p of state.pixels) detected.add(p.platform);
+  for (const r of state.networkRequests) detected.add(r.platform);
+  state.detectedPlatforms = detected;
+  // Sync activePlatforms: keep only detected ones, auto-add newly detected
+  state.activePlatforms = [...detected].filter(p => detected.has(p));
+}
+
 // Funnel session singleton
 const funnelSession = new FunnelSession();
+
+// Debounce timer for audit tab re-renders on dataLayer pushes
+let auditRerenderTimer = null;
 
 // ---- DOM References ----
 
@@ -235,9 +252,10 @@ const actions = {
     trackEvent('pdf_exported');
     // Dynamic import for PDF generation
     const { generateAuditReport } = await import('../export/pdf-report.js');
-    const filename = await generateAuditReport(state, {
-      whiteLabelLogo: state.capabilities.canWhiteLabel ? null : null, // Agency can set logo
-    });
+    const filename = await generateAuditReport(
+      { ...state, networkRequests: state.networkRequests },
+      { whiteLabelLogo: state.capabilities.canWhiteLabel ? null : null }
+    );
     showToast(`Report saved: ${filename}`, 'success');
   },
 
@@ -299,9 +317,10 @@ const actions = {
         if (!exists) state.quickPushTarget = 'top';
       }
 
-      // Auto-start continuous monitoring in custom pixel frames with dataLayer
+      // Auto-start continuous monitoring in ALL custom pixel frames
+      // (not just those with dataLayer — Meta/TikTok fire network requests without dataLayer)
       for (const frame of state.customPixelFrames) {
-        if (frame.hasDataLayer && !state.monitoredFrames.has(frame.frameId)) {
+        if (!state.monitoredFrames.has(frame.frameId)) {
           state.monitoredFrames.add(frame.frameId);
           chrome.runtime.sendMessage({
             type: MSG.START_FRAME_MONITORING,
@@ -459,27 +478,31 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.timestamp = payload.timestamp;
       state.loading = false;
 
+      recomputeDetectedPlatforms();
+
       trackEvent('page_detected', {
         cms: state.cms?.cms || 'unknown',
         pageType: state.pageType?.pageType || 'unknown',
         eventsCount: Object.values(state.generatedEvents).flat().length,
       });
 
-      // If funnel recording is active, add this step
+      // If funnel recording is active, add this step (with network snapshot)
       if (funnelSession.isRecording) {
-        funnelSession.addStep(payload);
+        funnelSession.addStep({ ...payload, networkRequests: [...state.networkRequests] });
       }
 
       render({ preserveContent: true });
 
-      // Detect custom pixel frames for Quick Push targeting
-      // Always detect on Shopify; also on checkout/thank_you pages (Shopify checkout may be on checkout.shopify.com)
+      // Detect custom pixel frames for Quick Push targeting + funnel network monitoring
+      // Always detect on Shopify; also on checkout/thank_you pages; also during funnel recording
       const isShopify = state.cms?.cms === 'shopify';
       const isCheckout = state.pageType?.pageType === 'checkout' || state.pageType?.pageType === 'thank_you';
-      if (isShopify || isCheckout) {
+      if (isShopify || isCheckout || funnelSession.isRecording) {
         actions.detectCustomPixelFrames().then(() => {
-          if (state.customPixelFrames.length > 0 && state.activeTab === 'events') {
-            renderActiveTab();
+          if (state.customPixelFrames.length > 0) {
+            if (state.activeTab === 'events' || state.activeTab === 'funnel') {
+              renderActiveTab();
+            }
           }
         });
       }
@@ -488,6 +511,31 @@ chrome.runtime.onMessage.addListener((msg) => {
 
     case MSG.DATALAYER_PUSH: {
       const payload = msg.payload;
+
+      // --- Deduplication: skip if same event name was seen within 150ms ---
+      const _dlData = payload.data;
+      let _dedupName = null;
+      if (_dlData && typeof _dlData === 'object') {
+        if (_dlData.event) {
+          _dedupName = _dlData.event;
+        } else if (Array.isArray(_dlData) && _dlData[0]?.event) {
+          _dedupName = _dlData[0].event;
+        } else if (_dlData['0'] === 'event' && _dlData['1']) {
+          _dedupName = _dlData['1'];
+        } else if (Array.isArray(_dlData) && _dlData[0] && _dlData[0]['0'] === 'event' && _dlData[0]['1']) {
+          _dedupName = _dlData[0]['1'];
+        }
+      }
+      if (!state._dlDedupMap) state._dlDedupMap = new Map();
+      if (_dedupName) {
+        const now = Date.now();
+        const lastSeen = state._dlDedupMap.get(_dedupName);
+        if (lastSeen && now - lastSeen < 150) {
+          break; // skip duplicate
+        }
+        state._dlDedupMap.set(_dedupName, now);
+      }
+
       const entry = {
         id: Date.now() + Math.random(),
         timestamp: new Date(payload.timestamp || Date.now()),
@@ -501,15 +549,51 @@ chrome.runtime.onMessage.addListener((msg) => {
         state.dataLayerStream = state.dataLayerStream.slice(0, 200);
       }
 
+      // If funnel recording is active, check for funnel events in the push
+      if (funnelSession.isRecording) {
+        const dlData = payload.data;
+        // Extract event name from dataLayer push (can be {event: 'xxx'} or array-wrapped)
+        let eventName = null;
+        if (dlData && typeof dlData === 'object') {
+          eventName = dlData.event || (Array.isArray(dlData) && dlData[0]?.event);
+        }
+        if (eventName) {
+          const isNew = funnelSession.recordEvent(eventName, 'datalayer_push', 'ga4');
+          if (isNew && state.activeTab === 'funnel') {
+            renderActiveTab();
+          }
+        }
+      }
+
       // If we're on the datalayer tab, append without full re-render
       if (state.activeTab === 'datalayer') {
         appendDataLayerEntry(tabContentEl, entry, state.dataLayerStream.length);
+      }
+
+      // If on audit tab, debounce re-render to detect events from live stream
+      if (state.activeTab === 'audit') {
+        clearTimeout(auditRerenderTimer);
+        auditRerenderTimer = setTimeout(() => renderActiveTab(), 300);
       }
       break;
     }
 
     case MSG.NETWORK_REQUEST: {
       const netPayload = msg.payload;
+
+      // Dedup: skip if same URL prefix was recently captured (JS hooks + webRequest overlap)
+      if (!state._netDedupMap) state._netDedupMap = new Map();
+      const netUrlKey = (netPayload.url || '').slice(0, 200);
+      const netNow = Date.now();
+      const netLastSeen = state._netDedupMap.get(netUrlKey);
+      if (netLastSeen && netNow - netLastSeen < 2000) break;
+      state._netDedupMap.set(netUrlKey, netNow);
+      if (state._netDedupMap.size > 300) {
+        for (const [k, t] of state._netDedupMap) {
+          if (netNow - t > 10000) state._netDedupMap.delete(k);
+        }
+      }
+
       const parsed = parseNetworkRequest(netPayload.platform, netPayload.url, netPayload.body);
       const netEntry = {
         id: Date.now() + Math.random(),
@@ -517,23 +601,43 @@ chrome.runtime.onMessage.addListener((msg) => {
         platform: netPayload.platform,
         url: netPayload.url,
         method: netPayload.method,
-        eventName: parsed.eventName,
+        eventName: parsed.eventName || netPayload.eventName || null,
         params: parsed.params,
         items: parsed.items,
         measurementId: parsed.measurementId || null,
-        pixelId: parsed.pixelId || null,
+        pixelId: parsed.pixelId || netPayload.pixelId || null,
         source: netPayload.source || 'top',
       };
       state.networkRequests.unshift(netEntry);
+
+      // Update detected platforms if new platform seen
+      if (!state.detectedPlatforms.has(netEntry.platform)) {
+        recomputeDetectedPlatforms();
+      }
 
       // Keep max 500 entries
       if (state.networkRequests.length > 500) {
         state.networkRequests = state.networkRequests.slice(0, 500);
       }
 
-      // If on audit tab, re-render to show network status
+      // If funnel recording is active, check for funnel events in network request
+      if (funnelSession.isRecording && netEntry.eventName) {
+        const isNew = funnelSession.recordEvent(netEntry.eventName, 'network', netEntry.platform);
+        if (isNew && state.activeTab === 'funnel') {
+          renderActiveTab();
+        }
+      }
+
+      // If on audit tab, debounce re-render (network requests arrive in bursts)
       if (state.activeTab === 'audit') {
-        renderActiveTab();
+        clearTimeout(auditRerenderTimer);
+        auditRerenderTimer = setTimeout(() => renderActiveTab(), 300);
+      }
+
+      // If on pixels tab, debounce re-render
+      if (state.activeTab === 'pixels') {
+        clearTimeout(auditRerenderTimer);
+        auditRerenderTimer = setTimeout(() => renderActiveTab(), 300);
       }
 
       // If on datalayer tab, append network entry to live stream
@@ -547,8 +651,12 @@ chrome.runtime.onMessage.addListener((msg) => {
       // Clear live streams on navigation (URL change or tab switch).
       // Fired by the service worker BEFORE new page scripts run,
       // so new dataLayer events won't be wiped.
+      clearTimeout(auditRerenderTimer);
       state.dataLayerStream = [];
       state.networkRequests = [];
+      // Reset accordion/expand state for new page
+      resetEventGeneratorState();
+      resetAuditPanelState();
       if (state.activeTab === 'datalayer') renderActiveTab();
       break;
     }
@@ -556,28 +664,35 @@ chrome.runtime.onMessage.addListener((msg) => {
     case MSG.FRAME_PIXELS: {
       const framePixels = msg.payload?.pixels || [];
       for (const fp of framePixels) {
-        if (!state.pixels.some((p) => p.platform === fp.platform && p.id === fp.id)) {
-          state.pixels.push({ ...fp, source: 'custom_pixel' });
+        // Dedup by platform: merge into existing entry instead of duplicating
+        const existing = state.pixels.find((p) => p.platform === fp.platform);
+        if (existing) {
+          // Fill in missing ID from network/custom pixel source
+          if (!existing.id && fp.id) existing.id = fp.id;
+        } else {
+          state.pixels.push({ ...fp, source: fp.source || 'custom_pixel' });
         }
       }
+      if (framePixels.length > 0) recomputeDetectedPlatforms();
       if (state.activeTab === 'pixels') renderActiveTab();
       break;
     }
 
     case 'TRACKPULSE_PLAN_CHANGED': {
       // Real-time plan upgrade detection
+      const newPlan = msg.payload?.plan || state.plan;
+      if (newPlan === state.plan) break; // No change, skip render
+
       const oldPlan = state.plan;
-      state.plan = msg.payload?.plan || state.plan;
+      state.plan = newPlan;
       state.capabilities = resolvePlanCapabilities(state.plan);
       state.planLoading = false;
 
-      if (state.plan !== oldPlan) {
-        identifyUser(state.plan, state.userEmail);
-        trackEvent('subscription_changed', { from: oldPlan, to: state.plan });
-      }
+      identifyUser(state.plan, state.userEmail);
+      trackEvent('subscription_changed', { from: oldPlan, to: state.plan });
 
       // If on pricing page and plan upgraded, show success animation
-      if (state.activeTab === 'pricing' && state.plan !== 'free' && state.plan !== oldPlan) {
+      if (state.activeTab === 'pricing' && state.plan !== 'free') {
         showUpgradeSuccess(state.plan);
         setTimeout(() => {
           state.activeTab = 'events';
@@ -594,8 +709,14 @@ chrome.runtime.onMessage.addListener((msg) => {
 // ---- Rendering ----
 
 function handleTabChange(tab) {
+  clearTimeout(auditRerenderTimer);
   state.activeTab = tab;
   trackEvent('tab_changed', { tab });
+  // Recompute detected platforms when switching to audit or pixels
+  // (picks up platforms from network requests that arrived while on another tab)
+  if (tab === 'audit' || tab === 'pixels') {
+    recomputeDetectedPlatforms();
+  }
   renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
   renderActiveTab();
 }
@@ -627,7 +748,8 @@ function render(options = {}) {
   renderHeader(headerEl, state, actions.refresh, actions.handleUpgrade);
   renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
 
-  // Skip re-rendering content when detection fires but DataLayer tab is already mounted
+  // Skip re-rendering tab content when detection fires but current tab is already mounted.
+  // Only update the header (for URL/CMS badge changes).
   if (options.preserveContent && state.activeTab === 'datalayer'
       && tabContentEl.querySelector('#dl-entries')) {
     return;
@@ -651,7 +773,7 @@ function renderActiveTab() {
       renderPixelStatus(tabContentEl, state);
       break;
     case 'funnel':
-      renderFunnelMode(tabContentEl, funnelSession, state.capabilities, state.funnelReport);
+      renderFunnelMode(tabContentEl, funnelSession, state.capabilities, state.funnelReport, state);
       break;
     case 'settings':
       renderSettingsPanel(tabContentEl, state, actions);
@@ -732,6 +854,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           state.consent = response.consent;
           state.url = response.url || '';
           state.loading = false;
+          recomputeDetectedPlatforms();
           render({ preserveContent: true });
         } else {
           chrome.tabs.sendMessage(

@@ -1,33 +1,104 @@
 /**
  * AuditPanel Component — Shows tracking audit results (expected vs actual events).
  * V2: Gated for Free/Starter users — shows paywall overlay.
+ * V2.2: Event-grouped audit view — groups by canonical event (begin_checkout,
+ *        add_shipping_info, etc.) and shows which platforms detected it with icons.
+ *        Also checks network requests, not just dataLayer.
  */
 
 import { escapeHtml } from '../../shared/utils.js';
-import { PAGE_TYPE_LABELS, GA4_EVENT_MAP, META_EVENT_MAP, TIKTOK_EVENT_MAP } from '../../shared/constants.js';
+import { PAGE_TYPE_LABELS, PLATFORM_LABELS } from '../../shared/constants.js';
 import { renderSectionPaywall } from './Paywall.js';
+import { enhanceAuditWithNetworkData, findNetworkMatchForEvent } from '../utils/network-audit-enhancer.js';
+import { platformIconHtml } from '../../shared/platform-icons.js';
+
+// Track which audit rows are expanded (persists across re-renders, resets on page navigation)
+const expandedAuditRows = new Set();
+
+export function resetAuditPanelState() {
+  expandedAuditRows.clear();
+}
+
+/**
+ * Canonical events per page type.
+ * Each entry defines the event name per platform.
+ */
+const CANONICAL_EVENTS = {
+  view_item: { label: 'Product View', platforms: { ga4: 'view_item', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit' } },
+  add_to_cart: { label: 'Add to Cart', platforms: { ga4: 'add_to_cart', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart', snapchat: 'ADD_CART' } },
+  view_item_list: { label: 'Collection View', platforms: { ga4: 'view_item_list', meta: 'ViewCategory', tiktok: 'ViewContent', pinterest: 'viewcategory' } },
+  view_cart: { label: 'View Cart', platforms: { ga4: 'view_cart', meta: 'ViewCart', tiktok: 'ViewCart' } },
+  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout' } },
+  add_shipping_info: { label: 'Add Shipping Info', platforms: { ga4: 'add_shipping_info' } },
+  add_payment_info: { label: 'Add Payment Info', platforms: { ga4: 'add_payment_info' } },
+  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout' } },
+  search: { label: 'Search', platforms: { ga4: 'search', meta: 'Search', tiktok: 'Search', pinterest: 'search' } },
+};
+
+/**
+ * Which canonical events are expected per page type.
+ */
+const EXPECTED_EVENTS_BY_PAGE = {
+  product: ['view_item', 'add_to_cart'],
+  collection: ['view_item_list'],
+  cart: ['view_cart'],
+  checkout: ['begin_checkout', 'add_shipping_info', 'add_payment_info'],
+  thank_you: ['purchase'],
+  search: ['search'],
+};
+
+/**
+ * Extract event name from a live dataLayer stream entry.
+ * Handles both standard format ({event: 'xxx'}) and gtag format ({0: 'event', 1: 'xxx'}).
+ */
+function extractEventNameFromStreamEntry(entry) {
+  let data = entry.data;
+  // Unwrap single-element array (bridge wraps push args in array)
+  if (Array.isArray(data) && data.length === 1) data = data[0];
+  if (Array.isArray(data) && data.length > 1) data = data[0]; // multi-arg, take first
+  if (!data || typeof data !== 'object') return null;
+
+  // Standard format: {event: 'view_item', ...}
+  if (data.event) return data.event;
+  // gtag format: {0: 'event', 1: 'view_item', 2: {...}}
+  if (data['0'] === 'event' && data['1']) return data['1'];
+  return null;
+}
 
 export function renderAuditPanel(container, state, actions) {
-  // V2: Check if audit is accessible
   if (state.capabilities && !state.capabilities.canAudit) {
     renderSectionPaywall(container, 'auditDiff', 'pro');
     return;
   }
 
-  // Original V1 audit logic below
   const pageType = state.pageType?.pageType || 'unknown';
   const pageLabel = PAGE_TYPE_LABELS[pageType] || 'Unknown';
-  const diff = state.audit?.diff || [];
+  const rawDiff = state.audit?.diff || [];
   const existingEvents = state.audit?.existingEvents || [];
+  const networkRequests = state.networkRequests || [];
+  const dataLayerStream = state.dataLayerStream || [];
 
-  // Build expected events list
-  const expectedGA4 = GA4_EVENT_MAP[pageType];
-  const expectedMeta = META_EVENT_MAP[pageType];
-  const expectedTikTok = TIKTOK_EVENT_MAP[pageType];
+  const diff = enhanceAuditWithNetworkData(rawDiff, networkRequests);
+
+  // Precompute stream event names into Sets for O(1) lookups (avoids O(N*M) scanning)
+  const streamEventNames = new Set();
+  const streamEventNamesLower = new Set();
+  for (const entry of dataLayerStream) {
+    const name = extractEventNameFromStreamEntry(entry);
+    if (name) {
+      streamEventNames.add(name);
+      streamEventNamesLower.add(name.toLowerCase());
+    }
+  }
+
+  // Use centrally-computed detected platforms (from pixels + network requests)
+  const installedPlatforms = state.detectedPlatforms || new Set(['ga4']);
+
+  const expectedKeys = EXPECTED_EVENTS_BY_PAGE[pageType] || [];
 
   let auditHtml = '';
 
-  if (!expectedGA4 && !expectedMeta && !expectedTikTok) {
+  if (expectedKeys.length === 0) {
     auditHtml = `
       <div class="tp-empty">
         <div class="tp-empty-icon">&#9989;</div>
@@ -35,18 +106,23 @@ export function renderAuditPanel(container, state, actions) {
       </div>
     `;
   } else {
+    // Build event-grouped rows
+    const eventRows = expectedKeys.map((key) => {
+      const canonical = CANONICAL_EVENTS[key];
+      if (!canonical) return '';
+      return renderCanonicalEventRow(canonical, key, diff, existingEvents, networkRequests, streamEventNames, streamEventNamesLower, installedPlatforms);
+    }).join('');
+
     auditHtml = `
       <div class="tp-card">
         <div class="p-3">
           <div class="text-[12px] font-medium mb-3">Expected events for "${pageLabel}" page</div>
-          ${renderAuditRow('GA4', expectedGA4, diff, existingEvents)}
-          ${renderAuditRow('Meta', expectedMeta, diff, existingEvents)}
-          ${renderAuditRow('TikTok', expectedTikTok, diff, existingEvents)}
+          ${eventRows}
         </div>
       </div>
     `;
 
-    // Show field-level diffs
+    // Field-level diffs
     const fieldsWithIssues = [];
     for (const d of diff) {
       if (d.status === 'partial') {
@@ -74,7 +150,7 @@ export function renderAuditPanel(container, state, actions) {
       `;
     }
 
-    // Existing dataLayer events summary
+    // Existing dataLayer events
     if (existingEvents.length > 0) {
       auditHtml += `
         <div class="tp-card">
@@ -90,7 +166,7 @@ export function renderAuditPanel(container, state, actions) {
   }
 
   // Network Requests section
-  auditHtml += renderNetworkRequestsSection(state.networkRequests || []);
+  auditHtml += renderNetworkRequestsSection(networkRequests);
 
   // Action buttons
   auditHtml += `
@@ -109,106 +185,223 @@ export function renderAuditPanel(container, state, actions) {
 
   container.innerHTML = auditHtml;
 
-  // Bind copy audit
+  // Bind expand/collapse for event rows
+  container.querySelectorAll('[data-audit-toggle]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const key = el.dataset.auditKey;
+      const detail = el.parentElement.querySelector('[data-audit-detail]');
+      if (detail) {
+        const isHidden = detail.style.display === 'none';
+        detail.style.display = isHidden ? 'block' : 'none';
+        const arrow = el.querySelector('[data-arrow]');
+        if (arrow) arrow.textContent = isHidden ? '▾' : '▸';
+        // Persist state
+        if (key) {
+          if (isHidden) {
+            expandedAuditRows.add(key);
+          } else {
+            expandedAuditRows.delete(key);
+          }
+        }
+      }
+    });
+  });
+
   container.querySelector('#copy-audit')?.addEventListener('click', () => {
-    const report = generateTextAuditReport(state);
+    const report = generateTextAuditReport(state, diff);
     actions.copyCode(report);
   });
 
-  // Bind PDF export
   container.querySelector('#export-pdf')?.addEventListener('click', () => {
-    if (actions.exportPDF) {
-      actions.exportPDF();
-    }
+    if (actions.exportPDF) actions.exportPDF();
   });
 }
 
-function renderAuditRow(platform, expectedEvent, diffs, existingEvents) {
-  if (!expectedEvent) return '';
+/**
+ * Render a canonical event row (e.g. "Begin Checkout") showing which platforms detected it.
+ */
+function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkRequests, streamEventNames, streamEventNamesLower, installedPlatforms) {
+  // Filter to only platforms actually detected on this site
+  const platformEntries = Object.entries(canonical.platforms)
+    .filter(([platform]) => installedPlatforms.has(platform));
 
-  const diffResult = diffs.find(
-    (d) => d.expected?.eventName === expectedEvent
-  );
+  // If none of this event's platforms are installed, skip the entire row
+  if (platformEntries.length === 0) return '';
 
-  let statusIcon, statusText, statusClass;
+  const platformResults = []; // { platform, status, source }
 
-  if (diffResult) {
-    if (diffResult.status === 'match') {
-      statusIcon = '<span class="tp-dot tp-dot-green"></span>';
-      statusText = 'Found — Full match';
-      statusClass = 'tp-diff-match';
-    } else if (diffResult.status === 'partial') {
-      const missingCount = (diffResult.fields || []).filter(
-        (f) => f.status !== 'match' && f.status !== 'extra'
-      ).length;
-      statusIcon = '<span class="tp-dot tp-dot-yellow"></span>';
-      statusText = `Found — ${diffResult.matchPercentage}% match (${missingCount} fields differ)`;
-      statusClass = 'tp-diff-partial';
-    } else {
-      statusIcon = '<span class="tp-dot tp-dot-red"></span>';
-      statusText = 'Not found in dataLayer';
-      statusClass = 'tp-diff-missing';
+  for (const [platform, eventName] of platformEntries) {
+    let status = 'missing';
+    let source = '';
+
+    // Check in enhanced diff (exact match first, then case-insensitive)
+    const eventLower = eventName.toLowerCase();
+    const diffResult = diffs.find((d) => d.expected?.eventName === eventName)
+      || diffs.find((d) => d.expected?.eventName && d.expected.eventName.toLowerCase() === eventLower);
+    if (diffResult) {
+      if (diffResult.status === 'match') { status = 'found'; source = 'dataLayer'; }
+      else if (diffResult.status === 'partial') { status = 'found'; source = 'dataLayer'; }
+      else if (diffResult.status === 'network_confirmed') {
+        status = 'network';
+        source = diffResult.networkMatch?.source === 'custom_pixel' ? 'Custom Pixel' : 'network';
+      }
     }
-  } else {
-    const exists = existingEvents.some((e) => e.event === expectedEvent);
-    if (exists) {
-      statusIcon = '<span class="tp-dot tp-dot-green"></span>';
-      statusText = 'Found';
-      statusClass = 'tp-diff-match';
-    } else {
-      statusIcon = '<span class="tp-dot tp-dot-red"></span>';
-      statusText = 'Not found';
-      statusClass = 'tp-diff-missing';
+
+    // Check existingEvents fallback (case-insensitive)
+    if (status === 'missing') {
+      const exists = existingEvents.some((e) =>
+        e.event === eventName || (e.event && e.event.toLowerCase() === eventLower)
+      );
+      if (exists) { status = 'found'; source = 'dataLayer'; }
     }
+
+    // Check live dataLayer stream (catches events pushed after initial snapshot)
+    if (status === 'missing' && (streamEventNames.has(eventName) || streamEventNamesLower.has(eventLower))) {
+      status = 'found'; source = 'dataLayer';
+    }
+
+    // Check network fallback
+    if (status === 'missing') {
+      const netMatch = findNetworkMatchForEvent(platform, eventName, networkRequests);
+      if (netMatch) {
+        status = 'network';
+        source = netMatch.source === 'custom_pixel' ? 'Custom Pixel' : 'network';
+      }
+    }
+
+    platformResults.push({ platform, eventName, status, source });
   }
 
+  const detectedPlatforms = platformResults.filter((p) => p.status !== 'missing');
+  const allPlatforms = platformResults.length;
+  const detectedCount = detectedPlatforms.length;
+
+  // Overall status for the row
+  let dotColor, statusLabel;
+  if (detectedCount === 0) {
+    dotColor = '#FF6B6B'; statusLabel = 'Not detected';
+  } else if (detectedCount === allPlatforms) {
+    dotColor = '#00B894'; statusLabel = `${detectedCount} platform${detectedCount > 1 ? 's' : ''}`;
+  } else {
+    dotColor = '#F0932B'; statusLabel = `${detectedCount}/${allPlatforms} platforms`;
+  }
+
+  // Platform icons (detected ones in color, missing ones grayed)
+  const iconsHtml = platformResults.map((p) => {
+    const opacity = p.status === 'missing' ? '0.25' : '1';
+    return `<span style="opacity: ${opacity};" title="${PLATFORM_LABELS[p.platform] || p.platform}: ${p.status === 'missing' ? 'not detected' : p.status}">${platformIconHtml(p.platform, 14)}</span>`;
+  }).join('');
+
+  // Detail rows (hidden by default, shown on click)
+  const detailRows = platformResults.map((p) => {
+    const pLabel = PLATFORM_LABELS[p.platform] || p.platform;
+    const icon = platformIconHtml(p.platform, 13);
+    let statusHtml;
+    if (p.status === 'found') {
+      statusHtml = `<span style="color: #00B894;">Found in dataLayer</span>`;
+    } else if (p.status === 'partial') {
+      statusHtml = `<span style="color: #F0932B;">Partial match</span>`;
+    } else if (p.status === 'network') {
+      statusHtml = `<span style="color: #00CEC9;">Sent via ${p.source}</span>`;
+    } else {
+      statusHtml = `<span style="color: #FF6B6B; opacity: 0.6;">Tag detected, no events</span>`;
+    }
+    const rowOpacity = p.status === 'missing' ? 'opacity: 0.55;' : '';
+    return `
+      <div style="display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; ${rowOpacity}">
+        ${icon}
+        <span style="color: var(--tp-text); min-width: 55px;">${pLabel}</span>
+        <span style="color: var(--tp-text-muted);">${escapeHtml(p.eventName)}</span>
+        <span style="margin-left: auto;">${statusHtml}</span>
+      </div>
+    `;
+  }).join('');
+
   return `
-    <div class="flex items-start gap-2 py-2 border-b border-tp-border last:border-0">
-      <div class="mt-1">${statusIcon}</div>
-      <div class="flex-1">
-        <div class="text-[12px]">
-          <span class="text-tp-text-secondary">${platform}:</span>
-          <span class="font-medium">${escapeHtml(expectedEvent)}</span>
-        </div>
-        <div class="text-[11px] ${statusClass}">${statusText}</div>
+    <div style="padding: 6px 0; border-bottom: 1px solid var(--tp-border);">
+      <div data-audit-toggle data-audit-key="${key}" style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${dotColor}; flex-shrink: 0;"></span>
+        <span style="color: var(--tp-text); font-size: 12px; font-weight: 600; flex: 1;">${canonical.label}</span>
+        <span style="display: flex; align-items: center; gap: 2px;">${iconsHtml}</span>
+        <span style="
+          font-size: 10px; color: ${dotColor};
+          background: ${dotColor}15; padding: 1px 6px;
+          border-radius: 10px; white-space: nowrap;
+        ">${statusLabel}</span>
+        <span data-arrow style="color: var(--tp-text-muted); font-size: 10px; width: 10px; text-align: center;">${expandedAuditRows.has(key) ? '▾' : '▸'}</span>
+      </div>
+      <div data-audit-detail style="display: ${expandedAuditRows.has(key) ? 'block' : 'none'}; padding: 6px 0 2px 16px;">
+        ${detailRows}
       </div>
     </div>
   `;
+}
+
+function groupFieldsByCategory(fields) {
+  const groups = {};
+  const priceKeys = new Set(['value', 'currency', 'tax', 'shipping', 'coupon', 'discount', 'ecomm_totalvalue', 'ecomm_pagetype']);
+  const idKeys = new Set(['transaction_id', 'affiliation', 'item_list_id', 'item_list_name', 'ecomm_prodid']);
+
+  for (const field of fields) {
+    const leaf = field.path.split('.').pop().replace(/\[\d+\]$/, '');
+    let cat;
+    if (field.path.includes('items[')) cat = 'Items';
+    else if (priceKeys.has(leaf)) cat = 'Price & Currency';
+    else if (idKeys.has(leaf)) cat = 'Identifiers';
+    else cat = 'Other';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(field);
+  }
+  return groups;
+}
+
+function formatFieldValue(val) {
+  if (val === null || val === undefined) return '(empty)';
+  if (typeof val === 'string') return val.length > 30 ? val.substring(0, 27) + '...' : val;
+  if (typeof val === 'number') return String(val);
+  if (Array.isArray(val)) return `[${val.length} item${val.length > 1 ? 's' : ''}]`;
+  if (typeof val === 'object') return `{${Object.keys(val).length} keys}`;
+  return String(val);
 }
 
 function renderFieldDiffs(item) {
+  const grouped = groupFieldsByCategory(item.issues.slice(0, 15));
+
+  const groupsHtml = Object.entries(grouped).map(([category, fields]) => `
+    <div style="margin-bottom: 6px;">
+      <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--tp-text-muted); padding-left: 8px; margin-bottom: 2px;">${category}</div>
+      ${fields.map((field) => {
+        const icon = field.status === 'missing' ? '&#10007;' : '&#9888;';
+        const iconColor = field.status === 'missing' ? '#FF6B6B' : '#F0932B';
+        let valueHtml;
+        if (field.status === 'missing') {
+          valueHtml = `<span style="color: #FF6B6B;">missing</span>`;
+        } else {
+          valueHtml = `<span style="color: #FF6B6B;"><code style="background: rgba(255,107,107,0.1); padding: 1px 4px; border-radius: 3px; font-size: 10px;">${escapeHtml(formatFieldValue(field.actual))}</code></span>
+            <span style="color: var(--tp-text-muted); margin: 0 2px;">/</span>
+            <span style="color: #00CEC9;"><code style="background: rgba(0,206,201,0.1); padding: 1px 4px; border-radius: 3px; font-size: 10px;">${escapeHtml(formatFieldValue(field.expected))}</code></span>`;
+        }
+        return `
+          <div style="display: flex; align-items: flex-start; gap: 6px; padding: 2px 8px; font-size: 11px;">
+            <span style="color: ${iconColor}; font-weight: bold; min-width: 12px;">${icon}</span>
+            <span style="min-width: 110px; color: var(--tp-text-secondary); font-family: monospace; font-size: 10px;">${escapeHtml(field.path)}</span>
+            <span style="flex: 1;">${valueHtml}</span>
+          </div>`;
+      }).join('')}
+    </div>
+  `).join('');
+
   return `
-    <div class="mb-3">
-      <div class="text-[11px] font-medium mb-1">
-        ${escapeHtml(item.eventName || '')}
-        <span class="text-tp-text-muted">(${item.matchPercentage}% match)</span>
+    <div style="margin-bottom: 10px; padding: 8px; border-radius: 6px; border: 1px solid var(--tp-border); background: var(--tp-surface-hover);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 11px; font-weight: 600;">${escapeHtml(item.eventName || '')}</span>
+        <span style="font-size: 10px; color: ${item.matchPercentage >= 80 ? '#F0932B' : '#FF6B6B'}; background: ${item.matchPercentage >= 80 ? 'rgba(240,147,43,0.1)' : 'rgba(255,107,107,0.1)'}; padding: 1px 8px; border-radius: 10px;">${item.matchPercentage}% match</span>
       </div>
-      ${item.issues
-        .slice(0, 10)
-        .map(
-          (field) => `
-        <div class="flex items-start gap-1 pl-3 py-1 text-[11px]">
-          <span class="${field.status === 'missing' ? 'tp-diff-missing' : 'tp-diff-partial'}">
-            ${field.status === 'missing' ? '&#10007;' : '&#9888;'}
-          </span>
-          <span class="text-tp-text-secondary">${escapeHtml(field.path)}:</span>
-          ${field.status === 'missing'
-            ? `<span class="tp-diff-missing">missing</span>`
-            : `<span class="tp-diff-partial">"${escapeHtml(String(field.actual ?? ''))}" vs expected "${escapeHtml(String(field.expected ?? ''))}"</span>`
-          }
-        </div>
-      `
-        )
-        .join('')}
-      ${item.issues.length > 10 ? `<div class="pl-3 text-[10px] text-tp-text-muted">... and ${item.issues.length - 10} more</div>` : ''}
+      ${groupsHtml}
+      ${item.issues.length > 15 ? `<div style="padding-left: 8px; font-size: 10px; color: var(--tp-text-muted);">... and ${item.issues.length - 15} more</div>` : ''}
     </div>
   `;
 }
-
-const PLATFORM_LABELS = {
-  ga4: 'GA4', meta: 'Meta', tiktok: 'TikTok',
-  pinterest: 'Pinterest', snapchat: 'Snapchat', linkedin: 'LinkedIn',
-};
 
 function renderNetworkRequestsSection(networkRequests) {
   if (networkRequests.length === 0) {
@@ -227,7 +420,6 @@ function renderNetworkRequestsSection(networkRequests) {
     `;
   }
 
-  // Group by platform
   const byPlatform = {};
   for (const req of networkRequests) {
     if (!byPlatform[req.platform]) byPlatform[req.platform] = [];
@@ -238,21 +430,59 @@ function renderNetworkRequestsSection(networkRequests) {
     const events = [...new Set(reqs.map((r) => r.eventName).filter(Boolean))];
     const count = reqs.length;
     const label = PLATFORM_LABELS[platform] || platform;
+    const icon = platformIconHtml(platform, 14);
+    const netKey = `net_${platform}`;
+    const isExpanded = expandedAuditRows.has(netKey);
+
+    // Detail rows: individual requests
+    const detailRows = reqs.map((req) => {
+      const evName = req.eventName || '(unknown)';
+      const source = req.source === 'custom_pixel' ? 'Custom Pixel' : req.source || '';
+      const method = req.method || 'GET';
+      const ts = req.timestamp ? new Date(req.timestamp).toLocaleTimeString() : '';
+
+      // Key params to display
+      const paramEntries = Object.entries(req.params || {}).filter(
+        ([k]) => !k.startsWith('_') && k !== 'pixelId'
+      ).slice(0, 6);
+
+      return `
+        <div style="padding: 4px 0; border-top: 1px solid var(--tp-border); font-size: 10px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="color: var(--tp-text-muted); min-width: 32px;">${escapeHtml(method)}</span>
+            <span style="font-weight: 600; color: var(--tp-text);">${escapeHtml(evName)}</span>
+            ${source ? `<span style="color: #6C5CE7; font-size: 9px;">${escapeHtml(source)}</span>` : ''}
+            <span style="margin-left: auto; color: var(--tp-text-muted);">${ts}</span>
+          </div>
+          ${paramEntries.length > 0 ? `
+            <div style="padding: 2px 0 0 38px; display: flex; flex-wrap: wrap; gap: 4px;">
+              ${paramEntries.map(([k, v]) => {
+                const val = typeof v === 'object' ? JSON.stringify(v).slice(0, 40) : String(v).slice(0, 40);
+                return `<span style="background: var(--tp-surface); border: 1px solid var(--tp-border); border-radius: 3px; padding: 0 4px; font-family: monospace; font-size: 9px;">${escapeHtml(k)}=${escapeHtml(val)}</span>`;
+              }).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
 
     return `
-      <div class="flex items-start gap-2 py-2 border-b border-tp-border last:border-0">
-        <div class="mt-1"><span class="tp-dot tp-dot-green"></span></div>
-        <div class="flex-1">
-          <div class="text-[12px]">
+      <div style="padding: 6px 0; border-bottom: 1px solid var(--tp-border);">
+        <div data-audit-toggle data-audit-key="${netKey}" style="display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
+          <span class="tp-dot tp-dot-green"></span>
+          ${icon}
+          <span style="flex: 1; font-size: 12px;">
             <span class="font-medium">${label}</span>
-            <span class="text-tp-text-muted"> &mdash; ${count} request${count > 1 ? 's' : ''}</span>
-          </div>
-          <div class="text-[11px] text-tp-text-secondary mt-1">
-            ${events.length > 0
-              ? events.map((e) => `<span class="tp-badge tp-badge-page mr-1 mb-1" style="display:inline-block; font-size:10px; padding: 1px 6px;">${escapeHtml(e)}</span>`).join('')
-              : '<span class="text-tp-text-muted">No event names parsed</span>'
-            }
-          </div>
+            <span class="text-tp-text-muted"> &mdash; ${count} req</span>
+          </span>
+          <span style="display: flex; gap: 2px; flex-wrap: wrap; max-width: 60%;">
+            ${events.slice(0, 4).map((e) => `<span class="tp-badge tp-badge-page" style="display:inline-block; font-size:9px; padding: 1px 5px;">${escapeHtml(e)}</span>`).join('')}
+            ${events.length > 4 ? `<span style="font-size: 9px; color: var(--tp-text-muted);">+${events.length - 4}</span>` : ''}
+          </span>
+          <span data-arrow style="color: var(--tp-text-muted); font-size: 10px; width: 10px; text-align: center;">${isExpanded ? '▾' : '▸'}</span>
+        </div>
+        <div data-audit-detail style="display: ${isExpanded ? 'block' : 'none'}; padding: 4px 0 2px 20px;">
+          ${detailRows}
         </div>
       </div>
     `;
@@ -276,10 +506,12 @@ function renderNetworkRequestsSection(networkRequests) {
   `;
 }
 
-function generateTextAuditReport(state) {
+function generateTextAuditReport(state, enhancedDiff) {
   const lines = [];
   const pageType = state.pageType?.pageType || 'unknown';
   const cms = state.cms?.cms || 'unknown';
+  const networkRequests = state.networkRequests || [];
+  const diff = enhancedDiff || enhanceAuditWithNetworkData(state.audit?.diff || [], networkRequests);
 
   lines.push(`Traacky Audit Report`);
   lines.push(`========================`);
@@ -288,12 +520,15 @@ function generateTextAuditReport(state) {
   lines.push(`Page Type: ${pageType}`);
   lines.push(``);
 
-  const diff = state.audit?.diff || [];
   lines.push(`Event Status:`);
   for (const d of diff) {
     const name = d.expected?.eventName || 'unknown';
     const platform = d.expected?.platform || '';
-    lines.push(`  ${d.status === 'match' ? '[OK]' : d.status === 'partial' ? '[!!]' : '[XX]'} ${platform}: ${name} — ${d.matchPercentage}% match`);
+    const statusMarker = d.status === 'match' ? '[OK]'
+      : d.status === 'partial' ? '[!!]'
+      : d.status === 'network_confirmed' ? '[NR]'
+      : '[XX]';
+    lines.push(`  ${statusMarker} ${platform}: ${name} — ${d.matchPercentage || 0}% match`);
 
     if (d.status === 'partial' || d.status === 'missing') {
       const issues = (d.fields || []).filter((f) => f.status !== 'match' && f.status !== 'extra');
@@ -311,12 +546,11 @@ function generateTextAuditReport(state) {
 
   lines.push(``);
   lines.push(`Network Requests:`);
-  const netReqs = state.networkRequests || [];
-  if (netReqs.length === 0) {
+  if (networkRequests.length === 0) {
     lines.push(`  No tracking requests captured`);
   } else {
     const byPlatform = {};
-    for (const r of netReqs) {
+    for (const r of networkRequests) {
       if (!byPlatform[r.platform]) byPlatform[r.platform] = [];
       byPlatform[r.platform].push(r);
     }

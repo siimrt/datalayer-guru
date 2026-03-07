@@ -8,7 +8,8 @@
     "storage",
     "sidePanel",
     "scripting",
-    "webNavigation"
+    "webNavigation",
+    "webRequest"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -19,6 +20,19 @@
     "type": "module"
   },
   "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/early-network-hooks-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/early-network-hooks.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
     {
       "matches": ["<all_urls>"],
       "js": ["src/content/index.js"],
