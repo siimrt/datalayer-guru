@@ -32,7 +32,7 @@ export function renderPlanBadge(container, plan, onUpgrade) {
     badge.addEventListener('click', onUpgrade);
     badge.addEventListener('mouseenter', () => {
       badge.style.borderColor = 'var(--tp-primary)';
-      badge.style.background = 'rgba(108, 92, 231, 0.2)';
+      badge.style.background = 'rgba(0, 109, 119, 0.2)';
     });
     badge.addEventListener('mouseleave', () => {
       badge.style.borderColor = c.border;

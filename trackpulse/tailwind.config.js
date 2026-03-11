@@ -18,6 +18,17 @@ export default {
           text: 'var(--tp-text)',
           'text-secondary': 'var(--tp-text-secondary)',
           'text-muted': 'var(--tp-text-muted)',
+        },
+        'stormy-teal': {
+          DEFAULT: '#006d77',
+          600: '#00b4c4',
+          700: '#005a63',
+        },
+        'pearl-aqua': {
+          DEFAULT: '#83c5be',
+        },
+        'alice-blue': {
+          DEFAULT: '#edf6f9',
         }
       },
       fontFamily: {

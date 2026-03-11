@@ -9,6 +9,7 @@
 export function parseNetworkRequest(platform, url, body) {
   const parsers = {
     ga4: parseGA4Request,
+    google_ads: parseGoogleAdsRequest,
     meta: parseMetaRequest,
     tiktok: parseTikTokRequest,
     pinterest: parsePinterestRequest,
@@ -383,6 +384,55 @@ function parseLinkedInRequest(url, body) {
 
   const result = { eventName, params: eventParams, items: null };
   if (eventParams.partnerId) result.pixelId = eventParams.partnerId;
+  return result;
+}
+
+/**
+ * Google Ads Conversion parser.
+ * Handles:
+ *   - googleads.g.doubleclick.net/pagead/conversion/AW_ID/?label=LABEL&...
+ *   - googleadservices.com/pagead/conversion/AW_ID/?label=LABEL&...
+ * Extracts conversion ID, label, value, currency from URL params.
+ */
+function parseGoogleAdsRequest(url, body) {
+  const eventParams = {};
+  let eventName = 'conversion';
+  let pixelId = null;
+
+  try {
+    const { urlObj, params: allParams } = mergeUrlAndBodyParams(url, body);
+
+    // Extract AW-ID from path: /pagead/conversion/XXXXXXXXX/
+    const pathMatch = urlObj.pathname.match(/\/conversion\/(\d+)\//);
+    if (pathMatch) pixelId = `AW-${pathMatch[1]}`;
+
+    // Conversion label
+    const label = allParams.label || allParams.gtm_label || null;
+    if (label) {
+      eventParams.label = label;
+      eventName = `conversion/${label}`;
+    }
+
+    // Conversion value & currency
+    if (allParams.value) eventParams.value = Number(allParams.value);
+    if (allParams.currency_code) eventParams.currency = allParams.currency_code;
+
+    // Order ID
+    if (allParams.oid) eventParams.order_id = allParams.oid;
+
+    // Remarketing vs conversion
+    if (allParams.aw_remarketing_only === '1' || allParams.aw_remarketing_only === 'true') {
+      eventName = 'remarketing';
+    }
+
+    // View-through conversion
+    if (urlObj.pathname.includes('viewthroughconversion')) {
+      eventName = label ? `view_through/${label}` : 'view_through_conversion';
+    }
+  } catch (e) {}
+
+  const result = { eventName, params: eventParams, items: null };
+  if (pixelId) result.pixelId = pixelId;
   return result;
 }
 

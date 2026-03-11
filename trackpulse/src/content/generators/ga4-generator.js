@@ -3,7 +3,7 @@
  * following Google's ecommerce documentation exactly.
  */
 
-import { PAGE_TYPES, GA4_EVENT_MAP } from '../../shared/constants.js';
+import { PAGE_TYPES } from '../../shared/constants.js';
 
 export class GA4Generator {
   /**

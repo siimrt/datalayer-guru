@@ -53,7 +53,7 @@ export function resolvePlanFromId(planId) {
 export const PLAN_CONFIG = {
   free: { label: 'FREE', bg: 'rgba(155, 155, 174, 0.12)', text: 'var(--tp-text-muted)', border: 'rgba(155, 155, 174, 0.2)' },
   starter: { label: 'STARTER', bg: 'rgba(91, 155, 213, 0.12)', text: '#5B9BD5', border: 'rgba(91, 155, 213, 0.2)' },
-  pro: { label: 'PRO', bg: 'rgba(108, 92, 231, 0.12)', text: '#6C5CE7', border: 'rgba(108, 92, 231, 0.2)' },
+  pro: { label: 'PRO', bg: 'rgba(0, 109, 119, 0.12)', text: '#006d77', border: 'rgba(0, 109, 119, 0.2)' },
   agency: { label: 'AGENCY', bg: 'rgba(253, 203, 110, 0.15)', text: '#D4A017', border: 'rgba(253, 203, 110, 0.25)' },
 };
 

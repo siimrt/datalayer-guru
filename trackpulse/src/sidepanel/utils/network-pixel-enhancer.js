@@ -37,6 +37,14 @@ function extractSnapchatIdFromUrl(url) {
   } catch (e) { return null; }
 }
 
+function extractGoogleAdsIdFromUrl(url) {
+  if (!url) return null;
+  try {
+    const match = url.match(/\/conversion\/(\d+)\//);
+    return match ? `AW-${match[1]}` : null;
+  } catch (e) { return null; }
+}
+
 function extractLinkedInIdFromUrl(url) {
   if (!url) return null;
   try {
@@ -48,6 +56,7 @@ function extractLinkedInIdFromUrl(url) {
 // Platform-specific pixel ID extractors from network request data
 const PIXEL_ID_EXTRACTORS = {
   ga4: (req) => req.measurementId || null,
+  google_ads: (req) => req.pixelId || extractGoogleAdsIdFromUrl(req.url) || null,
   meta: (req) => req.pixelId || null,
   tiktok: (req) => req.pixelId || req.params?.pixelId || extractTikTokIdFromUrl(req.url) || null,
   snapchat: (req) => req.pixelId || extractSnapchatIdFromUrl(req.url) || null,

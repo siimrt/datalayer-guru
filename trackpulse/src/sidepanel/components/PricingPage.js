@@ -162,7 +162,7 @@ function renderCompactCard(planKey, currentPlan) {
   let marginTop = '0';
   if (isPro) {
     borderStyle = '2px solid var(--tp-primary)';
-    boxShadow = '0 0 16px rgba(108, 92, 231, 0.25)';
+    boxShadow = '0 0 16px rgba(0, 109, 119, 0.25)';
     marginTop = '-4px';
   }
   if (isCurrentPlan) {
@@ -341,7 +341,7 @@ function bindPricingEvents(container, state, onBack) {
     // Hover effects
     const isProBtn = btn.dataset.planNickname?.includes('pro');
     if (isProBtn) {
-      btn.addEventListener('mouseenter', () => { btn.style.background = '#7d6ef0'; });
+      btn.addEventListener('mouseenter', () => { btn.style.background = '#005a63'; });
       btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--tp-primary)'; });
     } else {
       btn.addEventListener('mouseenter', () => { btn.style.borderColor = 'var(--tp-primary)'; });

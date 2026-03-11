@@ -3,17 +3,41 @@
  * Performs deep field-by-field comparison.
  */
 
+// GA4 ecommerce events that should have items[] and standard structure
+const ECOMMERCE_EVENTS = new Set([
+  'view_item', 'view_item_list', 'select_item',
+  'add_to_cart', 'remove_from_cart', 'view_cart',
+  'begin_checkout', 'add_shipping_info', 'add_payment_info',
+  'purchase', 'refund',
+]);
+
+// Required ecommerce fields per event type
+const EVENT_REQUIRED_FIELDS = {
+  view_item: ['items'],
+  view_item_list: ['items'],
+  select_item: ['items'],
+  add_to_cart: ['items'],
+  remove_from_cart: ['items'],
+  view_cart: ['items'],
+  begin_checkout: ['items'],
+  add_shipping_info: ['items'],
+  add_payment_info: ['items'],
+  purchase: ['transaction_id', 'items'],
+  refund: ['transaction_id'],
+};
+
 export class DiffEngine {
   /**
    * Compare all generated events against actual dataLayer events.
+   * Also auto-audit ecommerce events found in the dataLayer that have no
+   * matching expected event (e.g. add_to_cart found on a Product page).
    *
    * @param {Array} expectedEvents - Generated events from generators
    * @param {Array} actualEvents - Events extracted from dataLayer
    * @returns {Array<DiffResult>}
    */
   compareAll(expectedEvents, actualEvents) {
-    return expectedEvents.map((expected) => {
-      // Find the best matching actual event
+    const results = expectedEvents.map((expected) => {
       const actual = this._findBestMatch(expected, actualEvents);
       if (!actual) {
         return {
@@ -26,6 +50,106 @@ export class DiffEngine {
       }
       return this.compare(expected, actual);
     });
+
+    // Auto-audit additional ecommerce events not covered by expected events
+    const coveredEventNames = new Set(expectedEvents.map((e) => e.eventName || e.data?.event));
+    for (const actual of actualEvents) {
+      const eventName = actual.event || actual.data?.event;
+      if (!eventName || coveredEventNames.has(eventName)) continue;
+      if (!ECOMMERCE_EVENTS.has(eventName)) continue;
+      if (!actual.hasEcommerce && !actual.data?.ecommerce) continue;
+
+      // Self-audit: validate ecommerce structure
+      const auditResult = this._selfAudit(eventName, actual);
+      if (auditResult) results.push(auditResult);
+    }
+
+    return results;
+  }
+
+  /**
+   * Self-audit an ecommerce event against GA4 standard structure.
+   * No "expected" template needed — validates based on GA4 spec.
+   */
+  _selfAudit(eventName, actual) {
+    const data = actual.data || actual;
+    const ecom = data.ecommerce || {};
+    const fields = [];
+
+    // Check required fields
+    const required = EVENT_REQUIRED_FIELDS[eventName] || ['items'];
+    for (const field of required) {
+      const val = ecom[field];
+      if (field === 'items') {
+        if (Array.isArray(val) && val.length > 0) {
+          fields.push({ path: `ecommerce.items`, expected: '(array)', actual: `${val.length} item(s)`, status: 'match' });
+          // Validate item structure
+          this._auditItems(val, fields);
+        } else {
+          fields.push({ path: `ecommerce.items`, expected: '(array)', actual: undefined, status: 'missing' });
+        }
+      } else {
+        if (val != null) {
+          fields.push({ path: `ecommerce.${field}`, expected: field, actual: val, status: 'match' });
+        } else {
+          fields.push({ path: `ecommerce.${field}`, expected: field, actual: undefined, status: 'missing' });
+        }
+      }
+    }
+
+    // Check currency & value (recommended)
+    if (ecom.currency) {
+      fields.push({ path: 'ecommerce.currency', expected: 'currency', actual: ecom.currency, status: 'match' });
+    } else {
+      fields.push({ path: 'ecommerce.currency', expected: 'currency', actual: undefined, status: 'recommended' });
+    }
+    if (ecom.value != null) {
+      fields.push({ path: 'ecommerce.value', expected: 'value', actual: ecom.value, status: 'match' });
+    } else {
+      fields.push({ path: 'ecommerce.value', expected: 'value', actual: undefined, status: 'recommended' });
+    }
+
+    const scoredFields = fields.filter((f) => f.status !== 'recommended');
+    const totalFields = scoredFields.length;
+    const matchedFields = scoredFields.filter((f) => f.status === 'match').length;
+    const matchPercentage = totalFields > 0 ? Math.round((matchedFields / totalFields) * 100) : 100;
+
+    return {
+      expected: { eventName, data, pageType: 'auto' },
+      actual,
+      status: matchPercentage === 100 ? 'match' : matchPercentage > 0 ? 'partial' : 'missing',
+      fields,
+      matchPercentage,
+    };
+  }
+
+  /**
+   * Validate items array structure for GA4 compliance.
+   */
+  _auditItems(items, fields) {
+    const REQUIRED_ITEM_FIELDS = ['item_id', 'item_name'];
+    const RECOMMENDED_ITEM_FIELDS = ['price'];
+    const ITEM_ALIASES = { item_id: 'id', item_name: 'name' };
+
+    for (let i = 0; i < Math.min(items.length, 3); i++) {
+      const item = items[i];
+      if (!item || typeof item !== 'object') continue;
+
+      for (const field of REQUIRED_ITEM_FIELDS) {
+        const val = item[field] || item[ITEM_ALIASES[field]];
+        if (val != null) {
+          fields.push({ path: `ecommerce.items[${i}].${field}`, expected: field, actual: val, status: 'match' });
+        } else {
+          fields.push({ path: `ecommerce.items[${i}].${field}`, expected: field, actual: undefined, status: 'missing' });
+        }
+      }
+      for (const field of RECOMMENDED_ITEM_FIELDS) {
+        const val = item[field];
+        if (val != null) {
+          fields.push({ path: `ecommerce.items[${i}].${field}`, expected: field, actual: val, status: 'match' });
+        }
+      }
+    }
   }
 
   /**
@@ -52,11 +176,27 @@ export class DiffEngine {
     const fields = [];
     this._deepCompare(expectedData, actualData, '', fields);
 
-    // Calculate match percentage
-    const totalFields = fields.length;
-    const matchedFields = fields.filter((f) => f.status === 'match').length;
+    // Fields that are recommended but should not penalize the match score when missing
+    const OPTIONAL_ECOMMERCE_PATHS = new Set([
+      'ecommerce.currency', 'ecommerce.value',
+    ]);
+
+    // Calculate match percentage — exclude optional/info fields from penalty
+    const scoredFields = fields.filter((f) =>
+      !(f.status === 'missing' && OPTIONAL_ECOMMERCE_PATHS.has(f.path)) &&
+      f.status !== 'info'
+    );
+    const totalFields = scoredFields.length;
+    const matchedFields = scoredFields.filter((f) => f.status === 'match').length;
     const matchPercentage =
       totalFields > 0 ? Math.round((matchedFields / totalFields) * 100) : 0;
+
+    // Mark optional missing fields as 'recommended' instead of 'missing'
+    for (const f of fields) {
+      if (f.status === 'missing' && OPTIONAL_ECOMMERCE_PATHS.has(f.path)) {
+        f.status = 'recommended';
+      }
+    }
 
     let status;
     if (matchPercentage === 100) {
@@ -200,6 +340,12 @@ export class DiffEngine {
       const actualItem = this._findMatchingItem(expectedItem, actual);
 
       if (actualItem) {
+        // How was this item matched? By ID or by name fallback?
+        const matchedById = expectedItem.item_id && (
+          String(actualItem.item_id) === String(expectedItem.item_id) ||
+          String(actualItem.id) === String(expectedItem.item_id)
+        );
+
         // GA4-to-Shopify field aliases (expected key -> alternative actual key)
         const ITEM_ALIASES = {
           item_id: 'id', item_name: 'name', item_brand: 'brand',
@@ -224,7 +370,12 @@ export class DiffEngine {
             if (this._valuesMatch(value, actualVal)) {
               fields.push({ path: fieldPath, expected: value, actual: actualVal, status: 'match' });
             } else {
-              fields.push({ path: fieldPath, expected: value, actual: actualVal, status: 'mismatch' });
+              // item_id mismatch when matched by name: downgrade to 'info' (product vs variant ID)
+              if (key === 'item_id' && !matchedById) {
+                fields.push({ path: fieldPath, expected: value, actual: actualVal, status: 'info' });
+              } else {
+                fields.push({ path: fieldPath, expected: value, actual: actualVal, status: 'mismatch' });
+              }
             }
           } else {
             // Skip optional fields that are rarely in actual implementations
@@ -267,6 +418,18 @@ export class DiffEngine {
         (a) => a && (
           (a.item_name && a.item_name.toLowerCase() === expectedName) ||
           (a.name && a.name.toLowerCase() === expectedName)
+        )
+      );
+      if (match) return match;
+    }
+
+    // Try partial item_name match (contains) — handles truncated or reformatted names
+    if (expectedItem.item_name) {
+      const expectedName = expectedItem.item_name.toLowerCase();
+      const match = actualArray.find(
+        (a) => a && (
+          (a.item_name && (a.item_name.toLowerCase().includes(expectedName) || expectedName.includes(a.item_name.toLowerCase()))) ||
+          (a.name && (a.name.toLowerCase().includes(expectedName) || expectedName.includes(a.name.toLowerCase())))
         )
       );
       if (match) return match;

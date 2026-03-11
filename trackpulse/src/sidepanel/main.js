@@ -797,7 +797,7 @@ function showUpgradeSuccess(plan) {
   const overlay = document.createElement('div');
   overlay.style.cssText = `
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(108, 92, 231, 0.15);
+    background: rgba(0, 109, 119, 0.15);
     display: flex; align-items: center; justify-content: center;
     z-index: 1000;
   `;
@@ -882,3 +882,58 @@ setTimeout(() => {
     render();
   }
 }, 8000);
+
+// ---- Silent Auto-Refresh ----
+// Periodically re-run pixel detection + dataLayer snapshot to catch events
+// that were pushed before the sidepanel opened or between detection cycles.
+// This runs silently — no loading spinner, no visible page reload.
+
+let _silentRefreshTimer = null;
+const SILENT_REFRESH_INTERVAL = 8000; // 8 seconds
+
+function startSilentRefresh() {
+  if (_silentRefreshTimer) return;
+  _silentRefreshTimer = setInterval(() => {
+    if (document.visibilityState !== 'visible') return;
+    if (state.loading) return;
+
+    // Request a silent re-detection from the content script
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs?.[0]?.id) {
+        chrome.tabs.sendMessage(
+          tabs[0].id,
+          { type: MSG.REQUEST_REDETECT },
+          () => {
+            if (chrome.runtime.lastError) {
+              // Content script not available — ignore
+            }
+          }
+        );
+      }
+    });
+
+    // Also re-detect custom pixel frames if on Shopify
+    if (state.cms?.cms === 'shopify' || state.pageType?.pageType === 'checkout' || state.pageType?.pageType === 'thank_you') {
+      actions.detectCustomPixelFrames().catch(() => {});
+    }
+  }, SILENT_REFRESH_INTERVAL);
+}
+
+function stopSilentRefresh() {
+  if (_silentRefreshTimer) {
+    clearInterval(_silentRefreshTimer);
+    _silentRefreshTimer = null;
+  }
+}
+
+// Start when sidepanel is visible, stop when hidden
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    startSilentRefresh();
+  } else {
+    stopSilentRefresh();
+  }
+});
+
+// Start immediately
+startSilentRefresh();

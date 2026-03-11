@@ -31,6 +31,7 @@ export class PixelDetector {
 
     pixels.push(...this._detectGTM(domCache));
     pixels.push(...this._detectGA4(pageContext, domCache));
+    pixels.push(...this._detectGoogleAds(pageContext, domCache));
     pixels.push(...this._detectUA(domCache));
     pixels.push(...this._detectMeta(pageContext, domCache));
     pixels.push(...this._detectTikTok(pageContext, domCache));
@@ -207,6 +208,77 @@ export class PixelDetector {
   }
 
   /* ------------------------------------------------------------------ */
+  /*  Google Ads (AW-)                                                   */
+  /* ------------------------------------------------------------------ */
+
+  _detectGoogleAds(pageContext, domCache) {
+    const results = [];
+    const ids = new Set();
+
+    // 1. Script tags — googletagmanager.com/gtag with AW- id
+    const scripts = document.querySelectorAll(
+      'script[src*="googletagmanager.com/gtag"]',
+    );
+    let hasGtagScript = scripts.length > 0;
+    for (const script of scripts) {
+      const match = script.src.match(/[?&]id=(AW-[A-Z0-9]+)/);
+      if (match) ids.add(match[1]);
+    }
+
+    // 1b. gtag/js and gtag/destination patterns
+    const gtagScripts = document.querySelectorAll(
+      'script[src*="gtag/js"], script[src*="gtag/destination"]',
+    );
+    for (const script of gtagScripts) {
+      hasGtagScript = true;
+      const match = script.src.match(/[?&]id=(AW-[A-Z0-9]+)/);
+      if (match) ids.add(match[1]);
+    }
+
+    // 2. Inline scripts — AW- IDs
+    for (const script of domCache.inlineScripts) {
+      const content = script.textContent || '';
+      const matches = content.match(/AW-[A-Z0-9]+/g);
+      if (matches) {
+        for (const id of matches) ids.add(id);
+      }
+    }
+
+    // 3. dataLayer — gtag config events with AW- IDs
+    if (pageContext.dataLayer) {
+      for (const entry of pageContext.dataLayer) {
+        if (Array.isArray(entry) && entry[0] === 'config') {
+          const id = entry[1];
+          if (typeof id === 'string' && id.startsWith('AW-')) ids.add(id);
+        }
+        if (
+          entry &&
+          typeof entry === 'object' &&
+          !Array.isArray(entry) &&
+          entry['0'] === 'config'
+        ) {
+          const id = entry['1'];
+          if (typeof id === 'string' && id.startsWith('AW-')) ids.add(id);
+        }
+      }
+    }
+
+    // Build results
+    if (ids.size > 0) {
+      for (const id of ids) {
+        results.push({
+          platform: 'google_ads',
+          id,
+          method: hasGtagScript ? 'script' : 'dataLayer',
+          active: true,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /* ------------------------------------------------------------------ */
   /*  Universal Analytics (legacy)                                       */
   /* ------------------------------------------------------------------ */
 
@@ -331,41 +403,44 @@ export class PixelDetector {
     const results = [];
     const ids = new Set();
 
-    // 1. Script tag — analytics.tiktok.com
+    // 1. Script tag — analytics.tiktok.com or tiktok.com broadly
     const scripts = document.querySelectorAll(
-      'script[src*="analytics.tiktok.com"]',
+      'script[src*="analytics.tiktok.com"], script[src*="tiktok.com"]',
     );
     const hasTtScript = scripts.length > 0;
 
-    if (hasTtScript || pageContext.pixels?.ttq) {
-      // 2. Inline scripts — ttq.load('XXXX')
-      for (const script of domCache.inlineScripts) {
-        const content = script.textContent || '';
-        const match = content.match(
-          /ttq\.load\s*\(\s*['"]([A-Z0-9]+)['"]/,
-        );
-        if (match) {
-          ids.add(match[1]);
-        }
+    // 2. Inline scripts — ttq.load('XXXX') — always scan (GTM may load without external script)
+    let hasInlineTtq = false;
+    for (const script of domCache.inlineScripts) {
+      const content = script.textContent || '';
+      const match = content.match(
+        /ttq\.load\s*\(\s*['"]([A-Z0-9]+)['"]/,
+      );
+      if (match) {
+        ids.add(match[1]);
+        hasInlineTtq = true;
       }
+    }
 
-      // 3. pageContext — ttq._t pixel map
-      if (pageContext.pixels?.ttqPixelIds) {
-        for (const id of pageContext.pixels.ttqPixelIds) ids.add(id);
-      }
+    // 3. pageContext — ttq._t pixel map
+    if (pageContext.pixels?.ttqPixelIds) {
+      for (const id of pageContext.pixels.ttqPixelIds) ids.add(id);
+    }
 
-      // 4. Script src — sdkid parameter
-      for (const script of scripts) {
-        const srcMatch = script.src.match(/sdkid=([A-Z0-9]+)/);
-        if (srcMatch) ids.add(srcMatch[1]);
-      }
+    // 4. Script src — sdkid parameter
+    for (const script of scripts) {
+      const srcMatch = script.src.match(/sdkid=([A-Z0-9]+)/);
+      if (srcMatch) ids.add(srcMatch[1]);
+    }
 
+    if (hasTtScript || pageContext.pixels?.ttq || hasInlineTtq || ids.size > 0) {
+      const isActive = pageContext.pixels?.ttq || hasTtScript || hasInlineTtq;
       if (ids.size === 0) {
         results.push({
           platform: 'tiktok',
           id: null,
           method: 'script',
-          active: pageContext.pixels?.ttq || hasTtScript,
+          active: isActive,
         });
       } else {
         for (const id of ids) {
@@ -373,7 +448,7 @@ export class PixelDetector {
             platform: 'tiktok',
             id,
             method: 'script',
-            active: pageContext.pixels?.ttq || hasTtScript,
+            active: isActive,
           });
         }
       }
@@ -406,24 +481,27 @@ export class PixelDetector {
     const results = [];
     let pixelId = null;
 
-    // 1. Script tags — s.pinimg.com/ct/core.js and pintrk pattern
+    // 1. Script tags — s.pinimg.com/ct/core.js, pintrk pattern, or pinimg.com broadly
     const scripts = document.querySelectorAll(
-      'script[src*="s.pinimg.com/ct/core.js"], script[src*="pintrk"]',
+      'script[src*="s.pinimg.com/ct/core.js"], script[src*="pintrk"], script[src*="pinimg.com"]',
     );
     const hasPinScript = scripts.length > 0;
 
-    // 2. Inline scripts — pintrk('load', 'XXXX')
-    if (hasPinScript || pageContext.pixels?.pintrk) {
-      for (const script of domCache.inlineScripts) {
-        const content = script.textContent || '';
-        const match = content.match(
-          /pintrk\s*\(\s*['"]load['"]\s*,\s*['"](\d+)['"]/,
-        );
-        if (match) {
-          pixelId = match[1];
-          break;
-        }
+    // 2. Inline scripts — pintrk('load', 'XXXX') — scan always (GTM may load without external script)
+    for (const script of domCache.inlineScripts) {
+      const content = script.textContent || '';
+      const match = content.match(
+        /pintrk\s*\(\s*['"]load['"]\s*,\s*['"](\d+)['"]/,
+      );
+      if (match) {
+        pixelId = match[1];
+        break;
       }
+    }
+
+    // 2b. pageContext — pinterestPixelId from pintrk queue
+    if (!pixelId && pageContext.pixels?.pinterestPixelId) {
+      pixelId = pageContext.pixels.pinterestPixelId;
     }
 
     // 3. <noscript> / <img> — ct.pinterest.com
@@ -467,12 +545,28 @@ export class PixelDetector {
       }
     }
 
-    if (hasPinScript || pageContext.pixels?.pintrk || pixelId) {
+    // Also detect pintrk inline call even without script tag/pageContext
+    let hasInlinePintrk = false;
+    if (!pixelId && !hasPinScript && !pageContext.pixels?.pintrk) {
+      for (const script of domCache.inlineScripts) {
+        const content = script.textContent || '';
+        if (/pintrk\s*\(/.test(content)) {
+          hasInlinePintrk = true;
+          const match = content.match(
+            /pintrk\s*\(\s*['"]load['"]\s*,\s*['"](\d+)['"]/,
+          );
+          if (match) pixelId = match[1];
+          break;
+        }
+      }
+    }
+
+    if (hasPinScript || pageContext.pixels?.pintrk || pixelId || hasInlinePintrk) {
       results.push({
         platform: 'pinterest',
         id: pixelId,
         method: 'script',
-        active: pageContext.pixels?.pintrk || hasPinScript || !!pixelId,
+        active: pageContext.pixels?.pintrk || hasPinScript || !!pixelId || hasInlinePintrk,
       });
     }
 
@@ -486,32 +580,38 @@ export class PixelDetector {
   _detectSnapchat(pageContext, domCache) {
     const results = [];
 
-    // 1. Broader script src — sc-static.net (not just /scevent)
+    // 1. Broader script src — sc-static.net (including scevent)
     const scripts = document.querySelectorAll(
       'script[src*="sc-static.net"]',
     );
     const hasSnapScript = scripts.length > 0;
 
-    if (hasSnapScript || pageContext.pixels?.snaptr) {
-      let pixelId = null;
-
-      // 2. Inline scripts — snaptr('init', 'UUID')
-      for (const script of domCache.inlineScripts) {
-        const content = script.textContent || '';
-        const match = content.match(
-          /snaptr\s*\(\s*['"]init['"]\s*,\s*['"]([a-f0-9-]+)['"]/,
-        );
-        if (match) {
-          pixelId = match[1];
-          break;
-        }
+    // 2. Inline scripts — snaptr('init', 'UUID') — always scan (GTM may load without external script)
+    let pixelId = null;
+    let hasInlineSnaptr = false;
+    for (const script of domCache.inlineScripts) {
+      const content = script.textContent || '';
+      const match = content.match(
+        /snaptr\s*\(\s*['"]init['"]\s*,\s*['"]([a-f0-9-]+)['"]/,
+      );
+      if (match) {
+        pixelId = match[1];
+        hasInlineSnaptr = true;
+        break;
       }
+    }
 
+    // 2b. pageContext — snapchatPixelId from snaptr queue
+    if (!pixelId && pageContext.pixels?.snapchatPixelId) {
+      pixelId = pageContext.pixels.snapchatPixelId;
+    }
+
+    if (hasSnapScript || pageContext.pixels?.snaptr || hasInlineSnaptr) {
       results.push({
         platform: 'snapchat',
         id: pixelId,
         method: 'script',
-        active: pageContext.pixels?.snaptr || hasSnapScript,
+        active: pageContext.pixels?.snaptr || hasSnapScript || hasInlineSnaptr,
       });
     }
 
@@ -525,32 +625,34 @@ export class PixelDetector {
   _detectLinkedIn(pageContext, domCache) {
     const results = [];
 
-    // 1. Broader script src — snap.licdn.com + linkedin.com/li/track
+    // 1. Broader script src — snap.licdn.com + linkedin.com/li/track + insight.min.js
     const scripts = document.querySelectorAll(
-      'script[src*="snap.licdn.com"], script[src*="linkedin.com/li/track"]',
+      'script[src*="snap.licdn.com"], script[src*="linkedin.com/li/track"], script[src*="insight.min.js"]',
     );
     const hasLiScript = scripts.length > 0;
 
     let pixelId = null;
 
-    if (hasLiScript || pageContext.pixels?.lintrk) {
-      // 2. Inline scripts — _linkedin_partner_id
-      for (const script of domCache.inlineScripts) {
-        const content = script.textContent || '';
-        const match = content.match(
-          /_linkedin_partner_id\s*=\s*['"]?(\d+)/,
-        );
-        if (match) {
-          pixelId = match[1];
-          break;
-        }
+    // 2. Inline scripts — _linkedin_partner_id — always scan (GTM may load without external script)
+    let hasInlineLintrk = false;
+    for (const script of domCache.inlineScripts) {
+      const content = script.textContent || '';
+      const match = content.match(
+        /_linkedin_partner_id\s*=\s*['"]?(\d+)/,
+      );
+      if (match) {
+        pixelId = match[1];
+        hasInlineLintrk = true;
+        break;
       }
+    }
 
+    if (hasLiScript || pageContext.pixels?.lintrk || hasInlineLintrk) {
       results.push({
         platform: 'linkedin',
-        id: pixelId,
+        id: pixelId || pageContext.pixels?.linkedInPartnerId || null,
         method: 'script',
-        active: pageContext.pixels?.lintrk || hasLiScript,
+        active: pageContext.pixels?.lintrk || hasLiScript || hasInlineLintrk,
       });
 
       return results;

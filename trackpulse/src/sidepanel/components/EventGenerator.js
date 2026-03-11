@@ -9,19 +9,26 @@ import { platformIconHtml } from '../../shared/platform-icons.js';
 import { renderDataExtracted } from './DataExtracted.js';
 import { applyCodePaywall, renderLockedButton, renderCMSGateBanner } from './Paywall.js';
 import { getSyntheticEvents } from '../../content/generators/synthetic-events.js';
+import { PLATFORM_LABELS as _PLAT_LABELS } from '../../shared/constants.js';
 
-const PLATFORM_LABELS = {
-  ga4: 'GA4',
-  meta: 'Meta Pixel',
-  tiktok: 'TikTok',
-  pinterest: 'Pinterest',
-};
+// Override 'meta' label to 'Meta Pixel' for event generation context
+const PLATFORM_LABELS = { ..._PLAT_LABELS, meta: 'Meta Pixel' };
+
+// Track which event cards are expanded (persists across re-renders, resets on page navigation)
+const expandedCards = new Set();
+
+export function resetEventGeneratorState() {
+  expandedCards.clear();
+}
 
 const PLATFORM_COLORS = {
   ga4: '#4285F4',
   meta: '#1877F2',
   tiktok: '#1A1A1A',
   pinterest: '#E60023',
+  snapchat: '#FFFC00',
+  linkedin: '#0A66C2',
+  twitter: '#1DA1F2',
 };
 
 /**
@@ -53,7 +60,8 @@ function generateMockCode(platform, eventName) {
 
 export function renderEventGenerator(container, state, actions) {
   const events = state.generatedEvents || {};
-  const activePlatforms = state.activePlatforms || ['ga4', 'meta', 'tiktok', 'pinterest'];
+  const detectedPlatforms = state.detectedPlatforms || new Set(['ga4']);
+  const activePlatforms = state.activePlatforms || [...detectedPlatforms];
   const capabilities = state.capabilities;
   const supportedPlatforms = capabilities?.supportedPlatforms || ['ga4'];
   const detectedCMS = state.cms?.cms || 'unknown';
@@ -65,9 +73,10 @@ export function renderEventGenerator(container, state, actions) {
   const isFreeUser = capabilities?.plan === 'free';
   const previewPlatforms = ['meta']; // Meta: visible but blurred in free
 
-  // Render platform toggles — show all platforms, mark unsupported ones
+  // Render platform toggles — only show detected platforms, mark unsupported ones
   // Meta is NOT locked for free users (shown as preview), only TikTok/Pinterest are locked
   const toggles = Object.keys(PLATFORM_LABELS)
+    .filter((platform) => detectedPlatforms.has(platform))
     .map((platform) => {
       const isActive = activePlatforms.includes(platform);
       const isSupported = supportedPlatforms.includes(platform);
@@ -359,9 +368,14 @@ export function renderEventGenerator(container, state, actions) {
   });
 }
 
-function createEventCard(event, index, collapsed, capabilities, actions) {
+function createEventCard(event, index, _collapsed, capabilities, actions) {
+  const cardKey = `${event.platform}:${event.eventName}`;
+  // Use expandedCards set for state; default first card open
+  const collapsed = expandedCards.size === 0 && index === 0 ? false
+    : !expandedCards.has(cardKey);
+
   const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
-  const platformColor = PLATFORM_COLORS[event.platform] || '#6C5CE7';
+  const platformColor = PLATFORM_COLORS[event.platform] || '#006d77';
   const isFree = capabilities?.plan === 'free';
   const isGatedPlatform = isFree && event.platform !== 'ga4';
 
@@ -462,6 +476,12 @@ function createEventCard(event, index, collapsed, capabilities, actions) {
     body.style.display = isHidden ? 'block' : 'none';
     const chevron = header.querySelector('.tp-chevron');
     if (chevron) chevron.classList.toggle('open', isHidden);
+    // Persist state
+    if (isHidden) {
+      expandedCards.add(cardKey);
+    } else {
+      expandedCards.delete(cardKey);
+    }
   });
 
   return card;
@@ -469,7 +489,7 @@ function createEventCard(event, index, collapsed, capabilities, actions) {
 
 function createLockedPlatformCard(event, actions) {
   const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
-  const platformColor = PLATFORM_COLORS[event.platform] || '#6C5CE7';
+  const platformColor = PLATFORM_COLORS[event.platform] || '#006d77';
 
   const card = document.createElement('div');
   card.className = 'tp-event-card animate-slide-in';

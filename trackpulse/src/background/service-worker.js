@@ -33,6 +33,10 @@ const tabContexts = {};
 const WEB_REQUEST_TRACKING_PATTERNS = [
   { platform: 'ga4',       pattern: '*://google-analytics.com/g/collect*' },
   { platform: 'ga4',       pattern: '*://analytics.google.com/g/collect*' },
+  { platform: 'ga4',       pattern: '*://*/g/collect?*tid=G-*' },  // Server-side GTM proxy (Stape, etc.)
+  { platform: 'google_ads', pattern: '*://googleads.g.doubleclick.net/pagead/conversion*' },
+  { platform: 'google_ads', pattern: '*://www.googleadservices.com/pagead/conversion*' },
+  { platform: 'google_ads', pattern: '*://googleads.g.doubleclick.net/pagead/viewthroughconversion*' },
   { platform: 'meta',      pattern: '*://*.facebook.com/tr*' },
   { platform: 'meta',      pattern: '*://*.facebook.com/privacy_sandbox/*' },
   { platform: 'meta',      pattern: '*://graph.facebook.com/*' },
@@ -53,6 +57,8 @@ const webRequestUrls = WEB_REQUEST_TRACKING_PATTERNS.map(p => p.pattern);
 function matchPlatformFromUrl(url) {
   const MATCHERS = [
     { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
+    { platform: 'ga4',       re: /\/g\/collect\?.*tid=G-/ },  // Server-side GTM proxy (Stape, etc.)
+    { platform: 'google_ads', re: /googleads\.g\.doubleclick\.net\/pagead\/(?:conversion|viewthroughconversion)|googleadservices\.com\/pagead\/conversion/ },
     { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/|graph\.facebook\.com/ },
     { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
     { platform: 'pinterest', re: /ct\.pinterest\.com|pinimg\.com\/ct\/|trk\.pinterest\.com/ },
@@ -71,6 +77,11 @@ function extractPixelIdFromUrl(platform, url) {
     const params = u.searchParams;
     switch (platform) {
       case 'ga4': return params.get('tid') || null;
+      case 'google_ads': {
+        // AW-XXXXXXXXX from the URL path or aw_remarketing_only param
+        const pathMatch = u.pathname.match(/\/conversion\/(?:AW-)?(\d+)\//);
+        return pathMatch ? `AW-${pathMatch[1]}` : null;
+      }
       case 'meta': return params.get('id') || null;
       case 'pinterest': return params.get('tid') || null;
       case 'tiktok': return params.get('sdkid') || null;
@@ -92,6 +103,11 @@ function extractEventNameFromUrl(platform, url) {
     const params = u.searchParams;
     switch (platform) {
       case 'ga4': return params.get('en') || null;
+      case 'google_ads': {
+        // Extract conversion label from URL params
+        const label = params.get('label') || params.get('gtm_label');
+        return label ? `conversion/${label}` : 'conversion';
+      }
       case 'meta': return params.get('ev') || null;
       case 'pinterest': return params.get('event') || null;
       case 'tiktok': return params.get('event') || params.get('ev') || null;
@@ -500,6 +516,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               // --- Hook fetch / XHR / sendBeacon ---
               var _TP_TRACKING_PATTERNS = [
                 { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
+                { platform: 'ga4',       re: /\/g\/collect\?.*tid=G-/ },
+                { platform: 'google_ads', re: /googleads\.g\.doubleclick\.net\/pagead\/(?:conversion|viewthroughconversion)|googleadservices\.com\/pagead\/conversion/ },
                 { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel|graph\.facebook\.com/ },
                 { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
                 { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\/|trk\.pinterest\.com/ },
@@ -681,6 +699,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                       if (/^G-/.test(configId) && !pixels.some(function (p) { return p.platform === 'ga4' && p.id === configId; })) {
                         pixels.push({ platform: 'ga4', id: configId, active: true });
                       }
+                      if (/^AW-/.test(configId) && !pixels.some(function (p) { return p.platform === 'google_ads' && p.id === configId; })) {
+                        pixels.push({ platform: 'google_ads', id: configId, active: true });
+                      }
                       if (/^GTM-/.test(configId) && !pixels.some(function (p) { return p.platform === 'gtm' && p.id === configId; })) {
                         pixels.push({ platform: 'gtm', id: configId, active: true });
                       }
@@ -702,6 +723,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     var gaMatch = src.match(/[?&]id=(G-[A-Z0-9]+)/);
                     if (gaMatch && !pixels.some(function (p) { return p.platform === 'ga4' && p.id === gaMatch[1]; })) {
                       pixels.push({ platform: 'ga4', id: gaMatch[1], active: true });
+                    }
+                    var awMatch = src.match(/[?&]id=(AW-[A-Z0-9]+)/);
+                    if (awMatch && !pixels.some(function (p) { return p.platform === 'google_ads' && p.id === awMatch[1]; })) {
+                      pixels.push({ platform: 'google_ads', id: awMatch[1], active: true });
                     }
                   }
                   if (src.indexOf('connect.facebook.net') !== -1 && !pixels.some(function (p) { return p.platform === 'meta'; })) {

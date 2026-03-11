@@ -5,6 +5,17 @@
 
 import { PLANS } from '../shared/plans.js';
 
+// Dev mode: extension loaded unpacked (no update_url) — bypass all gates
+let _isDevMode = null;
+function isDevMode() {
+  if (_isDevMode === null) {
+    try {
+      _isDevMode = !chrome.runtime.getManifest().update_url;
+    } catch (e) { _isDevMode = false; }
+  }
+  return _isDevMode;
+}
+
 /**
  * FEATURE GATE DEFINITIONS
  * Each feature has:
@@ -75,6 +86,11 @@ export const FEATURES = {
     upgradeMessage: 'Generate Pinterest Tag events — available in Pro.',
     upgradePlan: 'pro',
   },
+  platformGoogleAds: {
+    minPlan: 'starter',
+    upgradeMessage: 'Google Ads conversion tracking — available from Starter.',
+    upgradePlan: 'starter',
+  },
   platformSnapchat: {
     minPlan: 'pro',
     upgradeMessage: 'Generate Snapchat Pixel events — available in Pro.',
@@ -139,6 +155,9 @@ export const DOMAIN_LIMITS = {
  * Returns { allowed: boolean, reason?: string, upgradePlan?: string }
  */
 export function checkFeature(featureName, plan) {
+  // Dev mode: everything unlocked
+  if (isDevMode()) return { allowed: true };
+
   const feature = FEATURES[featureName];
   if (!feature) return { allowed: true };
 
@@ -189,6 +208,7 @@ export function isCMSSupported(cmsName, plan) {
 export function isPlatformSupported(platformName, plan) {
   const mapping = {
     ga4: 'platformGA4',
+    google_ads: 'platformGoogleAds',
     meta: 'platformMeta',
     tiktok: 'platformTikTok',
     pinterest: 'platformPinterest',
@@ -203,6 +223,25 @@ export function isPlatformSupported(platformName, plan) {
  * Used to show/hide UI elements.
  */
 export function getPlanCapabilities(plan) {
+  // Dev mode: full access to everything
+  if (isDevMode()) {
+    return {
+      plan: 'agency',
+      canCopyEvents: true,
+      canPushEvents: true,
+      canAudit: true,
+      canExportPDF: true,
+      canWhiteLabel: true,
+      canFunnelMode: true,
+      supportedCMS: getSupportedCMSList('agency'),
+      supportedPlatforms: getSupportedPlatformsList('agency'),
+      domainLimit: null,
+      pdfLimit: null,
+      funnelPageLimit: null,
+      templateLimit: null,
+    };
+  }
+
   const level = PLANS[plan] || 0;
 
   return {
@@ -228,6 +267,6 @@ function getSupportedCMSList(plan) {
 }
 
 function getSupportedPlatformsList(plan) {
-  const all = ['ga4', 'meta', 'tiktok', 'pinterest', 'snapchat'];
+  const all = ['ga4', 'google_ads', 'meta', 'tiktok', 'pinterest', 'snapchat'];
   return all.filter((p) => isPlatformSupported(p, plan));
 }

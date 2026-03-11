@@ -88,12 +88,7 @@ export function initBridge() {
       return true;
     }
 
-    if (msg.type === MSG.REQUEST_REDETECT) {
-      // Re-inject the page context script to re-collect data
-      injectPageScript();
-      sendResponse({ success: true });
-      return true;
-    }
+    // REQUEST_REDETECT is handled by content/index.js handleRedetect()
   });
 }
 

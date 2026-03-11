@@ -4,9 +4,10 @@
 
 import { formatTime, escapeHtml, syntaxHighlight } from '../../shared/utils.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
+import { PLATFORM_LABELS as _PLAT_LABELS } from '../../shared/constants.js';
 
 let filterText = '';
-let ecomOnly = false;
+let ecomOnly = true;
 let showNetwork = false;
 let expandedEntries = new Set();
 const jsonStore = new Map(); // entryId -> JSON string (avoids attribute escaping issues)
@@ -72,7 +73,7 @@ export function renderDataLayerLive(container, state, actions) {
     <div class="flex items-center justify-between p-3 border-b border-tp-border">
       <div class="flex items-center gap-2">
         <div class="text-[12px] font-medium">DataLayer Live</div>
-        <span style="
+        <span id="dl-counter" style="
           font-size: 10px; color: var(--tp-text-muted);
           background: var(--tp-surface); padding: 1px 6px;
           border-radius: 10px; border: 1px solid var(--tp-border);
@@ -166,7 +167,7 @@ export function appendDataLayerEntry(container, entry, number) {
   if (emptyEl) emptyEl.remove();
 
   // Update counter
-  const counterEl = container.querySelector('.flex.items-center.gap-2 span[style]');
+  const counterEl = container.querySelector('#dl-counter');
   if (counterEl) {
     counterEl.textContent = String(number);
   }
@@ -289,7 +290,7 @@ function renderStreamEntry(entry, number) {
           ">${info.badge}</span>` : ''}
           ${entry.source === 'custom_pixel' ? `<span style="
             font-size: 8px; padding: 1px 4px; border-radius: 3px;
-            background: rgba(108, 92, 231, 0.15); color: #6C5CE7;
+            background: rgba(0, 109, 119, 0.15); color: #006d77;
             font-weight: 600; letter-spacing: 0.3px;
           ">CP</span>` : ''}
         </div>
@@ -566,11 +567,11 @@ function classifyEvent(data) {
     if (keys.includes('user_data')) {
       return {
         label: 'user_data',
-        color: '#A29BFE',
+        color: '#83c5be',
         category: 'user',
         badge: keys.length > 1 ? `+${keys.length - 1} keys` : null,
-        badgeBg: 'rgba(162, 155, 254, 0.12)',
-        badgeColor: '#A29BFE',
+        badgeBg: 'rgba(131, 197, 190, 0.12)',
+        badgeColor: '#83c5be',
       };
     }
 
@@ -642,10 +643,8 @@ const PLATFORM_COLORS = {
   ga4: '#5B9BD5', meta: '#1877F2', tiktok: '#69C9D0',
   pinterest: '#E60023', snapchat: '#FFFC00', linkedin: '#0A66C2',
 };
-const PLATFORM_LABELS = {
-  ga4: 'GA4', meta: 'Meta', tiktok: 'TikTok',
-  pinterest: 'Pinterest', snapchat: 'Snap', linkedin: 'LinkedIn',
-};
+// Use shared labels with shorter 'Snap' override for compact UI
+const PLATFORM_LABELS = { ..._PLAT_LABELS, snapchat: 'Snap' };
 
 function renderNetworkStreamEntry(entry, number) {
   const time = formatTime(entry.timestamp);
@@ -700,7 +699,7 @@ function renderNetworkStreamEntry(entry, number) {
           ">${platformLabel}</span>
           ${entry.source === 'custom_pixel' ? `<span style="
             font-size: 8px; padding: 1px 4px; border-radius: 3px;
-            background: rgba(108, 92, 231, 0.15); color: #6C5CE7;
+            background: rgba(0, 109, 119, 0.15); color: #006d77;
             font-weight: 600; letter-spacing: 0.3px;
           ">CP</span>` : ''}
         </div>

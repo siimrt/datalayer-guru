@@ -29,7 +29,7 @@
   --tp-surface: #FFFFFF;
   --tp-surface-hover: #F0F0F5;
   --tp-border: #E5E5EA;
-  --tp-primary: #6C5CE7;
+  --tp-primary: #006d77;
   --tp-success: #00B894;
   --tp-warning: #E67E22;
   --tp-error: #E74C3C;
@@ -44,7 +44,7 @@ html.dark {
   --tp-surface: #1A1A1E;
   --tp-surface-hover: #252529;
   --tp-border: #2E2E34;
-  --tp-primary: #6C5CE7;
+  --tp-primary: #00b4c4;
   --tp-success: #00B894;
   --tp-warning: #FDCB6E;
   --tp-error: #FF6B6B;
@@ -116,14 +116,14 @@ html.dark .code-block {
 .syn-number { color: #E67E22; }
 .syn-keyword { color: #E74C3C; }
 .syn-function { color: #2980B9; }
-.syn-key { color: #8E44AD; }
+.syn-key { color: #006d77; }
 
 /* Syntax highlighting — dark mode */
 html.dark .syn-string { color: #A8E6A3; }
 html.dark .syn-number { color: #F9CA56; }
 html.dark .syn-keyword { color: #FF6B9D; }
 html.dark .syn-function { color: #7DABF8; }
-html.dark .syn-key { color: #C4A7E7; }
+html.dark .syn-key { color: #83c5be; }
 
 /* ---- Component Styles ---- */
 
@@ -145,8 +145,8 @@ html.dark .syn-key { color: #C4A7E7; }
 }
 
 .tp-badge-cms {
-  background: rgba(108, 92, 231, 0.12);
-  color: #6C5CE7;
+  background: rgba(0, 109, 119, 0.12);
+  color: #006d77;
 }
 
 .tp-badge-page {
@@ -160,8 +160,8 @@ html.dark .syn-key { color: #C4A7E7; }
 }
 
 html.dark .tp-badge-cms {
-  background: rgba(108, 92, 231, 0.15);
-  color: #A29BFE;
+  background: rgba(0, 109, 119, 0.15);
+  color: #83c5be;
 }
 
 html.dark .tp-badge-page {
@@ -293,7 +293,7 @@ html.dark .tp-badge-currency {
 }
 
 .tp-btn-primary:hover {
-  background: #5A4BD1;
+  background: #005a63;
   color: white;
 }
 
@@ -382,15 +382,15 @@ html.dark .tp-badge-currency {
 }
 
 .tp-platform-toggle.active {
-  background: rgba(108, 92, 231, 0.15);
+  background: rgba(0, 109, 119, 0.15);
   color: var(--tp-primary);
-  border-color: rgba(108, 92, 231, 0.3);
+  border-color: rgba(0, 109, 119, 0.3);
 }
 
 /* Extracted data summary */
 .tp-data-summary {
-  background: rgba(108, 92, 231, 0.08);
-  border: 1px solid rgba(108, 92, 231, 0.15);
+  background: rgba(0, 109, 119, 0.08);
+  border: 1px solid rgba(0, 109, 119, 0.15);
   border-radius: 10px;
   margin: 8px 12px;
   padding: 12px 14px;
@@ -593,8 +593,8 @@ html.dark .tp-toast {
 
 /* Upgrade prompt pulse animation */
 @keyframes upgradePulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(108, 92, 231, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 109, 119, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(0, 109, 119, 0); }
 }
 
 .upgrade-pulse {
@@ -608,7 +608,7 @@ html.dark .tp-toast {
 
 .section-paywall-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 109, 119, 0.3);
 }
 
 /* Usage bar */
@@ -674,16 +674,16 @@ html.dark .tp-toast {
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
-  border: 1px solid rgba(108, 92, 231, 0.3);
-  background: rgba(108, 92, 231, 0.1);
+  border: 1px solid rgba(0, 109, 119, 0.3);
+  background: rgba(0, 109, 119, 0.1);
   color: var(--tp-primary);
   transition: all 0.15s;
   white-space: nowrap;
 }
 
 .tp-quick-push-btn:hover {
-  background: rgba(108, 92, 231, 0.2);
-  border-color: rgba(108, 92, 231, 0.5);
+  background: rgba(0, 109, 119, 0.2);
+  border-color: rgba(0, 109, 119, 0.5);
 }
 
 .tp-quick-push-btn.pushed {

@@ -136,7 +136,7 @@ export function applyCodePaywall(codeBlock, feature, upgradePlan) {
 
   const btn = overlay.querySelector('.paywall-upgrade-btn');
   btn.addEventListener('click', triggerUpgrade);
-  btn.addEventListener('mouseenter', () => { btn.style.background = '#7d6ef0'; });
+  btn.addEventListener('mouseenter', () => { btn.style.background = '#005a63'; });
   btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--tp-primary)'; });
 }
 
@@ -175,7 +175,7 @@ export function renderSectionPaywall(container, feature, upgradePlan) {
   const btn = container.querySelector('.section-paywall-btn');
   btn.addEventListener('click', triggerUpgrade);
   btn.addEventListener('mouseenter', () => {
-    btn.style.background = '#7d6ef0';
+    btn.style.background = '#005a63';
     btn.style.transform = 'scale(1.02)';
   });
   btn.addEventListener('mouseleave', () => {

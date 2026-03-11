@@ -27,9 +27,13 @@ export const PAGE_TYPES = {
 // Platform identifiers
 export const PLATFORMS = {
   GA4: 'ga4',
+  GOOGLE_ADS: 'google_ads',
   META: 'meta',
   TIKTOK: 'tiktok',
   PINTEREST: 'pinterest',
+  SNAPCHAT: 'snapchat',
+  LINKEDIN: 'linkedin',
+  TWITTER: 'twitter',
 };
 
 // CMS detection signals with scoring weights
@@ -143,43 +147,11 @@ export const PAGE_TYPE_LABELS = {
   unknown: 'Unknown',
 };
 
-// GA4 event mapping by page type
-export const GA4_EVENT_MAP = {
-  product: 'view_item',
-  collection: 'view_item_list',
-  cart: 'view_cart',
-  checkout: 'begin_checkout',
-  thank_you: 'purchase',
-  search: 'search',
-};
-
-// Meta event mapping by page type
-export const META_EVENT_MAP = {
-  product: 'ViewContent',
-  collection: 'ViewCategory',
-  cart: 'ViewCart',
-  checkout: 'InitiateCheckout',
-  thank_you: 'Purchase',
-  search: 'Search',
-};
-
-// TikTok event mapping by page type
-export const TIKTOK_EVENT_MAP = {
-  product: 'ViewContent',
-  collection: 'ViewContent',
-  cart: 'ViewCart',
-  checkout: 'InitiateCheckout',
-  thank_you: 'PlaceAnOrder',
-  search: 'Search',
-};
-
-// Pinterest event mapping by page type
-export const PINTEREST_EVENT_MAP = {
-  product: 'pagevisit',
-  collection: 'viewcategory',
-  cart: 'addtocart',
-  thank_you: 'checkout',
-  search: 'search',
+// Platform display labels
+export const PLATFORM_LABELS = {
+  ga4: 'GA4', google_ads: 'Google Ads', meta: 'Meta', tiktok: 'TikTok',
+  pinterest: 'Pinterest', snapchat: 'Snapchat', linkedin: 'LinkedIn',
+  twitter: 'Twitter',
 };
 
 // Pixel detection patterns
@@ -191,6 +163,10 @@ export const PIXEL_PATTERNS = {
   ga4: {
     scripts: [/googletagmanager\.com\/gtag/, /google-analytics\.com/],
     idPattern: /G-[A-Z0-9]+/,
+  },
+  google_ads: {
+    scripts: [/googletagmanager\.com\/gtag/],
+    idPattern: /AW-[A-Z0-9]+/,
   },
   ua: {
     scripts: [/google-analytics\.com\/analytics\.js/],

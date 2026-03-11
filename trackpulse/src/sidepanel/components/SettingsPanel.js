@@ -5,12 +5,21 @@
 import { renderPlanBadge } from './PlanBadge.js';
 import { PLAN_CONFIG } from '../../shared/plans.js';
 
+// Dev/admin mode: show debug info only when extension is loaded unpacked (no update_url)
+function isDevMode() {
+  try {
+    const manifest = chrome.runtime.getManifest();
+    return !manifest.update_url;
+  } catch (e) { return false; }
+}
+
 export function renderSettingsPanel(container, state, actions) {
   const plan = state.plan || 'free';
   const email = state.userEmail;
   const capabilities = state.capabilities;
   const isDark = document.documentElement.classList.contains('dark');
   const autoSwitch = state.autoSwitchTab || false;
+  const showDebug = isDevMode();
 
   container.innerHTML = `
     <div style="padding: 16px;">
@@ -109,14 +118,14 @@ export function renderSettingsPanel(container, state, actions) {
         ">
           <div style="color: var(--tp-text-secondary); margin-bottom: 8px;"><b style="color: var(--tp-text);">Free</b> &mdash; CMS detection, dataLayer live, pixel status</div>
           <div style="color: #5B9BD5; margin-bottom: 8px;"><b>Starter ($9/mo)</b> &mdash; Copy events, Meta Pixel, PrestaShop, 5 domains</div>
-          <div style="color: #6C5CE7; margin-bottom: 8px;"><b>Pro ($19/mo)</b> &mdash; Push to dataLayer, Audit, Funnel Mode, PDF, all CMS</div>
+          <div style="color: #006d77; margin-bottom: 8px;"><b>Pro ($19/mo)</b> &mdash; Push to dataLayer, Audit, Funnel Mode, PDF, all CMS</div>
           <div style="color: #D4A017;"><b>Agency ($49/mo)</b> &mdash; White-label, debug snippets, unlimited</div>
         </div>
       </div>
       ` : ''}
 
-      <!-- Debug Info -->
-      ${state.planDebug ? `
+      <!-- Debug Info (admin/dev mode only) -->
+      ${showDebug && state.planDebug ? `
       <div style="margin-bottom: 24px;">
         <h3 style="color: var(--tp-text); font-size: 14px; margin-bottom: 12px;">ExtensionPay Debug</h3>
         <div style="
@@ -171,7 +180,7 @@ export function renderSettingsPanel(container, state, actions) {
     upgradeBtn.addEventListener('click', () => {
       if (actions?.navigateToPricing) actions.navigateToPricing();
     });
-    upgradeBtn.addEventListener('mouseenter', () => { upgradeBtn.style.background = '#7d6ef0'; });
+    upgradeBtn.addEventListener('mouseenter', () => { upgradeBtn.style.background = '#005a63'; });
     upgradeBtn.addEventListener('mouseleave', () => { upgradeBtn.style.background = 'var(--tp-primary)'; });
   }
 

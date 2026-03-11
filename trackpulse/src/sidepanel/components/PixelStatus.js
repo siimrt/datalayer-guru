@@ -11,6 +11,7 @@ import { enhancePixelsWithNetworkData } from '../utils/network-pixel-enhancer.js
 const PLATFORM_NAMES = {
   gtm: 'Google Tag Manager',
   ga4: 'Google Analytics 4',
+  google_ads: 'Google Ads',
   ua: 'Universal Analytics',
   meta: 'Meta Pixel',
   tiktok: 'TikTok Pixel',
@@ -46,7 +47,7 @@ export function renderPixelStatus(container, state) {
   const pixels = enhancePixelsWithNetworkData(rawPixels, state.networkRequests || []);
 
   // All possible platforms (to show "not detected" for missing ones)
-  const knownPlatforms = ['gtm', 'ga4', 'meta', 'tiktok', 'pinterest', 'snapchat', 'linkedin', 'twitter'];
+  const knownPlatforms = ['gtm', 'ga4', 'google_ads', 'meta', 'tiktok', 'pinterest', 'snapchat', 'linkedin', 'twitter'];
   const detectedPlatforms = new Set(pixels.map((p) => p.platform));
 
   let pixelHtml = '';
@@ -121,7 +122,7 @@ function renderPixelRow(pixel, detected) {
       <span class="text-[11px] ${detected ? 'text-tp-text-secondary' : 'text-tp-text-muted'}">
         ${idHtml}
         ${isNetwork ? '<span style="font-size: 9px; color: #00CEC9; margin-left: 4px;">via network</span>' : ''}
-        ${pixel.source === 'custom_pixel' && !isNetwork ? '<span style="font-size: 9px; color: #6C5CE7; margin-left: 4px;">via Custom Pixel</span>' : ''}
+        ${pixel.source === 'custom_pixel' && !isNetwork ? '<span style="font-size: 9px; color: #006d77; margin-left: 4px;">via Custom Pixel</span>' : ''}
       </span>
     </div>
   `;

@@ -24,14 +24,14 @@ export function resetAuditPanelState() {
  * Each entry defines the event name per platform.
  */
 const CANONICAL_EVENTS = {
-  view_item: { label: 'Product View', platforms: { ga4: 'view_item', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit' } },
-  add_to_cart: { label: 'Add to Cart', platforms: { ga4: 'add_to_cart', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart', snapchat: 'ADD_CART' } },
+  view_item: { label: 'Product View', platforms: { ga4: 'view_item', google_ads: 'conversion', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit' } },
+  add_to_cart: { label: 'Add to Cart', platforms: { ga4: 'add_to_cart', google_ads: 'conversion', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart', snapchat: 'ADD_CART' } },
   view_item_list: { label: 'Collection View', platforms: { ga4: 'view_item_list', meta: 'ViewCategory', tiktok: 'ViewContent', pinterest: 'viewcategory' } },
   view_cart: { label: 'View Cart', platforms: { ga4: 'view_cart', meta: 'ViewCart', tiktok: 'ViewCart' } },
-  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout' } },
+  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', google_ads: 'conversion', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout' } },
   add_shipping_info: { label: 'Add Shipping Info', platforms: { ga4: 'add_shipping_info' } },
   add_payment_info: { label: 'Add Payment Info', platforms: { ga4: 'add_payment_info' } },
-  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout' } },
+  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', google_ads: 'conversion', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout' } },
   search: { label: 'Search', platforms: { ga4: 'search', meta: 'Search', tiktok: 'Search', pinterest: 'search' } },
 };
 
@@ -128,7 +128,11 @@ export function renderAuditPanel(container, state, actions) {
       if (d.status === 'partial') {
         const issues = (d.fields || []).filter(
           (f) => f.status !== 'match' && f.status !== 'extra'
-        );
+        ).sort((a, b) => {
+          // Show missing/mismatch first, info/recommended last
+          const order = { missing: 0, mismatch: 1, info: 2, recommended: 3 };
+          return (order[a.status] ?? 1) - (order[b.status] ?? 1);
+        });
         if (issues.length > 0) {
           fieldsWithIssues.push({
             eventName: d.expected?.eventName,
@@ -207,6 +211,23 @@ export function renderAuditPanel(container, state, actions) {
     });
   });
 
+  // Copy conversion label on click
+  container.querySelectorAll('[data-copy-label]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const label = el.dataset.copyLabel;
+      if (label) {
+        navigator.clipboard.writeText(label).then(() => {
+          const original = el.textContent;
+          if (el.tagName === 'CODE') {
+            el.textContent = 'Copied!';
+            setTimeout(() => { el.textContent = original; }, 1200);
+          }
+        });
+      }
+    });
+  });
+
   container.querySelector('#copy-audit')?.addEventListener('click', () => {
     const report = generateTextAuditReport(state, diff);
     actions.copyCode(report);
@@ -261,15 +282,28 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
     }
 
     // Check network fallback
+    let networkMatchRef = null;
     if (status === 'missing') {
       const netMatch = findNetworkMatchForEvent(platform, eventName, networkRequests);
       if (netMatch) {
         status = 'network';
         source = netMatch.source === 'custom_pixel' ? 'Custom Pixel' : 'network';
+        networkMatchRef = netMatch;
       }
     }
 
-    platformResults.push({ platform, eventName, status, source });
+    // For Google Ads, also capture from diffResult network match
+    if (platform === 'google_ads') {
+      if (!networkMatchRef && diffResult?.networkMatch) {
+        networkMatchRef = diffResult.networkMatch;
+      }
+      // Last resort: search network requests directly
+      if (!networkMatchRef && status !== 'missing') {
+        networkMatchRef = findNetworkMatchForEvent(platform, eventName, networkRequests);
+      }
+    }
+
+    platformResults.push({ platform, eventName, status, source, networkMatchRef });
   }
 
   const detectedPlatforms = platformResults.filter((p) => p.status !== 'missing');
@@ -306,13 +340,36 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
     } else {
       statusHtml = `<span style="color: #FF6B6B; opacity: 0.6;">Tag detected, no events</span>`;
     }
+    // Google Ads: show conversion label with copy button
+    let conversionLabelHtml = '';
+    if (p.platform === 'google_ads' && p.networkMatchRef) {
+      const label = p.networkMatchRef.params?.label || null;
+      const pixelId = p.networkMatchRef.pixelId || null;
+      if (label) {
+        const fullLabel = pixelId ? `${pixelId}/${label}` : label;
+        conversionLabelHtml = `
+          <div style="display: flex; align-items: center; gap: 4px; margin-top: 2px; padding-left: 20px;">
+            <span style="font-size: 10px; color: var(--tp-text-muted);">Label:</span>
+            <code data-copy-label="${escapeHtml(fullLabel)}" style="
+              font-size: 10px; color: #4285F4; background: rgba(66,133,244,0.08);
+              padding: 1px 6px; border-radius: 4px; cursor: pointer; user-select: all;
+              border: 1px solid rgba(66,133,244,0.15);
+            " title="Click to copy">${escapeHtml(fullLabel)}</code>
+            <span data-copy-label="${escapeHtml(fullLabel)}" style="cursor: pointer; font-size: 10px; color: var(--tp-text-muted);" title="Copy label">📋</span>
+          </div>`;
+      }
+    }
+
     const rowOpacity = p.status === 'missing' ? 'opacity: 0.55;' : '';
     return `
-      <div style="display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 11px; ${rowOpacity}">
-        ${icon}
-        <span style="color: var(--tp-text); min-width: 55px;">${pLabel}</span>
-        <span style="color: var(--tp-text-muted);">${escapeHtml(p.eventName)}</span>
-        <span style="margin-left: auto;">${statusHtml}</span>
+      <div style="display: flex; flex-direction: column; padding: 3px 0; font-size: 11px; ${rowOpacity}">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          ${icon}
+          <span style="color: var(--tp-text); min-width: 55px;">${pLabel}</span>
+          <span style="color: var(--tp-text-muted);">${escapeHtml(p.eventName)}</span>
+          <span style="margin-left: auto;">${statusHtml}</span>
+        </div>
+        ${conversionLabelHtml}
       </div>
     `;
   }).join('');
@@ -371,11 +428,18 @@ function renderFieldDiffs(item) {
     <div style="margin-bottom: 6px;">
       <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--tp-text-muted); padding-left: 8px; margin-bottom: 2px;">${category}</div>
       ${fields.map((field) => {
-        const icon = field.status === 'missing' ? '&#10007;' : '&#9888;';
-        const iconColor = field.status === 'missing' ? '#FF6B6B' : '#F0932B';
+        const isRecommended = field.status === 'recommended';
+        const isInfo = field.status === 'info';
+        const icon = field.status === 'missing' ? '&#10007;' : isRecommended ? '&#9737;' : isInfo ? '&#8505;' : '&#9888;';
+        const iconColor = field.status === 'missing' ? '#FF6B6B' : isRecommended ? '#006d77' : isInfo ? '#74B9FF' : '#F0932B';
         let valueHtml;
         if (field.status === 'missing') {
           valueHtml = `<span style="color: #FF6B6B;">missing</span>`;
+        } else if (isRecommended) {
+          valueHtml = `<span style="color: #006d77; opacity: 0.8;">recommended</span>`;
+        } else if (isInfo) {
+          valueHtml = `<span style="color: #74B9FF;"><code style="background: rgba(116,185,255,0.1); padding: 1px 4px; border-radius: 3px; font-size: 10px;">${escapeHtml(formatFieldValue(field.actual))}</code></span>
+            <span style="color: var(--tp-text-muted); margin: 0 2px; font-size: 9px;">variant ID</span>`;
         } else {
           valueHtml = `<span style="color: #FF6B6B;"><code style="background: rgba(255,107,107,0.1); padding: 1px 4px; border-radius: 3px; font-size: 10px;">${escapeHtml(formatFieldValue(field.actual))}</code></span>
             <span style="color: var(--tp-text-muted); margin: 0 2px;">/</span>
@@ -451,7 +515,7 @@ function renderNetworkRequestsSection(networkRequests) {
           <div style="display: flex; align-items: center; gap: 6px;">
             <span style="color: var(--tp-text-muted); min-width: 32px;">${escapeHtml(method)}</span>
             <span style="font-weight: 600; color: var(--tp-text);">${escapeHtml(evName)}</span>
-            ${source ? `<span style="color: #6C5CE7; font-size: 9px;">${escapeHtml(source)}</span>` : ''}
+            ${source ? `<span style="color: #006d77; font-size: 9px;">${escapeHtml(source)}</span>` : ''}
             <span style="margin-left: auto; color: var(--tp-text-muted);">${ts}</span>
           </div>
           ${paramEntries.length > 0 ? `
