@@ -11,6 +11,12 @@ const ECOMMERCE_EVENTS = new Set([
   'purchase', 'refund',
 ]);
 
+// Lead gen events (simpler structure, no items[] required)
+const LEADGEN_EVENTS = new Set([
+  'generate_lead', 'sign_up', 'contact', 'form_submit', 'form_start',
+  'schedule', 'book_appointment', 'request_quote', 'qualify_lead',
+]);
+
 // Required ecommerce fields per event type
 const EVENT_REQUIRED_FIELDS = {
   view_item: ['items'],

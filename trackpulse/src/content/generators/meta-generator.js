@@ -51,6 +51,35 @@ export class MetaGenerator {
       case PAGE_TYPES.SEARCH:
         events.push(this._search(ecommerceData));
         break;
+
+      // --- Lead gen page types ---
+      case PAGE_TYPES.CONTACT:
+      case PAGE_TYPES.FORM:
+        events.push(this._lead());
+        events.push(this._contact());
+        break;
+
+      case PAGE_TYPES.DEMO:
+        events.push(this._lead());
+        events.push(this._schedule());
+        break;
+
+      case PAGE_TYPES.LANDING:
+        events.push(this._lead());
+        break;
+
+      case PAGE_TYPES.PRICING:
+        events.push(this._lead());
+        break;
+
+      case PAGE_TYPES.CONFIRMATION:
+        events.push(this._lead());
+        events.push(this._completeRegistration());
+        break;
+
+      case PAGE_TYPES.SERVICES:
+        events.push(this._lead());
+        break;
     }
 
     return events;
@@ -168,6 +197,37 @@ export class MetaGenerator {
     }
 
     return this._createEvent('Search', params, PAGE_TYPES.SEARCH);
+  }
+
+  _lead() {
+    const params = {
+      content_name: document.title,
+      content_category: 'lead',
+    };
+    return this._createEvent('Lead', params, 'leadgen');
+  }
+
+  _contact() {
+    const params = {
+      content_name: document.title,
+    };
+    return this._createEvent('Contact', params, 'leadgen');
+  }
+
+  _completeRegistration() {
+    const params = {
+      content_name: document.title,
+      status: 'complete',
+    };
+    return this._createEvent('CompleteRegistration', params, 'leadgen');
+  }
+
+  _schedule() {
+    const params = {
+      content_name: document.title,
+      content_category: 'demo',
+    };
+    return this._createEvent('Schedule', params, 'leadgen');
   }
 
   _createEvent(eventName, params, pageType) {

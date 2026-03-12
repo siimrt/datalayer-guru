@@ -2,8 +2,39 @@
  * Header Component — Shows CMS badge, page type, currency, plan badge, and refresh button.
  */
 
-import { CMS_INFO, CMS_LOGOS, PAGE_TYPE_LABELS } from '../../shared/constants.js';
+import { CMS_INFO, CMS_LOGOS, PAGE_TYPE_LABELS, SITE_TYPE_INFO, SITE_TYPES } from '../../shared/constants.js';
 import { renderPlanBadge } from './PlanBadge.js';
+
+function getPageTypeIcon(pageType) {
+  const icons = {
+    home: '🏠 ',
+    collection: '🗂️ ',
+    product: '📦 ',
+    cart: '🛒 ',
+    checkout: '💳 ',
+    thank_you: '✅ ',
+    search: '🔍 ',
+  };
+  return icons[pageType] || '';
+}
+
+function getSiteTypeIcon(siteType) {
+  const icons = {
+    ecommerce: '🛒 ',
+    leadgen: '🎯 ',
+    hybrid: '🔀 ',
+  };
+  return icons[siteType] || '';
+}
+
+function getSiteTypeStyle(siteType) {
+  const styles = {
+    ecommerce: 'background:#F0FDF4;color:#166534;border:none;padding:4px 10px',
+    leadgen: 'background:#EEF2FF;color:#3730A3;border:none;padding:4px 10px',
+    hybrid: 'background:#FAF5FF;color:#6B21A8;border:none;padding:4px 10px',
+  };
+  return styles[siteType] || 'background:#F1F5F9;color:#334155;border:none;padding:4px 10px';
+}
 
 export function renderHeader(container, state, onRefresh, onUpgrade) {
   const cms = state.cms?.cms || 'unknown';
@@ -13,6 +44,8 @@ export function renderHeader(container, state, onRefresh, onUpgrade) {
   const pageLabel = PAGE_TYPE_LABELS[pageType] || 'Unknown';
   const currency = state.ecommerceData?.currency || '';
   const version = state.cms?.version || '';
+  const effectiveSiteType = state.siteTypeOverride || state.siteType?.siteType || 'unknown';
+  const siteTypeInfo = SITE_TYPE_INFO?.[effectiveSiteType] || { name: 'Unknown', color: '#888' };
 
   // Get hostname from URL
   let hostname = '';
@@ -31,7 +64,8 @@ export function renderHeader(container, state, onRefresh, onUpgrade) {
             ${cmsInfo.name}
             <span class="text-tp-text-muted text-[10px]">(${confidence}%)</span>
           </span>
-          <span class="tp-badge tp-badge-page">${pageLabel}</span>
+          <span class="tp-badge tp-badge-page">${getPageTypeIcon(pageType)}${pageLabel}</span>
+          <span class="tp-badge tp-badge-site-type" style="${getSiteTypeStyle(effectiveSiteType)}" id="site-type-badge" title="Site type: ${siteTypeInfo.name}${state.siteTypeOverride ? ' (override)' : ''}">${getSiteTypeIcon(effectiveSiteType)}${siteTypeInfo.name}${state.siteTypeOverride ? ' *' : ''}</span>
           ${currency ? `<span class="tp-badge tp-badge-currency">${currency}</span>` : ''}
         </div>
         <div class="flex items-center gap-2">

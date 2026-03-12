@@ -11,6 +11,19 @@ import { PAGE_TYPE_LABELS, PLATFORM_LABELS } from '../../shared/constants.js';
 import { renderSectionPaywall } from './Paywall.js';
 import { enhanceAuditWithNetworkData, findNetworkMatchForEvent } from '../utils/network-audit-enhancer.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
+import { isServerSideRequest } from '../../content/parsers/network-request-parser.js';
+import {
+  CANONICAL_EVENTS, CANONICAL_EVENTS_LEADGEN,
+  EXPECTED_EVENTS_BY_PAGE, EXPECTED_EVENTS_BY_PAGE_LEADGEN,
+  extractEventNameFromStreamEntry,
+} from '../../shared/canonical-audit.js';
+
+const LEADGEN_TOOL_COLORS = {
+  crm: '#FF6F00',
+  call_tracking: '#00897B',
+  chat: '#5C6BC0',
+  scheduling: '#AB47BC',
+};
 
 // Track which audit rows are expanded (persists across re-renders, resets on page navigation)
 const expandedAuditRows = new Set();
@@ -19,51 +32,7 @@ export function resetAuditPanelState() {
   expandedAuditRows.clear();
 }
 
-/**
- * Canonical events per page type.
- * Each entry defines the event name per platform.
- */
-const CANONICAL_EVENTS = {
-  view_item: { label: 'Product View', platforms: { ga4: 'view_item', google_ads: 'conversion', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit' } },
-  add_to_cart: { label: 'Add to Cart', platforms: { ga4: 'add_to_cart', google_ads: 'conversion', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart', snapchat: 'ADD_CART' } },
-  view_item_list: { label: 'Collection View', platforms: { ga4: 'view_item_list', meta: 'ViewCategory', tiktok: 'ViewContent', pinterest: 'viewcategory' } },
-  view_cart: { label: 'View Cart', platforms: { ga4: 'view_cart', meta: 'ViewCart', tiktok: 'ViewCart' } },
-  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', google_ads: 'conversion', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout' } },
-  add_shipping_info: { label: 'Add Shipping Info', platforms: { ga4: 'add_shipping_info' } },
-  add_payment_info: { label: 'Add Payment Info', platforms: { ga4: 'add_payment_info' } },
-  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', google_ads: 'conversion', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout' } },
-  search: { label: 'Search', platforms: { ga4: 'search', meta: 'Search', tiktok: 'Search', pinterest: 'search' } },
-};
-
-/**
- * Which canonical events are expected per page type.
- */
-const EXPECTED_EVENTS_BY_PAGE = {
-  product: ['view_item', 'add_to_cart'],
-  collection: ['view_item_list'],
-  cart: ['view_cart'],
-  checkout: ['begin_checkout', 'add_shipping_info', 'add_payment_info'],
-  thank_you: ['purchase'],
-  search: ['search'],
-};
-
-/**
- * Extract event name from a live dataLayer stream entry.
- * Handles both standard format ({event: 'xxx'}) and gtag format ({0: 'event', 1: 'xxx'}).
- */
-function extractEventNameFromStreamEntry(entry) {
-  let data = entry.data;
-  // Unwrap single-element array (bridge wraps push args in array)
-  if (Array.isArray(data) && data.length === 1) data = data[0];
-  if (Array.isArray(data) && data.length > 1) data = data[0]; // multi-arg, take first
-  if (!data || typeof data !== 'object') return null;
-
-  // Standard format: {event: 'view_item', ...}
-  if (data.event) return data.event;
-  // gtag format: {0: 'event', 1: 'view_item', 2: {...}}
-  if (data['0'] === 'event' && data['1']) return data['1'];
-  return null;
-}
+// Constants and helpers are now imported from shared/canonical-audit.js
 
 export function renderAuditPanel(container, state, actions) {
   if (state.capabilities && !state.capabilities.canAudit) {
@@ -94,21 +63,75 @@ export function renderAuditPanel(container, state, actions) {
   // Use centrally-computed detected platforms (from pixels + network requests)
   const installedPlatforms = state.detectedPlatforms || new Set(['ga4']);
 
-  const expectedKeys = EXPECTED_EVENTS_BY_PAGE[pageType] || [];
+  // Determine which event map to use based on site type
+  const effectiveSiteType = state.siteTypeOverride || state.siteType?.siteType || 'unknown';
+  const isLeadgen = effectiveSiteType === 'leadgen' || effectiveSiteType === 'hybrid';
+  const isEcom = effectiveSiteType === 'ecommerce' || effectiveSiteType === 'hybrid';
+
+  // Merge expected keys from ecom + leadgen based on site type
+  let expectedKeys = [];
+  if (isEcom) {
+    expectedKeys.push(...(EXPECTED_EVENTS_BY_PAGE[pageType] || []));
+  }
+  if (isLeadgen) {
+    expectedKeys.push(...(EXPECTED_EVENTS_BY_PAGE_LEADGEN[pageType] || []));
+  }
+  if (expectedKeys.length === 0) {
+    // Fallback: try ecom first, then leadgen
+    expectedKeys = EXPECTED_EVENTS_BY_PAGE[pageType] || EXPECTED_EVENTS_BY_PAGE_LEADGEN[pageType] || [];
+  }
+
+  // Merge canonical event maps
+  const allCanonicalEvents = { ...CANONICAL_EVENTS, ...CANONICAL_EVENTS_LEADGEN };
 
   let auditHtml = '';
 
+  // Lead gen tools section (if detected)
+  const leadgenTools = state.leadgenTools || [];
+  if (leadgenTools.length > 0) {
+    auditHtml += `
+      <div class="tp-card">
+        <div class="p-3">
+          <div class="text-[12px] font-medium mb-2">Lead Gen Tools Detected</div>
+          <div class="flex flex-wrap gap-1">
+            ${leadgenTools.map((t) => `<span class="tp-badge" style="background:${LEADGEN_TOOL_COLORS[t.category] || '#888'}20;color:${LEADGEN_TOOL_COLORS[t.category] || '#888'};border:1px solid ${LEADGEN_TOOL_COLORS[t.category] || '#888'}40;font-size:10px;">${escapeHtml(t.name)}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Forms section (if detected)
+  const forms = state.forms || [];
+  if (forms.length > 0) {
+    auditHtml += `
+      <div class="tp-card">
+        <div class="p-3">
+          <div class="text-[12px] font-medium mb-2">Forms Detected (${forms.length})</div>
+          ${forms.map((f) => `
+            <div style="font-size:11px;padding:3px 0;border-bottom:1px solid var(--tp-border);">
+              <span class="font-medium">${escapeHtml(f.builderName || 'Native')}</span>
+              <span class="tp-badge tp-badge-page" style="font-size:9px;margin-left:4px;">${escapeHtml(f.purpose)}</span>
+              ${f.capturesUtm ? '<span style="color:#00B894;font-size:9px;margin-left:4px;">UTM</span>' : '<span style="color:#FF6B6B;font-size:9px;margin-left:4px;">No UTM</span>'}
+              ${f.capturesClickIds ? '<span style="color:#00B894;font-size:9px;margin-left:4px;">GCLID</span>' : '<span style="color:#FF6B6B;font-size:9px;margin-left:4px;">No GCLID</span>'}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   if (expectedKeys.length === 0) {
-    auditHtml = `
+    auditHtml += `
       <div class="tp-empty">
         <div class="tp-empty-icon">&#9989;</div>
-        <p>No ecommerce events expected for "${pageLabel}" page</p>
+        <p>No tracking events expected for "${pageLabel}" page</p>
       </div>
     `;
   } else {
     // Build event-grouped rows
     const eventRows = expectedKeys.map((key) => {
-      const canonical = CANONICAL_EVENTS[key];
+      const canonical = allCanonicalEvents[key];
       if (!canonical) return '';
       return renderCanonicalEventRow(canonical, key, diff, existingEvents, networkRequests, streamEventNames, streamEventNamesLower, installedPlatforms);
     }).join('');
@@ -336,7 +359,12 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
     } else if (p.status === 'partial') {
       statusHtml = `<span style="color: #F0932B;">Partial match</span>`;
     } else if (p.status === 'network') {
-      statusHtml = `<span style="color: #00CEC9;">Sent via ${p.source}</span>`;
+      const isSSR = p.networkMatchRef && isServerSideRequest(p.networkMatchRef.url);
+      if (isSSR) {
+        statusHtml = `<span class="tp-badge-ss">Server-Side</span>`;
+      } else {
+        statusHtml = `<span style="color: #00CEC9;">Sent via network</span>`;
+      }
     } else {
       statusHtml = `<span style="color: #FF6B6B; opacity: 0.6;">Tag detected, no events</span>`;
     }
@@ -582,6 +610,14 @@ function generateTextAuditReport(state, enhancedDiff) {
   lines.push(`URL: ${state.url || ''}`);
   lines.push(`CMS: ${cms} (${state.cms?.confidence || 0}% confidence)`);
   lines.push(`Page Type: ${pageType}`);
+  const stEffective = state.siteTypeOverride || state.siteType?.siteType || 'unknown';
+  lines.push(`Site Type: ${stEffective}${state.siteTypeOverride ? ' (override)' : ''}`);
+  if (state.leadgenTools?.length > 0) {
+    lines.push(`Lead Gen Tools: ${state.leadgenTools.map((t) => t.name).join(', ')}`);
+  }
+  if (state.forms?.length > 0) {
+    lines.push(`Forms: ${state.forms.length} detected`);
+  }
   lines.push(``);
 
   lines.push(`Event Status:`);

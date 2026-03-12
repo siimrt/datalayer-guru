@@ -45,6 +45,21 @@ export class PinterestGenerator {
       case PAGE_TYPES.SEARCH:
         events.push(this._search(ecommerceData));
         break;
+
+      // --- Lead gen page types ---
+      case PAGE_TYPES.CONTACT:
+      case PAGE_TYPES.FORM:
+      case PAGE_TYPES.DEMO:
+      case PAGE_TYPES.LANDING:
+      case PAGE_TYPES.PRICING:
+      case PAGE_TYPES.SERVICES:
+        events.push(this._lead());
+        break;
+
+      case PAGE_TYPES.CONFIRMATION:
+        events.push(this._lead());
+        events.push(this._signup());
+        break;
     }
 
     return events;
@@ -137,6 +152,20 @@ export class PinterestGenerator {
     };
 
     return this._createEvent('search', params, PAGE_TYPES.SEARCH);
+  }
+
+  _lead() {
+    const params = {
+      lead_type: 'form',
+    };
+    return this._createEvent('lead', params, 'leadgen');
+  }
+
+  _signup() {
+    const params = {
+      lead_type: 'signup',
+    };
+    return this._createEvent('signup', params, 'leadgen');
   }
 
   _createEvent(eventName, params, pageType) {

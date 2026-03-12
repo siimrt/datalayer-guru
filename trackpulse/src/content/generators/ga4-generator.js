@@ -52,6 +52,34 @@ export class GA4Generator {
       case PAGE_TYPES.SEARCH:
         events.push(this._search(ecommerceData));
         break;
+
+      // --- Lead gen page types ---
+      case PAGE_TYPES.CONTACT:
+      case PAGE_TYPES.FORM:
+        events.push(this._generateLead('contact'));
+        break;
+
+      case PAGE_TYPES.DEMO:
+        events.push(this._generateLead('demo'));
+        events.push(this._schedule());
+        break;
+
+      case PAGE_TYPES.LANDING:
+        events.push(this._generateLead('landing'));
+        break;
+
+      case PAGE_TYPES.PRICING:
+        events.push(this._generateLead('pricing'));
+        break;
+
+      case PAGE_TYPES.CONFIRMATION:
+        events.push(this._generateLead('confirmation'));
+        events.push(this._signUp());
+        break;
+
+      case PAGE_TYPES.SERVICES:
+        events.push(this._generateLead('services'));
+        break;
     }
 
     // Always generate page_view
@@ -175,6 +203,31 @@ export class GA4Generator {
     };
 
     return this._createEvent('search', eventObj, PAGE_TYPES.SEARCH);
+  }
+
+  _generateLead(source) {
+    const eventObj = {
+      event: 'generate_lead',
+      lead_source: source,
+      page_location: window.location.href,
+    };
+    return this._createEvent('generate_lead', eventObj, 'leadgen');
+  }
+
+  _signUp() {
+    const eventObj = {
+      event: 'sign_up',
+      method: 'form',
+    };
+    return this._createEvent('sign_up', eventObj, 'leadgen');
+  }
+
+  _schedule() {
+    const eventObj = {
+      event: 'schedule',
+      method: 'demo_request',
+    };
+    return this._createEvent('schedule', eventObj, 'leadgen');
   }
 
   _pageView() {

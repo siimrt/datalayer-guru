@@ -10,6 +10,24 @@ import { initAnalytics, trackEvent, identifyUser } from '../shared/analytics.js'
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
 
+// ---- Anti-flicker: skip re-render when detection data hasn't changed ----
+let _lastDetectionFingerprint = null;
+
+function detectionFingerprint(payload) {
+  return JSON.stringify({
+    cms: payload.cms,
+    pageType: payload.pageType,
+    siteType: payload.siteType || null,
+    pixels: payload.pixels || [],
+    consent: payload.consent,
+    url: payload.url || '',
+    generatedEvents: payload.generatedEvents || {},
+    audit: payload.audit || {},
+    leadgenTools: payload.leadgenTools || [],
+    forms: payload.forms || [],
+  });
+}
+
 // ---- Popup Mode Detection ----
 const IS_POPUP = new URLSearchParams(window.location.search).get('popup') === '1';
 
@@ -61,10 +79,14 @@ const state = {
   // V1 state
   cms: null,
   pageType: null,
+  siteType: null,
+  siteTypeOverride: null,
   ecommerceData: null,
   generatedEvents: { ga4: [], meta: [], tiktok: [], pinterest: [] },
-  audit: { existingEvents: [], diff: [] },
+  audit: { existingEvents: [], existingLeadgenEvents: [], diff: [] },
   pixels: [],
+  leadgenTools: [],
+  forms: [],
   consent: null,
   dataLayerStream: [],
   activeTab: 'events',
@@ -250,13 +272,18 @@ const actions = {
     }
 
     trackEvent('pdf_exported');
-    // Dynamic import for PDF generation
-    const { generateAuditReport } = await import('../export/pdf-report.js');
-    const filename = await generateAuditReport(
-      { ...state, networkRequests: state.networkRequests },
-      { whiteLabelLogo: state.capabilities.canWhiteLabel ? null : null }
-    );
-    showToast(`Report saved: ${filename}`, 'success');
+    try {
+      // Dynamic import for PDF generation
+      const { generateAuditReport } = await import('../export/pdf-report.js');
+      await generateAuditReport(
+        { ...state, networkRequests: state.networkRequests },
+        { whiteLabelLogo: state.capabilities.canWhiteLabel ? null : null }
+      );
+      showToast('PDF downloaded', 'success');
+    } catch (e) {
+      console.error('[Traacky] PDF export failed:', e);
+      showToast('PDF generation failed', 'error');
+    }
   },
 
   pushSyntheticEvent(code, target) {
@@ -353,6 +380,12 @@ const actions = {
     state.autoSwitchTab = enabled;
     chrome.storage.local.set({ tp_auto_switch_tab: enabled });
     trackEvent('auto_switch_tab_toggled', { enabled });
+  },
+
+  setSiteTypeOverride(siteType) {
+    state.siteTypeOverride = siteType || null;
+    trackEvent('site_type_override', { siteType: siteType || 'auto' });
+    render();
   },
 };
 
@@ -461,8 +494,12 @@ chrome.runtime.onMessage.addListener((msg) => {
   switch (msg.type) {
     case MSG.DETECTION_RESULT: {
       const payload = msg.payload;
+      const fp = detectionFingerprint(payload);
+      if (fp === _lastDetectionFingerprint) break;
+      _lastDetectionFingerprint = fp;
       state.cms = payload.cms;
       state.pageType = payload.pageType;
+      state.siteType = payload.siteType || null;
       state.ecommerceData = payload.ecommerceData;
       state.monitoredFrames = new Set(); // Reset for new page
       state.generatedEvents = payload.generatedEvents || {
@@ -471,8 +508,10 @@ chrome.runtime.onMessage.addListener((msg) => {
         tiktok: [],
         pinterest: [],
       };
-      state.audit = payload.audit || { existingEvents: [], diff: [] };
+      state.audit = payload.audit || { existingEvents: [], existingLeadgenEvents: [], diff: [] };
       state.pixels = payload.pixels || [];
+      state.leadgenTools = payload.leadgenTools || [];
+      state.forms = payload.forms || [];
       state.consent = payload.consent;
       state.url = payload.url || '';
       state.timestamp = payload.timestamp;
@@ -581,33 +620,62 @@ chrome.runtime.onMessage.addListener((msg) => {
     case MSG.NETWORK_REQUEST: {
       const netPayload = msg.payload;
 
-      // Dedup: skip if same URL prefix was recently captured (JS hooks + webRequest overlap)
+      // Parse first so we know the event name for dedup keying.
+      // This prevents different events sent to the same URL (e.g. TikTok Pageview
+      // + ViewContent both POST to analytics.tiktok.com/api/v2/shopify_pixel)
+      // from being incorrectly deduplicated.
+      const parsed = parseNetworkRequest(netPayload.platform, netPayload.url, netPayload.body);
+      const resolvedEventName = parsed.eventName || netPayload.eventName || null;
+
+      // Dedup: skip if same URL+event was recently captured (JS hooks + webRequest overlap)
+      // Exception: if new request has body (richer data from JS hook), update existing entry
       if (!state._netDedupMap) state._netDedupMap = new Map();
-      const netUrlKey = (netPayload.url || '').slice(0, 200);
+      const netUrlKey = (netPayload.url || '').slice(0, 200) + '::' + (resolvedEventName || Math.random());
       const netNow = Date.now();
-      const netLastSeen = state._netDedupMap.get(netUrlKey);
-      if (netLastSeen && netNow - netLastSeen < 2000) break;
-      state._netDedupMap.set(netUrlKey, netNow);
-      if (state._netDedupMap.size > 300) {
-        for (const [k, t] of state._netDedupMap) {
-          if (netNow - t > 10000) state._netDedupMap.delete(k);
+      const netPrev = state._netDedupMap.get(netUrlKey);
+      if (netPrev && netNow - netPrev.ts < 2000) {
+        // Duplicate detected — but if new one has body and old didn't, upgrade in place
+        if (netPayload.body && !netPrev.hasBody) {
+          if (resolvedEventName) {
+            // Find and update the existing entry in networkRequests
+            const existing = state.networkRequests.find(r => r.id === netPrev.entryId);
+            if (existing) {
+              existing.eventName = resolvedEventName;
+              existing.params = parsed.params;
+              existing.items = parsed.items;
+              if (parsed.measurementId) existing.measurementId = parsed.measurementId;
+              if (parsed.pixelId) existing.pixelId = parsed.pixelId;
+            }
+            state._netDedupMap.set(netUrlKey, { ts: netPrev.ts, hasBody: true, entryId: netPrev.entryId });
+            // Trigger re-render for audit/datalayer tabs
+            if (state.activeTab === 'audit' || state.activeTab === 'datalayer' || state.activeTab === 'pixels') {
+              clearTimeout(auditRerenderTimer);
+              auditRerenderTimer = setTimeout(() => renderActiveTab(), 300);
+            }
+          }
         }
+        break;
       }
 
-      const parsed = parseNetworkRequest(netPayload.platform, netPayload.url, netPayload.body);
       const netEntry = {
         id: Date.now() + Math.random(),
         timestamp: new Date(netPayload.timestamp || Date.now()),
         platform: netPayload.platform,
         url: netPayload.url,
         method: netPayload.method,
-        eventName: parsed.eventName || netPayload.eventName || null,
+        eventName: resolvedEventName,
         params: parsed.params,
         items: parsed.items,
         measurementId: parsed.measurementId || null,
         pixelId: parsed.pixelId || netPayload.pixelId || null,
         source: netPayload.source || 'top',
       };
+      state._netDedupMap.set(netUrlKey, { ts: netNow, hasBody: !!netPayload.body, entryId: netEntry.id });
+      if (state._netDedupMap.size > 300) {
+        for (const [k, entry] of state._netDedupMap) {
+          if (netNow - entry.ts > 10000) state._netDedupMap.delete(k);
+        }
+      }
       state.networkRequests.unshift(netEntry);
 
       // Update detected platforms if new platform seen
@@ -644,6 +712,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       if (state.activeTab === 'datalayer') {
         appendNetworkEntry(tabContentEl, netEntry, state.networkRequests.length);
       }
+
       break;
     }
 
@@ -651,6 +720,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       // Clear live streams on navigation (URL change or tab switch).
       // Fired by the service worker BEFORE new page scripts run,
       // so new dataLayer events won't be wiped.
+      _lastDetectionFingerprint = null;
       clearTimeout(auditRerenderTimer);
       state.dataLayerStream = [];
       state.networkRequests = [];
@@ -842,6 +912,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (response) {
           state.cms = response.cms;
           state.pageType = response.pageType;
+          state.siteType = response.siteType || null;
           state.ecommerceData = response.ecommerceData;
           state.generatedEvents = response.generatedEvents || {
             ga4: [],
@@ -849,8 +920,10 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             tiktok: [],
             pinterest: [],
           };
-          state.audit = response.audit || { existingEvents: [], diff: [] };
+          state.audit = response.audit || { existingEvents: [], existingLeadgenEvents: [], diff: [] };
           state.pixels = response.pixels || [];
+          state.leadgenTools = response.leadgenTools || [];
+          state.forms = response.forms || [];
           state.consent = response.consent;
           state.url = response.url || '';
           state.loading = false;
@@ -889,7 +962,7 @@ setTimeout(() => {
 // This runs silently — no loading spinner, no visible page reload.
 
 let _silentRefreshTimer = null;
-const SILENT_REFRESH_INTERVAL = 8000; // 8 seconds
+const SILENT_REFRESH_INTERVAL = 30000; // 30 seconds
 
 function startSilentRefresh() {
   if (_silentRefreshTimer) return;

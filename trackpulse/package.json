@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "extpay": "^3.1.2",
+    "html2pdf.js": "^0.14.0",
     "jspdf": "^2.5.1",
     "posthog-js-lite": "^4.5.2"
   },

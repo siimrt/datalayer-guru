@@ -305,6 +305,23 @@ function fallbackDetection(pageContext) {
     } catch (e) {}
   }
 
+  // JSON-LD: Service / LocalBusiness → services page
+  for (const script of jsonldScripts) {
+    try {
+      const data = JSON.parse(script.textContent);
+      const items = Array.isArray(data) ? data : [data];
+      for (const item of items) {
+        if (item['@type'] === 'Service' || item['@type'] === 'LocalBusiness' || item['@type'] === 'ProfessionalService') {
+          return {
+            pageType: PAGE_TYPES.SERVICES,
+            confidence: 60,
+            method: 'fallback',
+          };
+        }
+      }
+    } catch (e) {}
+  }
+
   // URL-based guesses
   if (/^\/$/i.test(pathname)) {
     return {
@@ -313,6 +330,58 @@ function fallbackDetection(pageContext) {
       method: 'fallback',
     };
   }
+
+  // Lead gen URL patterns (before ecom to avoid conflicts)
+  if (/\/(contact|kontakt|nous-contacter|contacto)\/?$/i.test(pathname)) {
+    return {
+      pageType: PAGE_TYPES.CONTACT,
+      confidence: 50,
+      method: 'fallback',
+    };
+  }
+  if (/\/(demo|book-a-demo|request-demo|schedule-demo)\/?$/i.test(pathname)) {
+    return {
+      pageType: PAGE_TYPES.DEMO_REQUEST,
+      confidence: 50,
+      method: 'fallback',
+    };
+  }
+  if (/\/(pricing|tarifs|plans|packages)\/?$/i.test(pathname)) {
+    return {
+      pageType: PAGE_TYPES.PRICING,
+      confidence: 50,
+      method: 'fallback',
+    };
+  }
+  if (/\/(services|solutions|what-we-do)\/?$/i.test(pathname)) {
+    return {
+      pageType: PAGE_TYPES.SERVICES,
+      confidence: 40,
+      method: 'fallback',
+    };
+  }
+  if (/\/(about|a-propos|who-we-are|team)\/?$/i.test(pathname)) {
+    return {
+      pageType: PAGE_TYPES.ABOUT,
+      confidence: 40,
+      method: 'fallback',
+    };
+  }
+  if (/\/(landing|lp|offer)\//i.test(pathname)) {
+    return {
+      pageType: PAGE_TYPES.LANDING_PAGE,
+      confidence: 40,
+      method: 'fallback',
+    };
+  }
+  if (/\/(confirmation|thank[-_]?you|merci|success)\/?$/i.test(pathname) && !/order/i.test(pathname)) {
+    return {
+      pageType: PAGE_TYPES.CONFIRMATION,
+      confidence: 40,
+      method: 'fallback',
+    };
+  }
+
   if (/\/(product|item|p)\//i.test(pathname)) {
     return {
       pageType: PAGE_TYPES.PRODUCT,

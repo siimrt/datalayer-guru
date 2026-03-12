@@ -55,11 +55,41 @@ const EXPECTED_FUNNEL_EVENTS = [
   },
 ];
 
+const EXPECTED_FUNNEL_EVENTS_LEADGEN = [
+  {
+    key: 'page_view',
+    label: 'Landing Page View',
+    events: { ga4: 'page_view', meta: 'PageView' },
+  },
+  {
+    key: 'form_start',
+    label: 'Form Interaction',
+    events: { ga4: 'form_start' },
+  },
+  {
+    key: 'generate_lead',
+    label: 'Lead Generated',
+    events: { ga4: 'generate_lead', meta: 'Lead', tiktok: 'SubmitForm', pinterest: 'lead' },
+  },
+  {
+    key: 'confirmation',
+    label: 'Confirmation',
+    events: { ga4: 'sign_up', meta: 'CompleteRegistration', tiktok: 'CompleteRegistration', pinterest: 'signup' },
+  },
+];
+
 // Reverse lookup: platform-specific eventName → canonical funnel key
 const EVENT_TO_FUNNEL_KEY = {};
 for (const fe of EXPECTED_FUNNEL_EVENTS) {
   for (const eventName of Object.values(fe.events)) {
     EVENT_TO_FUNNEL_KEY[eventName] = fe.key;
+  }
+}
+for (const fe of EXPECTED_FUNNEL_EVENTS_LEADGEN) {
+  for (const eventName of Object.values(fe.events)) {
+    if (!EVENT_TO_FUNNEL_KEY[eventName]) {
+      EVENT_TO_FUNNEL_KEY[eventName] = fe.key;
+    }
   }
 }
 
@@ -986,8 +1016,13 @@ function renderFunnelReport(container, report, funnelSession, capabilities, stat
   });
 
   container.querySelector('#funnel-export-btn')?.addEventListener('click', async () => {
-    const { generateFunnelPDFReport } = await import('../../export/pdf-report.js');
-    await generateFunnelPDFReport(report);
+    try {
+      const { generateFunnelPDFReport } = await import('../../export/pdf-report.js');
+      await generateFunnelPDFReport(report);
+      // Toast is shown from the calling context if available
+    } catch (e) {
+      console.error('[Traacky] Funnel PDF export failed:', e);
+    }
   });
 }
 

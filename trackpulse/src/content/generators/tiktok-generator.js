@@ -51,6 +51,35 @@ export class TikTokGenerator {
       case PAGE_TYPES.SEARCH:
         events.push(this._search(ecommerceData));
         break;
+
+      // --- Lead gen page types ---
+      case PAGE_TYPES.CONTACT:
+      case PAGE_TYPES.FORM:
+        events.push(this._submitForm());
+        events.push(this._contact());
+        break;
+
+      case PAGE_TYPES.DEMO:
+        events.push(this._submitForm());
+        events.push(this._contact());
+        break;
+
+      case PAGE_TYPES.LANDING:
+        events.push(this._submitForm());
+        break;
+
+      case PAGE_TYPES.PRICING:
+        events.push(this._submitForm());
+        break;
+
+      case PAGE_TYPES.CONFIRMATION:
+        events.push(this._submitForm());
+        events.push(this._completeRegistration());
+        break;
+
+      case PAGE_TYPES.SERVICES:
+        events.push(this._submitForm());
+        break;
     }
 
     return events;
@@ -165,6 +194,27 @@ export class TikTokGenerator {
     };
 
     return this._createEvent('Search', params, PAGE_TYPES.SEARCH);
+  }
+
+  _submitForm() {
+    const params = {
+      content_name: document.title,
+    };
+    return this._createEvent('SubmitForm', params, 'leadgen');
+  }
+
+  _contact() {
+    const params = {
+      content_name: document.title,
+    };
+    return this._createEvent('Contact', params, 'leadgen');
+  }
+
+  _completeRegistration() {
+    const params = {
+      content_name: document.title,
+    };
+    return this._createEvent('CompleteRegistration', params, 'leadgen');
   }
 
   _createEvent(eventName, params, pageType) {

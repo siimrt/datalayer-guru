@@ -8,7 +8,7 @@ function stripRemoteCode() {
   return {
     name: 'strip-remote-code',
     transform(code, id) {
-      if (id.includes('jspdf')) {
+      if (id.includes('jspdf') || id.includes('html2pdf')) {
         return code.replace(
           /https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/pdfobject\/[^"']*/g,
           ''
@@ -23,7 +23,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        sidepanel: 'src/sidepanel/index.html'
+        sidepanel: 'src/sidepanel/index.html',
+        report: 'src/report/index.html',
       }
     }
   }

@@ -87,8 +87,7 @@ export function renderEventGenerator(container, state, actions) {
         class="tp-platform-toggle ${isActive && (isSupported || isPreview) ? 'active' : ''} ${isLocked ? 'locked' : ''}"
         data-platform="${platform}"
         data-locked="${isLocked}"
-        style="${isActive && (isSupported || isPreview) ? `border-color: ${PLATFORM_COLORS[platform]}40; color: ${PLATFORM_COLORS[platform]};` : ''}
-               ${isLocked ? 'opacity: 0.5; cursor: pointer;' : ''}"
+        style="${isLocked ? 'opacity: 0.5; cursor: pointer;' : ''}"
         title="${isLocked ? `${PLATFORM_LABELS[platform]} — requires upgrade` : PLATFORM_LABELS[platform]}"
       >
         ${platformIconHtml(platform, 14)}
@@ -394,6 +393,7 @@ function createEventCard(event, index, _collapsed, capabilities, actions) {
   const header = document.createElement('div');
   header.className = 'tp-event-header';
   const cardIcon = platformIconHtml(event.platform, 14);
+
   header.innerHTML = `
     <div class="flex items-center gap-2">
       ${cardIcon}

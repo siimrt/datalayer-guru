@@ -36,6 +36,10 @@ export class ConsentChecker {
     if (consent.axeptio) return 'axeptio';
     if (consent.tarteaucitron) return 'tarteaucitron';
     if (consent.complianz) return 'complianz';
+    if (consent.acceptio) return 'acceptio';
+    if (consent.iubenda) return 'iubenda';
+    if (consent.usercentrics) return 'usercentrics';
+    if (consent.quantcast) return 'quantcast';
 
     // Fallback: check DOM for known CMP elements
     const cmpSelectors = {
@@ -46,6 +50,10 @@ export class ConsentChecker {
       axeptio: '#axeptio_overlay, .axeptio_widget',
       tarteaucitron: '#tarteaucitronRoot',
       complianz: '.cmplz-cookiebanner, #cmplz-cookiebanner-container',
+      acceptio: '#acceptio-app',
+      iubenda: '.iubenda-cs-container',
+      usercentrics: '#usercentrics-root',
+      quantcast: '.qc-cmp2-container',
     };
 
     for (const [cmp, selector] of Object.entries(cmpSelectors)) {
@@ -80,6 +88,10 @@ export class ConsentChecker {
           consentData = entry[2];
         }
       }
+      // Handle arguments-style object: {0: 'consent', 1: 'default', 2: {...}}
+      else if (entry && typeof entry === 'object' && entry['0'] === 'consent' && entry['2']) {
+        consentData = entry['2'];
+      }
       // Handle object format with consent data
       else if (entry && typeof entry === 'object') {
         // gtm.init_consent event
@@ -108,14 +120,16 @@ export class ConsentChecker {
     // Also check the full dataLayer for consent defaults
     if (pageContext.dataLayer) {
       for (const entry of pageContext.dataLayer) {
+        let data = null;
         if (Array.isArray(entry) && entry[0] === 'consent') {
-          const action = entry[1]; // 'default' or 'update'
-          const data = entry[2];
-          if (data && typeof data === 'object') {
-            for (const key of Object.keys(result)) {
-              if (data[key]) {
-                result[key] = data[key];
-              }
+          data = entry[2];
+        } else if (typeof entry === 'object' && !Array.isArray(entry) && entry['0'] === 'consent') {
+          data = entry['2'];
+        }
+        if (data && typeof data === 'object') {
+          for (const key of Object.keys(result)) {
+            if (data[key]) {
+              result[key] = data[key];
             }
           }
         }
@@ -136,6 +150,7 @@ export class ConsentChecker {
     if (pageContext.dataLayer) {
       for (const entry of pageContext.dataLayer) {
         if (Array.isArray(entry) && entry[0] === 'consent') return true;
+        if (typeof entry === 'object' && !Array.isArray(entry) && entry['0'] === 'consent') return true;
         if (entry?.event === 'gtm.init_consent') return true;
         if (entry?.event === 'consent_update') return true;
       }

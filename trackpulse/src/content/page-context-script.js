@@ -261,6 +261,10 @@
       context.consent.tarteaucitron =
         typeof window.tarteaucitron !== 'undefined';
       context.consent.complianz = typeof window.complianz !== 'undefined';
+      context.consent.acceptio = typeof window.acceptioSdk !== 'undefined' || typeof window.Acceptio !== 'undefined';
+      context.consent.iubenda = typeof window._iub !== 'undefined';
+      context.consent.usercentrics = typeof window.UC_UI !== 'undefined';
+      context.consent.quantcast = typeof window.__tcfapi !== 'undefined';
     } catch (e) {}
 
     // --- Google Consent Mode ---
@@ -269,6 +273,7 @@
         const consentEvents = window.dataLayer.filter(
           (e) =>
             (Array.isArray(e) && e[0] === 'consent') ||
+            (typeof e === 'object' && !Array.isArray(e) && e['0'] === 'consent') ||
             e?.event === 'consent_update' ||
             e?.event === 'gtm.init_consent'
         );
@@ -413,7 +418,7 @@
       var _TP_TRACKING_PATTERNS = [
         { platform: 'ga4',       re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect/ },
         { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel|graph\.facebook\.com/ },
-        { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
+        { platform: 'tiktok',    re: /analytics\.tiktok\.com\/(?:api|i18n\/pixel)|mon\.tiktok\.com|business-api\.tiktok\.com/ },
         { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\/|trk\.pinterest\.com/ },
         { platform: 'snapchat',  re: /tr\.snapchat\.com\/|tr-shadow\.snapchat\.com/ },
         { platform: 'linkedin',  re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com|www\.linkedin\.com\/px\/|www\.linkedin\.com\/li\/track|p\.adsymptotic\.com|sjs\.bizographics\.com|linkedin\.oribi\.io/ },
@@ -456,8 +461,15 @@
             if (init && init.body) {
               if (typeof init.body === 'string') body = init.body;
               else if (init.body instanceof URLSearchParams) body = init.body.toString();
+              else if (typeof Blob !== 'undefined' && init.body instanceof Blob && init.body.size < 16000) {
+                // Async read Blob body (TikTok sometimes sends JSON as Blob)
+                init.body.text().then(function (text) {
+                  _tpPostNetworkHit(platform, url, method, text);
+                }).catch(function () {});
+                body = '__blob_pending__';
+              }
             }
-            _tpPostNetworkHit(platform, url, method, body);
+            if (body !== '__blob_pending__') _tpPostNetworkHit(platform, url, method, body);
           }
         } catch (e) {}
         return _origFetch.apply(this, arguments);

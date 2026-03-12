@@ -42,6 +42,7 @@ const WEB_REQUEST_TRACKING_PATTERNS = [
   { platform: 'meta',      pattern: '*://graph.facebook.com/*' },
   { platform: 'tiktok',    pattern: '*://analytics.tiktok.com/*' },
   { platform: 'tiktok',    pattern: '*://mon.tiktok.com/*' },
+  { platform: 'tiktok',    pattern: '*://business-api.tiktok.com/*' },
   { platform: 'pinterest', pattern: '*://ct.pinterest.com/*' },
   { platform: 'pinterest', pattern: '*://*.pinimg.com/ct/*' },
   { platform: 'pinterest', pattern: '*://trk.pinterest.com/*' },
@@ -60,7 +61,7 @@ function matchPlatformFromUrl(url) {
     { platform: 'ga4',       re: /\/g\/collect\?.*tid=G-/ },  // Server-side GTM proxy (Stape, etc.)
     { platform: 'google_ads', re: /googleads\.g\.doubleclick\.net\/pagead\/(?:conversion|viewthroughconversion)|googleadservices\.com\/pagead\/conversion/ },
     { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/|graph\.facebook\.com/ },
-    { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
+    { platform: 'tiktok',    re: /analytics\.tiktok\.com\/(?:api|i18n\/pixel)|mon\.tiktok\.com|business-api\.tiktok\.com/ },
     { platform: 'pinterest', re: /ct\.pinterest\.com|pinimg\.com\/ct\/|trk\.pinterest\.com/ },
     { platform: 'snapchat',  re: /tr\.snapchat\.com|tr-shadow\.snapchat\.com/ },
     { platform: 'linkedin',  re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com/ },
@@ -121,6 +122,92 @@ function extractEventNameFromUrl(platform, url) {
   } catch (e) { return null; }
 }
 
+function extractEventNameFromBody(platform, body) {
+  try {
+    const json = JSON.parse(body);
+    switch (platform) {
+      case 'tiktok': {
+        // Single event: { event: 'ViewContent', ... }
+        const ev = json.event || json.type || null;
+        if (ev) return ev;
+        // Batch: { batch: [{ event: '...', ... }] }
+        if (Array.isArray(json.batch) && json.batch[0]) return json.batch[0].event || json.batch[0].type || null;
+        // Data array: { data: [{ event: '...', ... }] }
+        if (Array.isArray(json.data) && json.data[0]) return json.data[0].event || json.data[0].type || null;
+        // Events array: { events: [{ event: '...', ... }] }
+        if (Array.isArray(json.events) && json.events[0]) return json.events[0].event || json.events[0].type || null;
+        return null;
+      }
+      case 'snapchat':
+        return json.event_type || json.event_name || json.event || null;
+      case 'linkedin':
+        return json.eventType || json.event || (json.conversionId ? 'conversion' : null);
+      case 'pinterest':
+        return json.event || json.event_name || null;
+      default:
+        return json.event || json.event_name || json.ev || null;
+    }
+  } catch (e) { return null; }
+}
+
+// Map to store request bodies captured by onBeforeRequest (keyed by requestId)
+const _requestBodies = new Map();
+
+/**
+ * Extract body string from webRequest requestBody object.
+ * Handles both raw (JSON/plain text POST) and formData (URL-encoded) formats,
+ * and concatenates multiple raw chunks for large payloads.
+ */
+function extractBodyFromRequestBody(requestBody) {
+  if (!requestBody) return null;
+
+  // Try raw body first (JSON, plain text POST) — concatenate all chunks
+  if (requestBody.raw?.length) {
+    try {
+      const chunks = [];
+      for (const chunk of requestBody.raw) {
+        if (chunk.bytes) chunks.push(new TextDecoder().decode(chunk.bytes));
+      }
+      if (chunks.length > 0) return chunks.join('');
+    } catch (e) {}
+  }
+
+  // Fallback: formData (URL-encoded POST)
+  if (requestBody.formData) {
+    try {
+      const params = new URLSearchParams();
+      for (const [key, values] of Object.entries(requestBody.formData)) {
+        for (const val of values) {
+          params.append(key, val);
+        }
+      }
+      return params.toString();
+    } catch (e) {}
+  }
+
+  return null;
+}
+
+if (chrome.webRequest?.onBeforeRequest) {
+  chrome.webRequest.onBeforeRequest.addListener(
+    (details) => {
+      if (details.tabId < 0) return;
+
+      const platform = matchPlatformFromUrl(details.url);
+      if (!platform) return;
+
+      const body = extractBodyFromRequestBody(details.requestBody);
+      if (body) {
+        _requestBodies.set(details.requestId, body);
+        // Auto-cleanup after 10s to prevent memory leaks
+        setTimeout(() => _requestBodies.delete(details.requestId), 10000);
+      }
+    },
+    { urls: webRequestUrls },
+    ['requestBody']
+  );
+}
+
 const _recentWebRequests = new Map();
 const WEBREQUEST_DEDUP_WINDOW = 2000;
 const _seenWebRequestPixels = new Set(); // Track pixel IDs already forwarded as FRAME_PIXELS
@@ -134,7 +221,22 @@ if (chrome.webRequest?.onCompleted) {
       const platform = matchPlatformFromUrl(url);
       if (!platform) return;
 
-      const urlKey = url.slice(0, 200);
+      const storedBody = _requestBodies.get(details.requestId) || null;
+      _requestBodies.delete(details.requestId);
+
+      // Extract event name before dedup so we can include it in the dedup key.
+      // This prevents different events sent to the same URL (e.g. TikTok Pageview
+      // + ViewContent both POST to analytics.tiktok.com/api/v2/shopify_pixel)
+      // from being incorrectly deduplicated.
+      let eventName = extractEventNameFromUrl(platform, url);
+      if (!eventName && storedBody) {
+        eventName = extractEventNameFromBody(platform, storedBody);
+      }
+      const pixelId = extractPixelIdFromUrl(platform, url);
+
+      // Dedup key includes event name so different events to same URL aren't dropped.
+      // If no event name extractable, use requestId to ensure uniqueness (no dedup).
+      const urlKey = url.slice(0, 200) + '::' + (eventName || details.requestId);
       const now = Date.now();
       const lastSeen = _recentWebRequests.get(urlKey);
       if (lastSeen && now - lastSeen < WEBREQUEST_DEDUP_WINDOW) return;
@@ -146,16 +248,13 @@ if (chrome.webRequest?.onCompleted) {
         }
       }
 
-      const eventName = extractEventNameFromUrl(platform, url);
-      const pixelId = extractPixelIdFromUrl(platform, url);
-
       forwardToExtensionPages({
         type: MSG.NETWORK_REQUEST,
         payload: {
           platform,
           url: url.slice(0, 4000),
           method: details.method || 'GET',
-          body: null,
+          body: storedBody,
           timestamp: now,
           source: 'webRequest',
           pixelId,
@@ -274,6 +373,45 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
       sendResponse({ success: true });
       return true;
+    }
+
+    case MSG.REOPEN_CMP: {
+      const { cmp } = msg.payload || {};
+      getActiveTabId().then(async (activeTabId) => {
+        if (!activeTabId || !cmp) {
+          sendResponse({ success: false });
+          return;
+        }
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: activeTabId },
+            world: 'MAIN',
+            func: (cmpName) => {
+              try {
+                switch (cmpName) {
+                  case 'onetrust': OneTrust.ToggleInfoDisplay(); break;
+                  case 'cookiebot': typeof CookieConsent !== 'undefined' ? CookieConsent.renew() : Cookiebot.renew(); break;
+                  case 'cookieyes': typeof CookieYes !== 'undefined' ? CookieYes.openCookieBanner() : document.querySelector('.cky-btn-revisit')?.click(); break;
+                  case 'didomi': Didomi.preferences.show(); break;
+                  case 'axeptio': document.querySelector('[data-axeptio-btn]')?.click() || (typeof openAxeptioCookies === 'function' && openAxeptioCookies()); break;
+                  case 'tarteaucitron': tarteaucitron.userInterface.openPanel(); break;
+                  case 'complianz': typeof cmplz_open_settings === 'function' ? cmplz_open_settings() : document.querySelector('.cmplz-manage-settings,.cmplz-manage-consent')?.click(); break;
+                  case 'acceptio': typeof Acceptio !== 'undefined' && Acceptio.show(); break;
+                  case 'iubenda': _iub.cs.api.openPreferences(); break;
+                  case 'usercentrics': UC_UI.showSecondLayer(); break;
+                  case 'quantcast': __tcfapi('displayConsentUi', 2, function(){}); break;
+                }
+              } catch (e) { console.debug('[Traacky] CMP reopen failed:', e); }
+            },
+            args: [cmp],
+          });
+          sendResponse({ success: true });
+        } catch (err) {
+          console.debug('[Traacky] CMP reopen executeScript error:', err);
+          sendResponse({ success: false, error: err.message });
+        }
+      });
+      return true; // async sendResponse
     }
 
     case 'TRACKPULSE_GET_TAB_DATA': {
@@ -519,7 +657,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 { platform: 'ga4',       re: /\/g\/collect\?.*tid=G-/ },
                 { platform: 'google_ads', re: /googleads\.g\.doubleclick\.net\/pagead\/(?:conversion|viewthroughconversion)|googleadservices\.com\/pagead\/conversion/ },
                 { platform: 'meta',      re: /facebook\.com\/tr[\/?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel|graph\.facebook\.com/ },
-                { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
+                { platform: 'tiktok',    re: /analytics\.tiktok\.com\/(?:api|i18n\/pixel)|mon\.tiktok\.com|business-api\.tiktok\.com/ },
                 { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\/|trk\.pinterest\.com/ },
                 { platform: 'snapchat',  re: /tr\.snapchat\.com\/|tr-shadow\.snapchat\.com/ },
                 { platform: 'linkedin',  re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com|www\.linkedin\.com\/px\/|www\.linkedin\.com\/li\/track|p\.adsymptotic\.com|sjs\.bizographics\.com|linkedin\.oribi\.io/ },
@@ -563,8 +701,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                     if (init && init.body) {
                       if (typeof init.body === 'string') body = init.body;
                       else if (init.body instanceof URLSearchParams) body = init.body.toString();
+                      else if (typeof Blob !== 'undefined' && init.body instanceof Blob && init.body.size < 16000) {
+                        init.body.text().then(function (text) {
+                          _tpPostNetworkHit(platform, url, method, text);
+                        }).catch(function () {});
+                        body = '__blob_pending__';
+                      }
                     }
-                    _tpPostNetworkHit(platform, url, method, body);
+                    if (body !== '__blob_pending__') _tpPostNetworkHit(platform, url, method, body);
                   }
                 } catch (e) {}
                 return _origFetch.apply(this, arguments);

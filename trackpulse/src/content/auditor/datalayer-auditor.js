@@ -92,6 +92,42 @@ export class DataLayerAuditor {
   }
 
   /**
+   * Get all lead gen events currently in dataLayer.
+   */
+  getLeadGenEvents() {
+    const leadgenEventNames = new Set([
+      'generate_lead', 'sign_up', 'contact', 'form_submit', 'form_start',
+      'schedule', 'book_appointment', 'request_quote', 'qualify_lead',
+      'subscribe', 'newsletter_signup',
+    ]);
+
+    return this.dataLayer
+      .filter((entry) => {
+        if (!entry || typeof entry !== 'object') return false;
+        if (entry.event && leadgenEventNames.has(entry.event)) return true;
+        if (entry['0'] === 'event' && leadgenEventNames.has(entry['1'])) return true;
+        return false;
+      })
+      .map((entry, index) => {
+        let eventName = entry.event;
+        let data = entry;
+
+        if (!eventName && entry['0'] === 'event' && entry['1']) {
+          eventName = entry['1'];
+          data = { event: eventName, ...(entry['2'] || {}) };
+        }
+
+        return {
+          index,
+          event: eventName || 'unknown',
+          data,
+          hasEcommerce: false,
+          timestamp: entry['gtm.uniqueEventId'] || null,
+        };
+      });
+  }
+
+  /**
    * Get all events in the dataLayer.
    */
   getAllEvents() {

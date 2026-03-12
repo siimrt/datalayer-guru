@@ -95,6 +95,29 @@ function parseGA4Request(url, body) {
     }
   }
 
+  // Compact tilde-delimited format: pr1=nmProductName~id123~pr49.99~brBrand~caCat
+  if (items.length === 0) {
+    for (let i = 1; i <= 20; i++) {
+      const compact = allParams[`pr${i}`];
+      if (!compact) continue;
+      const item = {};
+      for (const part of compact.split('~')) {
+        const key = part.substring(0, 2);
+        const val = part.substring(2);
+        switch (key) {
+          case 'nm': item.item_name = val; break;
+          case 'id': item.item_id = val; break;
+          case 'pr': item.price = Number(val); break;
+          case 'qt': item.quantity = Number(val); break;
+          case 'br': item.item_brand = val; break;
+          case 'ca': item.item_category = val; break;
+          case 'va': item.item_variant = val; break;
+        }
+      }
+      if (item.item_name || item.item_id) items.push(item);
+    }
+  }
+
   // Key ecommerce values
   if (allParams.tr) eventParams.value = Number(allParams.tr);
   if (allParams.tt) eventParams.transaction_id = allParams.tt;
@@ -234,7 +257,10 @@ function parseTikTokRequest(url, body) {
     if (sdkid) eventParams.pixelId = sdkid;
   }
 
-  return { eventName, params: eventParams, items: null };
+  // Return pixelId as top-level field (consistent with other parsers)
+  const result = { eventName, params: eventParams, items: null };
+  if (eventParams.pixelId) result.pixelId = eventParams.pixelId;
+  return result;
 }
 
 /**
@@ -453,4 +479,57 @@ function parseGenericRequest(url, body) {
   }
 
   return { eventName, params: allParams, items: null };
+}
+
+// ---- Server-Side Detection ----
+
+const GOOGLE_OWNED_SUFFIXES = [
+  'google.com', 'google-analytics.com', 'googleapis.com',
+  'googleadservices.com', 'doubleclick.net', 'googlesyndication.com',
+];
+
+export function isServerSideRequest(url) {
+  try {
+    const host = new URL(url).hostname;
+    return !GOOGLE_OWNED_SUFFIXES.some(s => host === s || host.endsWith('.' + s));
+  } catch { return false; }
+}
+
+// ---- Network → GeneratedEvent Converter ----
+
+export function networkRequestToGeneratedEvent(netEntry) {
+  if (!netEntry.eventName) return null;
+  const { platform, eventName } = netEntry;
+  const params = netEntry.params || {};
+  const items = netEntry.items;
+  const serverSide = isServerSideRequest(netEntry.url);
+
+  let data, code;
+  if (platform === 'ga4') {
+    const eventObj = { event: eventName };
+    const ecomKeys = ['currency', 'value', 'transaction_id'];
+    const hasEcom = items || ecomKeys.some(k => params[k] != null);
+    if (hasEcom) {
+      eventObj.ecommerce = {};
+      for (const k of ecomKeys) { if (params[k] != null) eventObj.ecommerce[k] = params[k]; }
+      if (items) eventObj.ecommerce.items = items;
+      for (const [k, v] of Object.entries(params)) { if (!ecomKeys.includes(k)) eventObj[k] = v; }
+    } else {
+      Object.assign(eventObj, params);
+    }
+    data = eventObj;
+    const label = serverSide ? 'Server-Side' : 'Client-Side';
+    code = `// Detected via network \u2014 ${label}\ndataLayer.push({ ecommerce: null });\ndataLayer.push(${JSON.stringify(eventObj, null, 2)});`;
+  } else {
+    data = { event: eventName, ...params };
+    code = `// Detected via network request\n${JSON.stringify(data, null, 2)}`;
+  }
+
+  return {
+    platform, eventName, code, data,
+    pageType: null,
+    source: serverSide ? 'server-side' : 'client-side',
+    measurementId: netEntry.measurementId || null,
+    pixelId: netEntry.pixelId || null,
+  };
 }

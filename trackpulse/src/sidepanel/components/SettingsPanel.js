@@ -38,7 +38,7 @@ export function renderSettingsPanel(container, state, actions) {
         <div style="
           background: var(--tp-surface); border-radius: 8px; padding: 12px; border: 1px solid var(--tp-border);
         ">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <div>
               <div style="color: var(--tp-text); font-size: 12px; font-weight: 500;">Auto-switch on tab change</div>
               <div style="color: var(--tp-text-muted); font-size: 11px; margin-top: 2px;">Reload detection when switching browser tabs</div>
@@ -47,6 +47,21 @@ export function renderSettingsPanel(container, state, actions) {
               <input type="checkbox" id="auto-switch-tab" ${autoSwitch ? 'checked' : ''} />
               <span class="tp-switch-slider"></span>
             </label>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="color: var(--tp-text); font-size: 12px; font-weight: 500;">Site Type Override</div>
+              <div style="color: var(--tp-text-muted); font-size: 11px; margin-top: 2px;">Force ecommerce or lead gen mode</div>
+            </div>
+            <select id="site-type-override" style="
+              background: var(--tp-surface-hover); color: var(--tp-text); border: 1px solid var(--tp-border);
+              border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer;
+            ">
+              <option value="" ${!state.siteTypeOverride ? 'selected' : ''}>Auto-detect</option>
+              <option value="ecommerce" ${state.siteTypeOverride === 'ecommerce' ? 'selected' : ''}>Ecommerce</option>
+              <option value="leadgen" ${state.siteTypeOverride === 'leadgen' ? 'selected' : ''}>Lead Gen</option>
+              <option value="hybrid" ${state.siteTypeOverride === 'hybrid' ? 'selected' : ''}>Hybrid</option>
+            </select>
           </div>
         </div>
       </div>
@@ -202,6 +217,14 @@ export function renderSettingsPanel(container, state, actions) {
     });
     viewPlansBtn.addEventListener('mouseenter', () => { viewPlansBtn.style.color = 'var(--tp-primary)'; });
     viewPlansBtn.addEventListener('mouseleave', () => { viewPlansBtn.style.color = 'var(--tp-text-muted)'; });
+  }
+
+  // Site type override
+  const siteTypeSelect = container.querySelector('#site-type-override');
+  if (siteTypeSelect) {
+    siteTypeSelect.addEventListener('change', (e) => {
+      if (actions.setSiteTypeOverride) actions.setSiteTypeOverride(e.target.value);
+    });
   }
 
   // Auto-switch tab toggle

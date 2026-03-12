@@ -26,6 +26,13 @@ export const MSG = {
 
   // Custom Pixel Frame -> Background -> SidePanel: detected pixels in frame
   FRAME_PIXELS: 'TRACKPULSE_FRAME_PIXELS',
+
+  // SidePanel -> Content: reopen CMP cookie popup
+  REOPEN_CMP: 'TRACKPULSE_REOPEN_CMP',
+
+  // Report tab -> SidePanel: PDF generation result
+  PDF_DONE: 'TRACKPULSE_PDF_DONE',
+  PDF_ERROR: 'TRACKPULSE_PDF_ERROR',
 };
 
 /**

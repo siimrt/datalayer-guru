@@ -14,7 +14,7 @@
     { platform: 'ga4',       re: /\/g\/collect\?.*tid=G-/ },  // Server-side GTM proxy (Stape, etc.)
     { platform: 'google_ads', re: /googleads\.g\.doubleclick\.net\/pagead\/(?:conversion|viewthroughconversion)|googleadservices\.com\/pagead\/conversion/ },
     { platform: 'meta',      re: /facebook\.com\/tr[\/\?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel|graph\.facebook\.com/ },
-    { platform: 'tiktok',    re: /analytics\.tiktok\.com\/api\/|analytics\.tiktok\.com\/i18n\/pixel|mon\.tiktok\.com/ },
+    { platform: 'tiktok',    re: /analytics\.tiktok\.com\/(?:api|i18n\/pixel)|mon\.tiktok\.com|business-api\.tiktok\.com/ },
     { platform: 'pinterest', re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\/|trk\.pinterest\.com/ },
     { platform: 'snapchat',  re: /tr\.snapchat\.com\/|tr-shadow\.snapchat\.com/ },
     { platform: 'linkedin',  re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com|www\.linkedin\.com\/px\/|www\.linkedin\.com\/li\/track|p\.adsymptotic\.com|sjs\.bizographics\.com|linkedin\.oribi\.io/ },
@@ -57,8 +57,14 @@
         if (init && init.body) {
           if (typeof init.body === 'string') body = init.body;
           else if (init.body instanceof URLSearchParams) body = init.body.toString();
+          else if (typeof Blob !== 'undefined' && init.body instanceof Blob && init.body.size < 16000) {
+            init.body.text().then(function (text) {
+              _tpPostNetworkHit(platform, url, method, text);
+            }).catch(function () {});
+            body = '__blob_pending__';
+          }
         }
-        _tpPostNetworkHit(platform, url, method, body);
+        if (body !== '__blob_pending__') _tpPostNetworkHit(platform, url, method, body);
       }
     } catch (e) {}
     return _origFetch.apply(this, arguments);

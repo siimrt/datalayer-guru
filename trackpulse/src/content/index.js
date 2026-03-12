@@ -8,6 +8,9 @@ import { injectPageScript, initBridge, waitForPageContext } from './bridge.js';
 import { detectCMS } from './detectors/cms-detector.js';
 import { detectPageType } from './detectors/page-type-detector.js';
 import { PixelDetector } from './detectors/pixel-detector.js';
+import { SiteTypeDetector } from './detectors/site-type-detector.js';
+import { LeadGenToolDetector } from './detectors/leadgen-tool-detector.js';
+import { FormDetector } from './detectors/form-detector.js';
 import { getExtractor } from './extractors/extractor-factory.js';
 import { GA4Generator } from './generators/ga4-generator.js';
 import { MetaGenerator } from './generators/meta-generator.js';
@@ -39,7 +42,7 @@ async function init() {
 
   // 5. dataLayer push listening is handled in bridge.js (initBridge)
 
-  // 6. Listen for re-detection requests
+  // 6. Listen for re-detection requests and CMP reopen
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === MSG.REQUEST_REDETECT) {
       handleRedetect();
@@ -67,7 +70,7 @@ async function runPipeline(pageContext) {
     // so run them concurrently.
     const extractor = getExtractor(cmsResult.cms, pageTypeResult.pageType);
 
-    const [ecommerceData, pixels, consent] = await Promise.all([
+    const [ecommerceData, pixels, consent, leadgenTools, forms] = await Promise.all([
       // Ecommerce data extraction (async)
       extractor.extract(pageContext).catch((e) => {
         console.debug('[Traacky] Extraction error:', e);
@@ -83,7 +86,26 @@ async function runPipeline(pageContext) {
       Promise.resolve(new PixelDetector().detect(pageContext)),
       // Consent check (sync, wrapped in resolved promise for Promise.all)
       Promise.resolve(new ConsentChecker().check(pageContext)),
+      // Lead gen tool detection
+      Promise.resolve(new LeadGenToolDetector().detect(pageContext)),
+      // Form detection
+      Promise.resolve(new FormDetector().detect()),
     ]);
+
+    // --- Phase 2b: Site type detection (depends on CMS, pixels, pageType, dataLayer, leadgenTools) ---
+    const siteTypeResult = new SiteTypeDetector().detect({
+      cms: cmsResult.cms,
+      pixels,
+      pageType: pageTypeResult.pageType,
+      dataLayerEvents: pageContext.dataLayer || [],
+      leadgenTools,
+      pageContext: {
+        hasProductSchema: pageContext.hasProductSchema || false,
+        hasServiceSchema: pageContext.hasServiceSchema || false,
+        hasLocalBusinessSchema: pageContext.hasLocalBusinessSchema || false,
+        formCount: forms.length,
+      },
+    });
 
     // --- Phase 3: Generate events + audit (depends on extraction) ---
     const ga4Events = new GA4Generator().generate(
@@ -105,16 +127,18 @@ async function runPipeline(pageContext) {
 
     const auditor = new DataLayerAuditor(pageContext);
     const existingEvents = auditor.getEcommerceEvents();
+    const existingLeadgenEvents = auditor.getLeadGenEvents();
     const diffEngine = new DiffEngine();
     const diff = diffEngine.compareAll(
       ga4Events.filter((e) => e.eventName !== 'page_view'),
-      existingEvents
+      [...existingEvents, ...existingLeadgenEvents]
     );
 
     // --- Phase 4: Send everything to background/sidepanel ---
     sendMessage(MSG.DETECTION_RESULT, {
       cms: cmsResult,
       pageType: pageTypeResult,
+      siteType: siteTypeResult,
       ecommerceData,
       generatedEvents: {
         ga4: ga4Events,
@@ -124,9 +148,12 @@ async function runPipeline(pageContext) {
       },
       audit: {
         existingEvents,
+        existingLeadgenEvents,
         diff,
       },
       pixels,
+      leadgenTools,
+      forms,
       consent,
       url: window.location.href,
       timestamp: Date.now(),
@@ -144,9 +171,12 @@ async function runPipeline(pageContext) {
         cart: null,
         order: null,
       },
+      siteType: { siteType: 'unknown', confidence: 0, ecomScore: 0, leadgenScore: 0, signals: [] },
       generatedEvents: { ga4: [], meta: [], tiktok: [], pinterest: [] },
-      audit: { existingEvents: [], diff: [] },
+      audit: { existingEvents: [], existingLeadgenEvents: [], diff: [] },
       pixels: [],
+      leadgenTools: [],
+      forms: [],
       consent: {
         cmpDetected: 'none',
         googleConsent: {
