@@ -26,6 +26,17 @@ planManager.onChange((newPlan) => {
 
 // Store per-tab context data
 const tabContexts = {};
+// Track last known URL per tab (to distinguish query-only changes from real navigations)
+const _tabUrls = {};
+
+/** Check if two URLs share origin + pathname (only query/hash differs) */
+function isSameBasePath(url1, url2) {
+  try {
+    const a = new URL(url1);
+    const b = new URL(url2);
+    return a.origin === b.origin && a.pathname === b.pathname;
+  } catch { return false; }
+}
 
 // --- WebRequest-based network detection ---
 // Catches tracking requests that bypass JS hooks (iframes, Privacy Sandbox, etc.)
@@ -957,9 +968,25 @@ chrome.tabs.onActivated.addListener(({ tabId }) => {
 
 // When a tab navigates, re-run detection
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  // URL changed (full nav or SPA pushState) — tell sidepanel to clear streams
-  // This fires BEFORE the new page's scripts run, so new events won't be wiped.
   if (changeInfo.url) {
+    const oldUrl = _tabUrls[tabId];
+    _tabUrls[tabId] = changeInfo.url;
+
+    // Only clear streams for true navigations (path change).
+    // Query-string-only changes (e.g. Shopify ?variant=...) should NOT
+    // wipe previously captured events like product_view.
+    const queryOnly = oldUrl && isSameBasePath(oldUrl, changeInfo.url);
+    if (!queryOnly) {
+      getActiveTabId().then((activeTabId) => {
+        if (activeTabId === tabId) {
+          forwardToExtensionPages({ type: 'TRACKPULSE_PAGE_NAVIGATED' });
+        }
+      });
+    }
+  }
+
+  // Same-URL reload (no changeInfo.url) → clear stale streams
+  if (changeInfo.status === 'loading' && !changeInfo.url) {
     getActiveTabId().then((activeTabId) => {
       if (activeTabId === tabId) {
         forwardToExtensionPages({ type: 'TRACKPULSE_PAGE_NAVIGATED' });
@@ -982,6 +1009,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
 // Clean up when a tab is closed
 chrome.tabs.onRemoved.addListener((tabId) => {
   delete tabContexts[tabId];
+  delete _tabUrls[tabId];
 });
 
 // --- Badge Management ---

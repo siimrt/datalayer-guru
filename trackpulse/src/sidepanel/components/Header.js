@@ -57,8 +57,8 @@ export function renderHeader(container, state, onRefresh, onUpgrade) {
 
   container.innerHTML = `
     <div class="tp-header">
-      <div class="flex items-center justify-between mb-2">
-        <div class="flex items-center gap-2">
+      <div class="tp-header-row">
+        <div class="tp-header-tags">
           <div class="tp-cms-logo">${CMS_LOGOS[cms] || CMS_LOGOS.unknown}</div>
           <span class="tp-badge tp-badge-cms">
             ${cmsInfo.name}
@@ -68,7 +68,7 @@ export function renderHeader(container, state, onRefresh, onUpgrade) {
           <span class="tp-badge tp-badge-site-type" style="${getSiteTypeStyle(effectiveSiteType)}" id="site-type-badge" title="Site type: ${siteTypeInfo.name}${state.siteTypeOverride ? ' (override)' : ''}">${getSiteTypeIcon(effectiveSiteType)}${siteTypeInfo.name}${state.siteTypeOverride ? ' *' : ''}</span>
           ${currency ? `<span class="tp-badge tp-badge-currency">${currency}</span>` : ''}
         </div>
-        <div class="flex items-center gap-2">
+        <div class="tp-header-actions">
           <span id="header-plan-badge"></span>
           <button class="tp-refresh-btn" id="refresh-btn" title="Re-detect">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">

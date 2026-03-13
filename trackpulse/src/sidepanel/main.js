@@ -51,11 +51,12 @@ if (IS_POPUP) {
 // Apply saved theme before first paint to avoid flash
 (async function initTheme() {
   try {
-    const data = await chrome.storage.local.get(['tp_theme', 'tp_auto_switch_tab']);
+    const data = await chrome.storage.local.get(['tp_theme', 'tp_auto_switch_tab', 'tp_auto_reload']);
     if ((data.tp_theme || 'light') === 'dark') {
       document.documentElement.classList.add('dark');
     }
     state.autoSwitchTab = !!data.tp_auto_switch_tab;
+    state.autoReload = data.tp_auto_reload !== undefined ? !!data.tp_auto_reload : true;
   } catch (e) {}
 })();
 
@@ -67,6 +68,7 @@ import { renderEventGenerator, resetEventGeneratorState } from './components/Eve
 import { renderAuditPanel, resetAuditPanelState } from './components/AuditPanel.js';
 import { renderDataLayerLive, appendDataLayerEntry, appendNetworkEntry } from './components/DataLayerLive.js';
 import { parseNetworkRequest } from '../content/parsers/network-request-parser.js';
+import { showPushDiagnostic } from './components/PushDiagnostic.js';
 import { renderPixelStatus } from './components/PixelStatus.js';
 import { renderSettingsPanel } from './components/SettingsPanel.js';
 import { renderFunnelMode, FunnelSession } from './components/FunnelMode.js';
@@ -123,6 +125,11 @@ const state = {
 
   // V2 Settings
   autoSwitchTab: false,  // Auto-reload detection on tab switch
+  autoReload: false,     // Auto-reload page when sidepanel opens on already-loaded page
+
+  // Page load state detection
+  pageAlreadyLoaded: false,
+  showMissedEventsBanner: false,
 };
 
 /** Recompute detectedPlatforms from pixels + networkRequests and sync activePlatforms */
@@ -154,6 +161,14 @@ const tabContentEl = document.getElementById('tab-content');
 
 function resolvePlanCapabilities(plan) {
   return getPlanCapabilities(plan);
+}
+
+// ---- Helpers ----
+
+/** Extract event name from JS code string (e.g. `event: 'purchase'` → 'purchase') */
+function extractEventNameFromCode(code) {
+  const match = code.match(/event['"]?\s*:\s*['"]([^'"]+)/);
+  return match ? match[1] : null;
 }
 
 // ---- Actions ----
@@ -223,7 +238,12 @@ const actions = {
           type: MSG.EXECUTE_CODE,
           code: decoded,
         });
-        showToast('Pushed to dataLayer', 'success');
+        showPushDiagnostic({
+          eventName: extractEventNameFromCode(decoded),
+          target: 'top',
+          currentPageType: state.pageType?.pageType || null,
+          getNetworkRequests: () => state.networkRequests,
+        });
       } else {
         showToast('No active tab found', 'error');
       }
@@ -293,6 +313,13 @@ const actions = {
     }
     trackEvent('synthetic_event_pushed', { target: target === 'top' ? 'top' : 'custom_pixel' });
 
+    const diagOpts = {
+      eventName: extractEventNameFromCode(code),
+      target: target && target !== 'top' ? target : 'top',
+      currentPageType: state.pageType?.pageType || null,
+      getNetworkRequests: () => state.networkRequests,
+    };
+
     if (target && target !== 'top') {
       // Push to a specific Shopify custom pixel sandbox frame
       chrome.runtime.sendMessage(
@@ -302,7 +329,7 @@ const actions = {
         },
         (response) => {
           if (response?.success) {
-            showToast('Pushed to custom pixel', 'success');
+            showPushDiagnostic(diagOpts);
           } else {
             showToast(`Push failed: ${response?.error || 'unknown'}`, 'error');
           }
@@ -316,7 +343,7 @@ const actions = {
             type: MSG.EXECUTE_CODE,
             code,
           });
-          showToast('Pushed to dataLayer', 'success');
+          showPushDiagnostic(diagOpts);
         } else {
           showToast('No active tab found', 'error');
         }
@@ -380,6 +407,29 @@ const actions = {
     state.autoSwitchTab = enabled;
     chrome.storage.local.set({ tp_auto_switch_tab: enabled });
     trackEvent('auto_switch_tab_toggled', { enabled });
+  },
+
+  toggleAutoReload(enabled) {
+    state.autoReload = enabled;
+    chrome.storage.local.set({ tp_auto_reload: enabled });
+    trackEvent('auto_reload_toggled', { enabled });
+  },
+
+  dismissMissedEventsBanner() {
+    state.showMissedEventsBanner = false;
+    const banner = document.getElementById('tp-missed-events-banner');
+    if (banner) banner.remove();
+  },
+
+  reloadPageForCapture() {
+    state.showMissedEventsBanner = false;
+    const banner = document.getElementById('tp-missed-events-banner');
+    if (banner) banner.remove();
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs?.[0]?.id) {
+        chrome.tabs.reload(tabs[0].id);
+      }
+    });
   },
 
   setSiteTypeOverride(siteType) {
@@ -724,6 +774,10 @@ chrome.runtime.onMessage.addListener((msg) => {
       clearTimeout(auditRerenderTimer);
       state.dataLayerStream = [];
       state.networkRequests = [];
+      state.showMissedEventsBanner = false;
+      state.pageAlreadyLoaded = false;
+      const navBanner = document.getElementById('tp-missed-events-banner');
+      if (navBanner) navBanner.remove();
       // Reset accordion/expand state for new page
       resetEventGeneratorState();
       resetAuditPanelState();
@@ -803,6 +857,7 @@ function render(options = {}) {
   }
 
   hideLoading();
+  renderMissedEventsBanner();
 
   // Pricing page takes over the entire content area
   if (state.activeTab === 'pricing') {
@@ -843,7 +898,7 @@ function renderActiveTab() {
       renderPixelStatus(tabContentEl, state);
       break;
     case 'funnel':
-      renderFunnelMode(tabContentEl, funnelSession, state.capabilities, state.funnelReport, state);
+      renderFunnelMode(tabContentEl, funnelSession, state.capabilities, state.funnelReport, state, actions);
       break;
     case 'settings':
       renderSettingsPanel(tabContentEl, state, actions);
@@ -853,12 +908,12 @@ function renderActiveTab() {
 
 function showLoading() {
   loadingEl.classList.remove('hidden');
-  mainContentEl.classList.add('hidden');
+  mainContentEl.style.display = 'none';
 }
 
 function hideLoading() {
   loadingEl.classList.add('hidden');
-  mainContentEl.classList.remove('hidden');
+  mainContentEl.style.display = 'flex';
 }
 
 // ---- Upgrade Success Animation ----
@@ -901,11 +956,150 @@ function showToast(message, type = 'success') {
   }, 2000);
 }
 
+// ---- Missed Events Banner ----
+
+function renderMissedEventsBanner() {
+  // Remove existing banner first
+  const existing = document.getElementById('tp-missed-events-banner');
+  if (existing) existing.remove();
+
+  if (!state.showMissedEventsBanner) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'tp-missed-events-banner';
+  banner.style.cssText = `
+    background: var(--tp-warning-bg, #fff8e1); border: 1px solid var(--tp-warning-border, #ffe082);
+    border-radius: 8px; padding: 10px 12px; margin: 8px 12px; display: flex;
+    align-items: center; gap: 8px; font-size: 12px; color: var(--tp-text);
+    position: relative; z-index: 10;
+  `;
+  banner.innerHTML = `
+    <span style="font-size: 16px; flex-shrink: 0;">&#9432;</span>
+    <span style="flex: 1;">Page was already loaded. Some tracking events may be missing.</span>
+    <button id="tp-banner-reload" style="
+      background: var(--tp-primary); color: white; border: none; border-radius: 6px;
+      padding: 4px 10px; font-size: 11px; cursor: pointer; white-space: nowrap;
+    ">Reload page</button>
+    <button id="tp-banner-dismiss" style="
+      background: none; border: none; color: var(--tp-text-muted); cursor: pointer;
+      font-size: 16px; padding: 0 4px; line-height: 1;
+    ">&times;</button>
+  `;
+
+  // Insert as first child of #app so it's visible even during loading state
+  const app = document.getElementById('app');
+  if (app) {
+    app.insertBefore(banner, app.firstChild);
+  }
+
+  banner.querySelector('#tp-banner-reload').addEventListener('click', () => actions.reloadPageForCapture());
+  banner.querySelector('#tp-banner-dismiss').addEventListener('click', () => actions.dismissMissedEventsBanner());
+}
+
+// ---- Performance API Fallback ----
+
+const PERF_TRACKING_PATTERNS = [
+  { platform: 'ga4',        re: /google-analytics\.com\/g\/collect|analytics\.google\.com\/g\/collect|\/g\/collect\?.*tid=G-/ },
+  { platform: 'google_ads', re: /googleads\.g\.doubleclick\.net\/pagead\/(?:conversion|viewthroughconversion)|googleadservices\.com\/pagead\/conversion/ },
+  { platform: 'meta',       re: /facebook\.com\/tr[\/\?]|facebook\.com\/tr$|facebook\.com\/privacy_sandbox\/pixel|graph\.facebook\.com/ },
+  { platform: 'tiktok',     re: /analytics\.tiktok\.com\/(?:api|i18n\/pixel)|mon\.tiktok\.com|business-api\.tiktok\.com/ },
+  { platform: 'pinterest',  re: /ct\.pinterest\.com|s\.pinimg\.com\/ct\/|trk\.pinterest\.com/ },
+  { platform: 'snapchat',   re: /tr\.snapchat\.com\/|tr-shadow\.snapchat\.com/ },
+  { platform: 'linkedin',   re: /px\.ads\.linkedin\.com|px4\.ads\.linkedin\.com|dc\.ads\.linkedin\.com|www\.linkedin\.com\/px\/|www\.linkedin\.com\/li\/track/ },
+];
+
+async function scanPerformanceAPI(tabId) {
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => performance.getEntriesByType('resource').map(e => ({ name: e.name, method: e.initiatorType })),
+    });
+    const entries = results?.[0]?.result || [];
+    for (const entry of entries) {
+      for (const pattern of PERF_TRACKING_PATTERNS) {
+        if (pattern.re.test(entry.name)) {
+          // Dedup against existing network requests
+          const alreadyCaptured = state.networkRequests.some(r => r.url === entry.name);
+          if (!alreadyCaptured) {
+            const netEntry = {
+              id: Date.now() + Math.random(),
+              timestamp: new Date(),
+              platform: pattern.platform,
+              url: entry.name,
+              method: entry.method === 'beacon' ? 'BEACON' : 'GET',
+              eventName: null,
+              params: {},
+              items: [],
+              measurementId: null,
+              pixelId: null,
+              source: 'performance_api',
+            };
+            state.networkRequests.unshift(netEntry);
+          }
+          break;
+        }
+      }
+    }
+    if (state.networkRequests.length > 0) {
+      recomputeDetectedPlatforms();
+      renderActiveTab();
+    }
+  } catch (e) {
+    console.debug('[Traacky] Performance API scan failed:', e);
+  }
+}
+
+// ---- Page Load State Check ----
+
+async function checkPageLoadState(tabId) {
+  try {
+    // Read autoReload setting directly — avoid race with initTheme IIFE
+    const settings = await chrome.storage.local.get('tp_auto_reload');
+    const autoReload = settings.tp_auto_reload !== undefined ? !!settings.tp_auto_reload : true;
+    state.autoReload = autoReload;
+
+    const response = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, { type: MSG.CHECK_PAGE_LOAD_STATE }, (resp) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+        } else {
+          resolve(resp);
+        }
+      });
+    });
+
+    if (!response?.alreadyLoaded) return;
+
+    state.pageAlreadyLoaded = true;
+
+    if (autoReload) {
+      // Auto-reload immediately — after reload, hooks will capture requests during
+      // page load, so networkRequests.length > 0 at next check → no re-reload loop
+      chrome.tabs.reload(tabId);
+      return;
+    }
+
+    // No auto-reload: wait briefly for network requests to potentially arrive
+    // (hooks may still be active from content script injection)
+    setTimeout(() => {
+      if (state.networkRequests.length > 0) return; // Requests arrived, no action needed
+
+      // Show banner (visible even over loading spinner) + scan Performance API
+      state.showMissedEventsBanner = true;
+      renderMissedEventsBanner();
+      scanPerformanceAPI(tabId);
+    }, 800);
+  } catch (e) {
+    console.debug('[Traacky] checkPageLoadState failed:', e);
+  }
+}
+
 // ---- Initialization ----
 
 // Request current tab's data on panel open
 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
   if (tabs?.[0]?.id) {
+    const currentTabId = tabs[0].id;
     chrome.runtime.sendMessage(
       { type: 'TRACKPULSE_GET_TAB_DATA' },
       (response) => {
@@ -931,7 +1125,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           render({ preserveContent: true });
         } else {
           chrome.tabs.sendMessage(
-            tabs[0].id,
+            currentTabId,
             { type: MSG.REQUEST_REDETECT },
             () => {
               if (chrome.runtime.lastError) {
@@ -941,6 +1135,9 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             }
           );
         }
+
+        // Check if page was already loaded when sidepanel opened
+        checkPageLoadState(currentTabId);
       }
     );
   }

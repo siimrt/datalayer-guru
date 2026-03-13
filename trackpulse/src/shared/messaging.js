@@ -30,6 +30,9 @@ export const MSG = {
   // SidePanel -> Content: reopen CMP cookie popup
   REOPEN_CMP: 'TRACKPULSE_REOPEN_CMP',
 
+  // SidePanel -> Content: check if page was already loaded
+  CHECK_PAGE_LOAD_STATE: 'TRACKPULSE_CHECK_PAGE_LOAD_STATE',
+
   // Report tab -> SidePanel: PDF generation result
   PDF_DONE: 'TRACKPULSE_PDF_DONE',
   PDF_ERROR: 'TRACKPULSE_PDF_ERROR',

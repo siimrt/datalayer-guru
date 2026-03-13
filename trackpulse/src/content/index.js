@@ -21,6 +21,15 @@ import { DiffEngine } from './auditor/diff-engine.js';
 import { ConsentChecker } from './auditor/consent-checker.js';
 import { MSG, sendMessage } from '../shared/messaging.js';
 
+// Register CHECK_PAGE_LOAD_STATE handler immediately (before async init)
+// so sidepanel can query page state even if pipeline hasn't completed yet
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.type === MSG.CHECK_PAGE_LOAD_STATE) {
+    sendResponse({ alreadyLoaded: document.readyState === 'complete' });
+    return true;
+  }
+});
+
 // Prevent double initialization
 if (!window.__TRACKPULSE_INITIALIZED__) {
   window.__TRACKPULSE_INITIALIZED__ = true;
@@ -233,13 +242,26 @@ function setupSPANavigationWatcher() {
   function checkUrlChange() {
     const currentUrl = window.location.href;
     if (currentUrl !== lastUrl) {
+      let oldPath, newPath;
+      try {
+        const a = new URL(lastUrl);
+        const b = new URL(currentUrl);
+        oldPath = a.origin + a.pathname;
+        newPath = b.origin + b.pathname;
+      } catch {
+        oldPath = lastUrl.split('?')[0].split('#')[0];
+        newPath = currentUrl.split('?')[0].split('#')[0];
+      }
       lastUrl = currentUrl;
-      // Debounce: wait briefly for the page to update DOM after SPA navigation.
-      // 200ms is enough for most frameworks to flush their render.
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        handleRedetect();
-      }, 200);
+
+      // Only re-detect on true path changes. Query-string-only changes
+      // (e.g. Shopify ?variant=...) should not reset captured events.
+      if (oldPath !== newPath) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          handleRedetect();
+        }, 200);
+      }
     }
   }
 }

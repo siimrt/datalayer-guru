@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Traacky",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Tracking inspector & event generator for ecommerce — Detect CMS, extract data, generate & audit GA4/Meta/TikTok events.",
   "permissions": [
     "activeTab",

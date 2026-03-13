@@ -20,15 +20,15 @@
     </div>
 
     <!-- Main content (hidden until loaded) -->
-    <div id="main-content" class="hidden">
+    <div id="main-content" class="hidden" style="flex-direction:column; height:100vh;">
       <!-- Header -->
-      <div id="header"></div>
+      <div id="header" style="flex-shrink:0;"></div>
 
       <!-- Tab Navigation -->
-      <div id="tab-nav"></div>
+      <div id="tab-nav" style="flex-shrink:0;"></div>
 
       <!-- Tab Content -->
-      <div id="tab-content" class="overflow-y-auto" style="height: calc(100vh - 120px);"></div>
+      <div id="tab-content" class="overflow-y-auto" style="flex:1; min-height:0;"></div>
     </div>
   </div>
 

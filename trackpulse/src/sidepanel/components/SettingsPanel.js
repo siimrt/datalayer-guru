@@ -19,6 +19,7 @@ export function renderSettingsPanel(container, state, actions) {
   const capabilities = state.capabilities;
   const isDark = document.documentElement.classList.contains('dark');
   const autoSwitch = state.autoSwitchTab || false;
+  const autoReload = state.autoReload !== undefined ? state.autoReload : true;
   const showDebug = isDevMode();
 
   container.innerHTML = `
@@ -45,6 +46,16 @@ export function renderSettingsPanel(container, state, actions) {
             </div>
             <label class="tp-switch">
               <input type="checkbox" id="auto-switch-tab" ${autoSwitch ? 'checked' : ''} />
+              <span class="tp-switch-slider"></span>
+            </label>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <div style="color: var(--tp-text); font-size: 12px; font-weight: 500;">Auto-reload on open</div>
+              <div style="color: var(--tp-text-muted); font-size: 11px; margin-top: 2px;">Reload the page when sidepanel opens on an already-loaded page</div>
+            </div>
+            <label class="tp-switch">
+              <input type="checkbox" id="auto-reload-toggle" ${autoReload ? 'checked' : ''} />
               <span class="tp-switch-slider"></span>
             </label>
           </div>
@@ -164,6 +175,31 @@ export function renderSettingsPanel(container, state, actions) {
       </div>
       ` : ''}
 
+      <!-- Help & Feedback -->
+      <div style="margin-bottom: 24px;">
+        <h3 style="color: var(--tp-text); font-size: 14px; margin-bottom: 12px;">Help &amp; Feedback</h3>
+        <div style="display: flex; gap: 8px;">
+          <a id="settings-support-btn" href="mailto:support@traacky.com" style="
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+            background: var(--tp-surface); color: var(--tp-text-secondary); border: 1px solid var(--tp-border);
+            padding: 10px 0; border-radius: 8px; font-size: 12px; font-weight: 500;
+            cursor: pointer; text-decoration: none; transition: all 0.2s;
+          ">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Support
+          </a>
+          <a id="settings-roadmap-btn" href="https://traacky.featurebase.app" target="_blank" style="
+            flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+            background: var(--tp-surface); color: var(--tp-text-secondary); border: 1px solid var(--tp-border);
+            padding: 10px 0; border-radius: 8px; font-size: 12px; font-weight: 500;
+            cursor: pointer; text-decoration: none; transition: all 0.2s;
+          ">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            Roadmap
+          </a>
+        </div>
+      </div>
+
       <!-- About -->
       <div>
         <h3 style="color: var(--tp-text); font-size: 14px; margin-bottom: 12px;">About</h3>
@@ -232,6 +268,30 @@ export function renderSettingsPanel(container, state, actions) {
   if (autoSwitchCheckbox) {
     autoSwitchCheckbox.addEventListener('change', (e) => {
       if (actions.toggleAutoSwitchTab) actions.toggleAutoSwitchTab(e.target.checked);
+    });
+  }
+
+  // Auto-reload toggle
+  const autoReloadCheckbox = container.querySelector('#auto-reload-toggle');
+  if (autoReloadCheckbox) {
+    autoReloadCheckbox.addEventListener('change', (e) => {
+      if (actions.toggleAutoReload) actions.toggleAutoReload(e.target.checked);
+    });
+  }
+
+  // Support & Roadmap hover effects + external link handling
+  const supportBtn = container.querySelector('#settings-support-btn');
+  if (supportBtn) {
+    supportBtn.addEventListener('mouseenter', () => { supportBtn.style.borderColor = 'var(--tp-primary)'; supportBtn.style.color = 'var(--tp-primary)'; });
+    supportBtn.addEventListener('mouseleave', () => { supportBtn.style.borderColor = 'var(--tp-border)'; supportBtn.style.color = 'var(--tp-text-secondary)'; });
+  }
+  const roadmapBtn = container.querySelector('#settings-roadmap-btn');
+  if (roadmapBtn) {
+    roadmapBtn.addEventListener('mouseenter', () => { roadmapBtn.style.borderColor = 'var(--tp-primary)'; roadmapBtn.style.color = 'var(--tp-primary)'; });
+    roadmapBtn.addEventListener('mouseleave', () => { roadmapBtn.style.borderColor = 'var(--tp-border)'; roadmapBtn.style.color = 'var(--tp-text-secondary)'; });
+    roadmapBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'https://traacky.featurebase.app' });
     });
   }
 

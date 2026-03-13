@@ -36,7 +36,7 @@ const EXPECTED_FUNNEL_EVENTS = [
   {
     key: 'view_item',
     label: 'Product View',
-    events: { ga4: 'view_item', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit' },
+    events: { ga4: 'view_item', meta: 'ViewContent', tiktok: 'ViewContent' },
   },
   {
     key: 'add_to_cart',
@@ -47,6 +47,16 @@ const EXPECTED_FUNNEL_EVENTS = [
     key: 'begin_checkout',
     label: 'Checkout Started',
     events: { ga4: 'begin_checkout', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout' },
+  },
+  {
+    key: 'add_shipping_info',
+    label: 'Shipping Info',
+    events: { ga4: 'add_shipping_info', meta: 'AddShippingInfo', tiktok: 'AddShippingInfo', google_ads: 'conversion' },
+  },
+  {
+    key: 'add_payment_info',
+    label: 'Payment Info',
+    events: { ga4: 'add_payment_info', meta: 'AddPaymentInfo', tiktok: 'AddPaymentInfo', google_ads: 'conversion' },
   },
   {
     key: 'purchase',
@@ -114,19 +124,72 @@ const DATALAYER_EVENT_TO_FUNNEL_KEY = {
   view_item: 'view_item',
   add_to_cart: 'add_to_cart',
   begin_checkout: 'begin_checkout',
+  add_shipping_info: 'add_shipping_info',
+  add_payment_info: 'add_payment_info',
+  add_contact_info: 'add_shipping_info', // contact info is part of shipping step
   purchase: 'purchase',
   view_cart: 'add_to_cart', // view_cart means cart is active
 };
 
 /**
- * Resolve funnel key from an event name (case-insensitive fallback).
+ * Resolve funnel key from an event name.
+ * 1. Exact match (direct lookup)
+ * 2. Case-insensitive exact match
+ * 3. Substring match: if the event name *contains* a known canonical name,
+ *    match it (e.g. "dl_begin_checkout", "purchase_mysite", "custom_add_to_cart_v2")
+ *    Longer canonical names are checked first to avoid false positives
+ *    (e.g. "add_shipping_info" before "add_to_cart").
+ *    Generic page-level events (pagevisit, page_view, PageView) are excluded
+ *    from substring matching to avoid false positives on every page.
  */
+
+// Events too generic for substring matching — they fire on every page
+const GENERIC_EVENT_NAMES = new Set([
+  'pagevisit', 'page_view', 'pageview',                // generic pageviews
+  'cookie_match', 'cookie_sync', 'firmographic_enrichment', // utility pings
+]);
+
+// Pre-sorted canonical names for substring matching (longest first to avoid partial false positives)
+const _ALL_CANONICAL_NAMES = [
+  ...Object.keys(DATALAYER_EVENT_TO_FUNNEL_KEY),
+  ...Object.keys(EVENT_TO_FUNNEL_KEY),
+].sort((a, b) => b.length - a.length);
+
+// Deduplicated, lowercase for substring scan — excluding generic events
+const _SUBSTRING_CANDIDATES = [];
+const _seenSubstr = new Set();
+for (const name of _ALL_CANONICAL_NAMES) {
+  const lower = name.toLowerCase();
+  if (_seenSubstr.has(lower) || GENERIC_EVENT_NAMES.has(lower)) continue;
+  _seenSubstr.add(lower);
+  const key = DATALAYER_EVENT_TO_FUNNEL_KEY[name]
+    || EVENT_TO_FUNNEL_KEY[name]
+    || EVENT_TO_FUNNEL_KEY_LOWER[lower];
+  if (key) _SUBSTRING_CANDIDATES.push({ pattern: lower, funnelKey: key });
+}
+
 function resolveFunnelKey(eventName) {
   if (!eventName) return null;
-  return DATALAYER_EVENT_TO_FUNNEL_KEY[eventName]
-    || EVENT_TO_FUNNEL_KEY[eventName]
-    || EVENT_TO_FUNNEL_KEY_LOWER[eventName.toLowerCase()]
-    || null;
+
+  // 1. Direct exact match
+  const direct = DATALAYER_EVENT_TO_FUNNEL_KEY[eventName]
+    || EVENT_TO_FUNNEL_KEY[eventName];
+  if (direct) return direct;
+
+  // 2. Case-insensitive exact match
+  const lower = eventName.toLowerCase();
+  const ciMatch = EVENT_TO_FUNNEL_KEY_LOWER[lower];
+  if (ciMatch) return ciMatch;
+
+  // Skip substring matching for generic page-level events
+  if (GENERIC_EVENT_NAMES.has(lower)) return null;
+
+  // 3. Substring match (longest pattern first)
+  for (const { pattern, funnelKey } of _SUBSTRING_CANDIDATES) {
+    if (lower.includes(pattern)) return funnelKey;
+  }
+
+  return null;
 }
 
 // --- PLATFORM LABELS & COLORS ---
@@ -499,7 +562,7 @@ function renderPlatformIconsRow(detectedPlatforms, waitingPlatforms, size = 14) 
  * @param {object|null} lastReport
  * @param {object} state - Full sidepanel state (for network requests, pixels)
  */
-export function renderFunnelMode(container, funnelSession, capabilities, lastReport, state) {
+export function renderFunnelMode(container, funnelSession, capabilities, lastReport, state, actions) {
   if (!capabilities.canFunnelMode) {
     renderSectionPaywall(container, 'funnelMode', 'pro');
     return;
@@ -511,18 +574,18 @@ export function renderFunnelMode(container, funnelSession, capabilities, lastRep
   }
 
   if (lastReport) {
-    renderFunnelReport(container, lastReport, funnelSession, capabilities, state);
+    renderFunnelReport(container, lastReport, funnelSession, capabilities, state, actions);
     return;
   }
 
   if (funnelSession.isRecording) {
-    renderRecordingState(container, funnelSession, capabilities, state);
+    renderRecordingState(container, funnelSession, capabilities, state, actions);
   } else {
-    renderIdleState(container, funnelSession, capabilities);
+    renderIdleState(container, funnelSession, capabilities, state, actions);
   }
 }
 
-function renderIdleState(container, funnelSession, capabilities) {
+function renderIdleState(container, funnelSession, capabilities, state, actions) {
   container.innerHTML = `
     <div style="padding: 16px; text-align: center;">
       <div style="font-size: 32px; margin-bottom: 12px;">&#128279;</div>
@@ -544,14 +607,31 @@ function renderIdleState(container, funnelSession, capabilities) {
 
   const startBtn = container.querySelector('#funnel-start-btn');
   startBtn.addEventListener('click', async () => {
+    if (state) state.funnelReport = null;
     await funnelSession.start();
-    renderRecordingState(container, funnelSession, capabilities, null);
+    renderRecordingState(container, funnelSession, capabilities, state, actions);
   });
   startBtn.addEventListener('mouseenter', () => { startBtn.style.background = '#005a63'; });
   startBtn.addEventListener('mouseleave', () => { startBtn.style.background = COLORS.primary; });
 }
 
-function renderRecordingState(container, funnelSession, capabilities, state) {
+function buildPurchaseCode(ecommerceData) {
+  if (!ecommerceData) return `dataLayer.push({event: 'purchase'});`;
+  const obj = { event: 'purchase', ecommerce: {} };
+  if (ecommerceData.currency) obj.ecommerce.currency = ecommerceData.currency;
+  if (ecommerceData.value) obj.ecommerce.value = ecommerceData.value;
+  obj.ecommerce.transaction_id = 'test_' + Date.now();
+  if (ecommerceData.items) obj.ecommerce.items = ecommerceData.items;
+  return `dataLayer.push({ecommerce: null});\ndataLayer.push(${JSON.stringify(obj, null, 2)});`;
+}
+
+const CHECKOUT_QUICK_PUSH_EVENTS = [
+  { key: 'add_shipping_info', label: 'Shipping', code: `dataLayer.push({event: 'add_shipping_info'});` },
+  { key: 'add_payment_info', label: 'Payment', code: `dataLayer.push({event: 'add_payment_info'});` },
+  { key: 'purchase', label: 'Purchase', code: null },
+];
+
+function renderRecordingState(container, funnelSession, capabilities, state, actions) {
   const steps = funnelSession.steps || [];
   const detected = funnelSession.detectedEvents || {};
   const detectedKeys = Object.keys(detected);
@@ -749,13 +829,44 @@ function renderRecordingState(container, funnelSession, capabilities, state) {
 
   container.querySelector('#funnel-stop-btn').addEventListener('click', async () => {
     const report = await funnelSession.stop(relevant);
-    renderFunnelReport(container, report, funnelSession, capabilities, state);
+    if (state) state.funnelReport = report;
+    renderFunnelReport(container, report, funnelSession, capabilities, state, actions);
   });
+
+  // Quick-push bar for checkout / thank_you pages
+  const pageType = state?.pageType?.pageType;
+  if (actions?.pushSyntheticEvent && (pageType === 'checkout' || pageType === 'thank_you')) {
+    const eventsToShow = pageType === 'thank_you'
+      ? CHECKOUT_QUICK_PUSH_EVENTS.filter(e => e.key === 'purchase')
+      : CHECKOUT_QUICK_PUSH_EVENTS;
+
+    const bar = document.createElement('div');
+    bar.className = 'tp-funnel-quickpush';
+    bar.innerHTML = `
+      <span style="font-size: 10px; color: var(--tp-text-muted); margin-right: 4px;">Quick Push</span>
+      ${eventsToShow.map(e => `<button class="tp-quick-push-btn" data-qp-event="${e.key}">${e.label}</button>`).join('')}
+    `;
+    container.querySelector('div').appendChild(bar);
+
+    bar.querySelectorAll('[data-qp-event]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.getAttribute('data-qp-event');
+        const evt = CHECKOUT_QUICK_PUSH_EVENTS.find(e => e.key === key);
+        if (!evt) return;
+        const code = key === 'purchase' ? buildPurchaseCode(state?.ecommerceData) : evt.code;
+        actions.pushSyntheticEvent(code, state.quickPushTarget);
+
+        // Flash green
+        btn.classList.add('pushed');
+        setTimeout(() => btn.classList.remove('pushed'), 800);
+      });
+    });
+  }
 }
 
 // ---- Funnel Report ----
 
-function renderFunnelReport(container, report, funnelSession, capabilities, state) {
+function renderFunnelReport(container, report, funnelSession, capabilities, state, actions) {
   const scoreColor = report.overallScore >= 80 ? COLORS.green : report.overallScore >= 50 ? COLORS.orange : COLORS.red;
   const scoreBg = report.overallScore >= 80 ? COLORS.greenBg : report.overallScore >= 50 ? COLORS.orangeBg : COLORS.redBg;
 
@@ -1012,7 +1123,8 @@ function renderFunnelReport(container, report, funnelSession, capabilities, stat
   });
 
   container.querySelector('#funnel-new-btn')?.addEventListener('click', () => {
-    renderIdleState(container, funnelSession, capabilities);
+    if (state) state.funnelReport = null;
+    renderIdleState(container, funnelSession, capabilities, state, actions);
   });
 
   container.querySelector('#funnel-export-btn')?.addEventListener('click', async () => {
