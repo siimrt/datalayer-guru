@@ -53,7 +53,7 @@ export default function Screenshots() {
     <section ref={ref} className="py-24 sm:py-28 md:py-32">
       <div className="mx-auto max-w-[960px] px-5 sm:px-8">
         <div className="fade-in mb-10 text-center sm:mb-12">
-          <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.5rem]">
+          <h2 className="text-[1.75rem] font-bold tracking-tight text-text sm:text-[2rem] md:text-[2.5rem]">
             See Traacky in action
           </h2>
           <p className="mx-auto mt-4 max-w-[480px] text-text-secondary">
@@ -69,8 +69,8 @@ export default function Screenshots() {
               onClick={() => setActive(i)}
               className={`rounded-lg px-3.5 py-2 text-[13px] font-medium transition-all ${
                 active === i
-                  ? "bg-primary text-white shadow-[0_0_16px_rgba(108,92,231,0.2)]"
-                  : "text-text-muted hover:bg-white/[0.04] hover:text-white"
+                  ? "bg-primary text-white shadow-[0_0_16px_rgba(0,109,119,0.15)]"
+                  : "text-text-muted hover:bg-black/[0.03] hover:text-text"
               }`}
             >
               {tab.title}
@@ -85,7 +85,7 @@ export default function Screenshots() {
               <div className="browser-dot bg-[#FF5F57]" />
               <div className="browser-dot bg-[#FEBC2E]" />
               <div className="browser-dot bg-[#28C840]" />
-              <span className="ml-4 text-[11px] text-text-dim font-mono">
+              <span className="ml-4 text-[11px] text-text-muted font-mono">
                 chrome-extension://traacky
               </span>
             </div>

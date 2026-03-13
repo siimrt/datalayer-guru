@@ -3,18 +3,18 @@
 import AppIcon from "./AppIcon";
 import ChromeIcon from "./ChromeIcon";
 
-const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/";
+const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/gbanfpfljdeeililjkaejmljnckmoged";
 
 export default function Navbar() {
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-[#0a0a0a]/70 backdrop-blur-xl border-b border-white/[0.04]">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-black/[0.06]">
       <div className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-3 sm:px-8 sm:py-4">
         {/* Logo */}
         <a href="#" className="flex shrink-0 items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#1A1A2E] to-[#0F0F10] shadow-[0_0_12px_rgba(108,92,231,0.2)]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-[#e6f4f5] to-[#cce8ea] shadow-[0_0_12px_rgba(0,109,119,0.12)]">
             <AppIcon size={22} />
           </div>
-          <span className="text-[15px] font-semibold tracking-tight text-white">
+          <span className="text-[15px] font-semibold tracking-tight text-text">
             Traacky
           </span>
         </a>
@@ -25,7 +25,7 @@ export default function Navbar() {
             <a
               key={item}
               href={`#${item.toLowerCase()}`}
-              className="text-[13px] font-medium text-text-muted transition-colors hover:text-white"
+              className="text-[13px] font-medium text-text-muted transition-colors hover:text-primary"
             >
               {item}
             </a>

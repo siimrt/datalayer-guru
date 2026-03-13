@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import ChromeIcon from "./ChromeIcon";
 
-const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/";
+const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/gbanfpfljdeeililjkaejmljnckmoged";
 
 const PLANS = [
   {
@@ -94,7 +94,7 @@ export default function Pricing() {
     >
       <div className="mx-auto max-w-[1100px] px-5 sm:px-8">
         <div className="fade-in mb-14 text-center sm:mb-16">
-          <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.5rem]">
+          <h2 className="text-[1.75rem] font-bold tracking-tight text-text sm:text-[2rem] md:text-[2.5rem]">
             Simple, transparent pricing
           </h2>
           <p className="mx-auto mt-4 max-w-[480px] text-text-secondary">
@@ -109,24 +109,24 @@ export default function Pricing() {
               key={plan.name}
               className={`fade-in relative flex flex-col rounded-2xl border p-6 ${
                 plan.highlighted
-                  ? "popular-card border-primary/30 bg-primary/[0.04]"
-                  : "border-white/[0.06] bg-white/[0.02]"
+                  ? "popular-card border-primary/20 bg-primary/[0.03]"
+                  : "border-black/[0.06] bg-white"
               }`}
               style={{ transitionDelay: `${i * 60}ms` }}
             >
               {plan.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[11px] font-semibold text-white shadow-[0_0_16px_rgba(108,92,231,0.3)]">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[11px] font-semibold text-white shadow-[0_0_16px_rgba(0,109,119,0.2)]">
                   {plan.badge}
                 </div>
               )}
 
-              <h3 className="text-[15px] font-bold text-white">{plan.name}</h3>
+              <h3 className="text-[15px] font-bold text-text">{plan.name}</h3>
               <p className="mt-1 text-[13px] text-text-dim">
                 {plan.description}
               </p>
 
               <div className="mt-5 mb-6">
-                <span className="text-[2rem] font-extrabold tracking-tight text-white">
+                <span className="text-[2rem] font-extrabold tracking-tight text-text">
                   {plan.price}
                 </span>
                 <span className="text-[13px] text-text-dim">{plan.period}</span>

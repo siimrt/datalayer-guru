@@ -71,7 +71,7 @@ export default function Features() {
           <p className="mb-4 text-[13px] font-semibold tracking-[0.1em] text-primary-light uppercase">
             Features
           </p>
-          <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.75rem] md:leading-[1.1]">
+          <h2 className="text-[1.75rem] font-bold tracking-tight text-text sm:text-[2rem] md:text-[2.75rem] md:leading-[1.1]">
             Tracking tools for the{" "}
             <span className="text-gradient">modern ecommerce stack</span>
           </h2>
@@ -86,14 +86,14 @@ export default function Features() {
           {FEATURES.map((f, i) => (
             <div
               key={f.title}
-              className={`fade-in border-b border-white/[0.04] py-12 last:border-b-0 md:py-16 ${
+              className={`fade-in border-b border-black/[0.04] py-12 last:border-b-0 md:py-16 ${
                 f.visual ? "grid items-center gap-8 md:grid-cols-2 md:gap-12" : ""
               }`}
               style={{ transitionDelay: `${i * 80}ms` }}
             >
               {/* Text */}
               <div className={!f.visual ? "max-w-[680px]" : ""}>
-                <h3 className="text-[1.25rem] font-bold tracking-tight text-white sm:text-[1.5rem] md:text-[1.75rem]">
+                <h3 className="text-[1.25rem] font-bold tracking-tight text-text sm:text-[1.5rem] md:text-[1.75rem]">
                   <span className="text-gradient">{f.title}</span>{" "}
                   <span className="text-text-secondary font-normal">
                     {f.tagline}
@@ -113,7 +113,7 @@ export default function Features() {
                     <div className="browser-dot bg-[#FF5F57]" />
                     <div className="browser-dot bg-[#FEBC2E]" />
                     <div className="browser-dot bg-[#28C840]" />
-                    <span className="ml-4 text-[11px] text-text-dim font-mono">
+                    <span className="ml-4 text-[11px] text-text-muted font-mono">
                       traacky
                     </span>
                   </div>

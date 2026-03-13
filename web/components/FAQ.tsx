@@ -59,7 +59,7 @@ export default function FAQ() {
     <section id="faq" ref={ref} className="py-24 sm:py-28 md:py-32">
       <div className="mx-auto max-w-[680px] px-5 sm:px-8">
         <div className="fade-in mb-12 text-center">
-          <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.5rem]">
+          <h2 className="text-[1.75rem] font-bold tracking-tight text-text sm:text-[2rem] md:text-[2.5rem]">
             Frequently asked questions
           </h2>
         </div>
@@ -75,7 +75,7 @@ export default function FAQ() {
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
                 className="flex w-full items-center justify-between px-5 py-4 text-left sm:px-6"
               >
-                <span className="pr-4 text-[14px] font-semibold text-white">
+                <span className="pr-4 text-[14px] font-semibold text-text">
                   {faq.q}
                 </span>
                 <svg

@@ -2,7 +2,7 @@
 
 import ChromeIcon from "./ChromeIcon";
 
-const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/";
+const CHROME_STORE_URL = "https://chromewebstore.google.com/detail/traacky/gbanfpfljdeeililjkaejmljnckmoged";
 
 /* Aurora lines — thin vertical beams of varying brightness */
 const LINES = [
@@ -43,7 +43,7 @@ export default function Hero() {
             style={{
               left: line.left,
               width: `${line.w}px`,
-              background: `linear-gradient(180deg, transparent 0%, rgba(108,92,231,${line.opacity}) 25%, rgba(162,155,254,${line.opacity * 1.4}) 50%, rgba(108,92,231,${line.opacity}) 75%, transparent 100%)`,
+              background: `linear-gradient(180deg, transparent 0%, rgba(0,109,119,${line.opacity}) 25%, rgba(131,197,190,${line.opacity * 1.4}) 50%, rgba(0,109,119,${line.opacity}) 75%, transparent 100%)`,
             }}
           />
         ))}
@@ -55,13 +55,13 @@ export default function Hero() {
 
       <div className="relative z-10 mx-auto max-w-[900px] px-5 text-center sm:px-8">
         {/* Badge */}
-        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-4 py-1.5 text-[13px] text-text-secondary">
+        <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-black/[0.02] px-4 py-1.5 text-[13px] text-text-secondary">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
           Free Chrome Extension — v2.0
         </div>
 
         {/* Headline */}
-        <h1 className="text-[2.75rem] leading-[1.08] font-extrabold tracking-[-0.035em] text-white sm:text-[3.5rem] md:text-[4.25rem] md:leading-[1.05]">
+        <h1 className="text-[2.75rem] leading-[1.08] font-extrabold tracking-[-0.035em] text-text sm:text-[3.5rem] md:text-[4.25rem] md:leading-[1.05]">
           Ship faster with{" "}
           <span className="text-gradient">tracking</span> for modern
           ecommerce teams
@@ -99,7 +99,7 @@ export default function Hero() {
               <div className="code-dot bg-[#FF5F57]" />
               <div className="code-dot bg-[#FEBC2E]" />
               <div className="code-dot bg-[#28C840]" />
-              <span className="ml-3 text-[11px] text-text-dim font-mono">dataLayer — live</span>
+              <span className="ml-3 text-[11px] text-[#64748b] font-mono">dataLayer — live</span>
             </div>
             <div className="code-content">
               <div><span className="syn-comment">{"// Traacky auto-detects your ecommerce data"}</span></div>
@@ -112,7 +112,7 @@ export default function Hero() {
               <div>{"    "}<span className="syn-prop">items</span><span className="syn-punct">:</span> <span className="syn-punct">[{"{"}</span> <span className="syn-prop">item_name</span><span className="syn-punct">:</span> <span className="syn-string">&apos;Premium Sneakers&apos;</span><span className="syn-punct">,</span> <span className="syn-prop">price</span><span className="syn-punct">:</span> <span className="syn-number">149.99</span> <span className="syn-punct">{"}"}]</span></div>
               <div>{"  "}<span className="syn-punct">{"}"}</span></div>
               <div><span className="syn-punct">{"});"}</span></div>
-              <div className="mt-3 border-t border-white/[0.04] pt-3">
+              <div className="mt-3 border-t border-white/[0.06] pt-3">
                 <div><span className="syn-check">{"✓"}</span> <span className="text-text-secondary">GA4 purchase event generated</span></div>
                 <div><span className="syn-check">{"✓"}</span> <span className="text-text-secondary">Meta Purchase pixel matched</span></div>
                 <div><span className="syn-check">{"✓"}</span> <span className="text-text-secondary">TikTok CompletePayment detected</span></div>

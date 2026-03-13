@@ -84,7 +84,7 @@ export default function FeatureShowcase() {
       <div className="mx-auto max-w-[1100px] px-5 sm:px-8">
         {/* Heading */}
         <div className="fade-in mb-14 max-w-[600px] sm:mb-16">
-          <h2 className="text-[1.75rem] font-bold tracking-tight text-white sm:text-[2rem] md:text-[2.5rem]">
+          <h2 className="text-[1.75rem] font-bold tracking-tight text-text sm:text-[2rem] md:text-[2.5rem]">
             Speed and accuracy for agencies.{" "}
             <span className="text-text-muted">And devs.</span>
           </h2>
@@ -101,7 +101,7 @@ export default function FeatureShowcase() {
               <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/8 text-primary-light">
                 {h.icon}
               </div>
-              <h3 className="mb-1.5 text-[15px] font-semibold text-white">
+              <h3 className="mb-1.5 text-[15px] font-semibold text-text">
                 {h.title}
               </h3>
               <p className="text-[14px] leading-relaxed text-text-muted">
