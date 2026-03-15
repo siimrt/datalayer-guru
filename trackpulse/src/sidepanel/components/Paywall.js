@@ -7,6 +7,7 @@
  */
 
 import { PLAN_PRICING } from '../../shared/plans.js';
+import { trackEvent } from '../../shared/analytics.js';
 
 // === Message helpers ===
 
@@ -61,6 +62,16 @@ let _upgradeHandler = () => {
   chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_PAYMENT' });
 };
 
+// Current plan (set from main.js for paywall tracking context)
+let _currentPlan = 'free';
+
+// Debounce: only fire paywall_shown once per feature per session
+const _paywallShownThisSession = new Set();
+
+export function setCurrentPlan(plan) {
+  _currentPlan = plan;
+}
+
 /**
  * Set the upgrade handler. Called once from main.js to route to the pricing page.
  */
@@ -68,7 +79,12 @@ export function setUpgradeHandler(handler) {
   _upgradeHandler = handler;
 }
 
-function triggerUpgrade() {
+function triggerUpgrade(feature, targetPlan) {
+  trackEvent('paywall_upgrade_clicked', {
+    feature: feature || 'unknown',
+    currentPlan: _currentPlan,
+    targetPlan: targetPlan || 'unknown',
+  });
   _upgradeHandler();
 }
 
@@ -79,6 +95,11 @@ function triggerUpgrade() {
  * @param {string} upgradePlan - Which plan to suggest
  */
 export function applyCodePaywall(codeBlock, feature, upgradePlan) {
+  if (!_paywallShownThisSession.has(feature)) {
+    _paywallShownThisSession.add(feature);
+    trackEvent('paywall_shown', { feature, currentPlan: _currentPlan, requiredPlan: upgradePlan });
+  }
+
   const wrapper = document.createElement('div');
   wrapper.className = 'paywall-wrapper';
 
@@ -135,7 +156,7 @@ export function applyCodePaywall(codeBlock, feature, upgradePlan) {
   wrapper.appendChild(overlay);
 
   const btn = overlay.querySelector('.paywall-upgrade-btn');
-  btn.addEventListener('click', triggerUpgrade);
+  btn.addEventListener('click', () => triggerUpgrade(feature, upgradePlan));
   btn.addEventListener('mouseenter', () => { btn.style.background = '#005a63'; });
   btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--tp-primary)'; });
 }
@@ -144,6 +165,11 @@ export function applyCodePaywall(codeBlock, feature, upgradePlan) {
  * Render a full-section paywall (for Audit tab, Funnel Mode, etc.)
  */
 export function renderSectionPaywall(container, feature, upgradePlan) {
+  if (!_paywallShownThisSession.has(feature)) {
+    _paywallShownThisSession.add(feature);
+    trackEvent('paywall_shown', { feature, currentPlan: _currentPlan, requiredPlan: upgradePlan });
+  }
+
   const planPrice = PLAN_PRICING[upgradePlan] || PLAN_PRICING.pro;
   const planLabel = upgradePlan.charAt(0).toUpperCase() + upgradePlan.slice(1);
 
@@ -173,7 +199,7 @@ export function renderSectionPaywall(container, feature, upgradePlan) {
   `;
 
   const btn = container.querySelector('.section-paywall-btn');
-  btn.addEventListener('click', triggerUpgrade);
+  btn.addEventListener('click', () => triggerUpgrade(feature, upgradePlan));
   btn.addEventListener('mouseenter', () => {
     btn.style.background = '#005a63';
     btn.style.transform = 'scale(1.02)';
@@ -195,7 +221,7 @@ export function renderLockedButton(container, label, feature, upgradePlan) {
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    triggerUpgrade();
+    triggerUpgrade(feature, upgradePlan);
   });
   btn.addEventListener('mouseenter', () => {
     btn.style.borderColor = 'var(--tp-primary)';
@@ -243,7 +269,7 @@ export function renderCMSGateBanner(container, detectedCMS, supportedCMS) {
     ">Upgrade to ${needed}</button>
   `;
 
-  banner.querySelector('.cms-gate-upgrade-btn').addEventListener('click', triggerUpgrade);
+  banner.querySelector('.cms-gate-upgrade-btn').addEventListener('click', () => triggerUpgrade('cmsGate', needed.toLowerCase()));
   container.appendChild(banner);
   return true;
 }

@@ -8,6 +8,7 @@ import { syntaxHighlight, escapeHtml } from '../../shared/utils.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { renderDataExtracted } from './DataExtracted.js';
 import { applyCodePaywall, renderLockedButton, renderCMSGateBanner } from './Paywall.js';
+import { trackEvent } from '../../shared/analytics.js';
 import { getSyntheticEvents } from '../../content/generators/synthetic-events.js';
 import { PLATFORM_LABELS as _PLAT_LABELS } from '../../shared/constants.js';
 
@@ -258,7 +259,14 @@ export function renderEventGenerator(container, state, actions) {
   // Show CMS gate banner if needed
   if (!cmsSupported) {
     const bannerEl = container.querySelector('#cms-gate-banner');
-    renderCMSGateBanner(bannerEl, detectedCMS, capabilities.supportedCMS);
+    const bannerShown = renderCMSGateBanner(bannerEl, detectedCMS, capabilities.supportedCMS);
+    if (bannerShown) {
+      trackEvent('cms_gate_shown', {
+        cms: detectedCMS,
+        currentPlan: capabilities.plan,
+        requiredPlan: detectedCMS === 'prestashop' ? 'starter' : 'pro',
+      });
+    }
   }
 
   // Bind Quick Push expandable card interactions
@@ -361,7 +369,13 @@ export function renderEventGenerator(container, state, actions) {
       if (btn.dataset.locked === 'true') {
         if (actions.navigateToPricing) actions.navigateToPricing();
       } else {
-        actions.togglePlatform(btn.dataset.platform);
+        const platform = btn.dataset.platform;
+        const willBeEnabled = !state.activePlatforms.includes(platform);
+        trackEvent('platform_toggled', {
+          platform,
+          enabled: willBeEnabled,
+        });
+        actions.togglePlatform(platform);
       }
     });
   });
@@ -479,6 +493,10 @@ function createEventCard(event, index, _collapsed, capabilities, actions) {
     // Persist state
     if (isHidden) {
       expandedCards.add(cardKey);
+      trackEvent('event_card_expanded', {
+        platform: event.platform,
+        eventName: event.eventName,
+      });
     } else {
       expandedCards.delete(cardKey);
     }

@@ -5,6 +5,7 @@
 import { formatTime, escapeHtml, syntaxHighlight } from '../../shared/utils.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { PLATFORM_LABELS as _PLAT_LABELS } from '../../shared/constants.js';
+import { trackEvent } from '../../shared/analytics.js';
 
 let filterText = '';
 let ecomOnly = true;
@@ -125,6 +126,7 @@ export function renderDataLayerLive(container, state, actions) {
   const ecomCheckbox = container.querySelector('#dl-ecom-only');
   ecomCheckbox?.addEventListener('change', (e) => {
     ecomOnly = e.target.checked;
+    trackEvent('datalayer_filter_used', { filterType: 'ecom_toggle' });
     renderDataLayerLive(container, state, actions);
   });
 
@@ -132,11 +134,15 @@ export function renderDataLayerLive(container, state, actions) {
   const netCheckbox = container.querySelector('#dl-net-toggle');
   netCheckbox?.addEventListener('change', (e) => {
     showNetwork = e.target.checked;
+    trackEvent('datalayer_filter_used', { filterType: 'network_toggle' });
     renderDataLayerLive(container, state, actions);
   });
 
   // Bind clear
   container.querySelector('#dl-clear')?.addEventListener('click', () => {
+    trackEvent('datalayer_cleared', {
+      eventCount: state.dataLayerStream.length + (showNetwork ? (state.networkRequests || []).length : 0),
+    });
     actions.clearDataLayerStream();
   });
 
@@ -243,6 +249,12 @@ function toggleEntry(entryEl) {
     if (chevron) chevron.classList.toggle('open', isHidden);
     if (isHidden) {
       expandedEntries.add(id);
+      const label = entryEl.querySelector('[style*="font-weight: 600"]')?.textContent?.trim() || 'unknown';
+      const isNetwork = entryEl.dataset.type === 'network';
+      trackEvent('datalayer_event_expanded', {
+        eventName: label,
+        category: isNetwork ? 'network' : 'datalayer',
+      });
     } else {
       expandedEntries.delete(id);
     }

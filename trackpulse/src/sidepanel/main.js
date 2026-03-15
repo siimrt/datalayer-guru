@@ -7,10 +7,21 @@
 import { MSG } from '../shared/messaging.js';
 import { ConsentChecker } from '../content/auditor/consent-checker.js';
 import { getPlanCapabilities } from '../licensing/feature-gates.js';
-import { initAnalytics, trackEvent, identifyUser } from '../shared/analytics.js';
+import { initAnalytics, trackEvent as _rawTrackEvent, identifyUser, setSuperProperties, flushAnalytics } from '../shared/analytics.js';
+import { setCurrentPlan } from './components/Paywall.js';
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
 import { shouldShowConsentOverlay, showConsentOverlay } from './components/ConsentOverlay.js';
+
+// ---- Session Tracking ----
+const _sessionStart = Date.now();
+const _sessionTabsVisited = new Set();
+let _sessionActionsCount = 0;
+
+function trackEvent(name, props) {
+  _sessionActionsCount++;
+  _rawTrackEvent(name, props);
+}
 
 // ---- Anti-flicker: skip re-render when detection data hasn't changed ----
 let _lastDetectionFingerprint = null;
@@ -64,7 +75,40 @@ if (IS_POPUP) {
 
 // ---- Analytics Initialization ----
 initAnalytics();
+setSuperProperties({
+  extension_version: chrome.runtime.getManifest().version,
+  is_popup: IS_POPUP,
+});
+
+// Session number & days since install (enriches every event for retention analysis)
+chrome.storage.local.get(['tp_session_number', 'tp_install_ts'], (data) => {
+  const sessionNumber = (data.tp_session_number || 0) + 1;
+  const installTs = data.tp_install_ts || Date.now();
+  const daysSinceInstall = Math.floor((Date.now() - installTs) / 86400000);
+  chrome.storage.local.set({
+    tp_session_number: sessionNumber,
+    tp_install_ts: installTs,
+  });
+  setSuperProperties({ session_number: sessionNumber, days_since_install: daysSinceInstall });
+});
+
 trackEvent('sidepanel_opened');
+
+// ---- Session Duration (fire on close/hide) ----
+function _sendSessionDuration() {
+  const duration_s = Math.round((Date.now() - _sessionStart) / 1000);
+  if (duration_s < 2) return;
+  _rawTrackEvent('session_duration', {
+    duration_s,
+    tabsVisited: _sessionTabsVisited.size,
+    actionsCount: _sessionActionsCount,
+  });
+  flushAnalytics();
+}
+window.addEventListener('beforeunload', _sendSessionDuration);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') _sendSessionDuration();
+});
 
 import { renderEventGenerator, resetEventGeneratorState } from './components/EventGenerator.js';
 import { renderAuditPanel, resetAuditPanelState } from './components/AuditPanel.js';
@@ -304,6 +348,7 @@ const actions = {
       showToast('PDF downloaded', 'success');
     } catch (e) {
       console.error('[Traacky] PDF export failed:', e);
+      trackEvent('export_failed', { type: 'audit_pdf', error: String(e.message || e).slice(0, 200) });
       showToast('PDF generation failed', 'error');
     }
   },
@@ -456,6 +501,8 @@ async function initPlan() {
     state.planLoading = false;
     state.capabilities = resolvePlanCapabilities(state.plan);
     identifyUser(state.plan, state.userEmail);
+    setSuperProperties({ plan: state.plan });
+    setCurrentPlan(state.plan);
     trackEvent('plan_loaded', { plan: state.plan });
     console.log('[Traacky Sidepanel] Initial plan:', state.plan, 'debug:', JSON.stringify(state.planDebug));
 
@@ -519,6 +566,8 @@ async function refreshPlanQuietly() {
       state.userEmail = refreshed.email || state.userEmail;
       state.capabilities = resolvePlanCapabilities(state.plan);
       identifyUser(state.plan, state.userEmail);
+      setSuperProperties({ plan: state.plan });
+      setCurrentPlan(state.plan);
       trackEvent('plan_upgraded', { from: oldPlan, to: state.plan });
 
       // If on pricing page and plan upgraded, show success animation + redirect
@@ -581,11 +630,32 @@ chrome.runtime.onMessage.addListener((msg) => {
 
       recomputeDetectedPlatforms();
 
+      setSuperProperties({ cms: state.cms?.cms || 'unknown' });
+
       trackEvent('page_detected', {
         cms: state.cms?.cms || 'unknown',
         pageType: state.pageType?.pageType || 'unknown',
         eventsCount: Object.values(state.generatedEvents).flat().length,
       });
+
+      // Fire first_detection_success only once ever
+      chrome.storage.local.get('tp_first_detection_fired', (data) => {
+        if (!data.tp_first_detection_fired && state.cms?.cms && state.cms.cms !== 'unknown') {
+          chrome.storage.local.set({ tp_first_detection_fired: true });
+          trackEvent('first_detection_success', {
+            cms: state.cms.cms,
+            pageType: state.pageType?.pageType || 'unknown',
+          });
+        }
+      });
+
+      // Track failed detections
+      if (state.cms?.cms === 'unknown' && state.pageType?.pageType === 'unknown') {
+        trackEvent('detection_failed', {
+          url: (state.url || '').slice(0, 200),
+          error: 'no_cms_no_page_type',
+        });
+      }
 
       // If funnel recording is active, add this step (with network snapshot)
       if (funnelSession.isRecording) {
@@ -864,6 +934,8 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.planLoading = false;
 
       identifyUser(state.plan, state.userEmail);
+      setSuperProperties({ plan: state.plan });
+      setCurrentPlan(state.plan);
       trackEvent('subscription_changed', { from: oldPlan, to: state.plan });
 
       // If on pricing page and plan upgraded, show success animation
@@ -886,6 +958,7 @@ chrome.runtime.onMessage.addListener((msg) => {
 function handleTabChange(tab) {
   clearTimeout(auditRerenderTimer);
   state.activeTab = tab;
+  _sessionTabsVisited.add(tab);
   trackEvent('tab_changed', { tab });
   // Recompute detected platforms when switching to audit or pixels
   // (picks up platforms from network requests that arrived while on another tab)

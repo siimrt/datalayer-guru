@@ -25,6 +25,7 @@ import { renderSectionPaywall } from './Paywall.js';
 import { enhanceAuditWithNetworkData } from '../utils/network-audit-enhancer.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { PAGE_TYPE_LABELS, PLATFORM_LABELS } from '../../shared/constants.js';
+import { trackEvent } from '../../shared/analytics.js';
 
 const FUNNEL_STORAGE_KEY = 'tp_funnel_session';
 
@@ -609,6 +610,7 @@ function renderIdleState(container, funnelSession, capabilities, state, actions)
   startBtn.addEventListener('click', async () => {
     if (state) state.funnelReport = null;
     await funnelSession.start();
+    trackEvent('funnel_started');
     renderRecordingState(container, funnelSession, capabilities, state, actions);
   });
   startBtn.addEventListener('mouseenter', () => { startBtn.style.background = '#005a63'; });
@@ -829,6 +831,11 @@ function renderRecordingState(container, funnelSession, capabilities, state, act
 
   container.querySelector('#funnel-stop-btn').addEventListener('click', async () => {
     const report = await funnelSession.stop(relevant);
+    trackEvent('funnel_stopped', {
+      pageCount: report.totalSteps || 0,
+      duration_s: Math.round((report.duration || 0) / 1000),
+      score: report.overallScore || 0,
+    });
     if (state) state.funnelReport = report;
     renderFunnelReport(container, report, funnelSession, capabilities, state, actions);
   });
@@ -1131,9 +1138,10 @@ function renderFunnelReport(container, report, funnelSession, capabilities, stat
     try {
       const { generateFunnelPDFReport } = await import('../../export/pdf-report.js');
       await generateFunnelPDFReport(report);
-      // Toast is shown from the calling context if available
+      trackEvent('funnel_exported', { format: 'pdf', score: report.overallScore || 0 });
     } catch (e) {
       console.error('[Traacky] Funnel PDF export failed:', e);
+      trackEvent('export_failed', { type: 'funnel_pdf', error: String(e.message || e).slice(0, 200) });
     }
   });
 }

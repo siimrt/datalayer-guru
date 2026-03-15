@@ -7,6 +7,7 @@
 import { escapeHtml } from '../../shared/utils.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { enhancePixelsWithNetworkData } from '../utils/network-pixel-enhancer.js';
+import { trackEvent } from '../../shared/analytics.js';
 
 const PLATFORM_NAMES = {
   gtm: 'Google Tag Manager',
@@ -88,6 +89,8 @@ export function renderPixelStatus(container, state, onReopenCMP) {
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       const pixelId = el.dataset.pixelId;
+      const platform = el.dataset.platform || 'unknown';
+      trackEvent('pixel_id_copied', { platform, pixelId });
       navigator.clipboard.writeText(pixelId).then(() => {
         const original = el.textContent;
         el.textContent = 'Copied!';
@@ -117,7 +120,7 @@ function renderPixelRow(pixel, detected) {
   if (!detected) {
     idHtml = 'Not detected';
   } else if (pixel.id) {
-    idHtml = `<span class="tp-pixel-id-copy" data-pixel-id="${escapeHtml(pixel.id)}" style="cursor: pointer; border-bottom: 1px dashed currentColor;" title="Click to copy">${escapeHtml(pixel.id)}</span>`;
+    idHtml = `<span class="tp-pixel-id-copy" data-pixel-id="${escapeHtml(pixel.id)}" data-platform="${pixel.platform}" style="cursor: pointer; border-bottom: 1px dashed currentColor;" title="Click to copy">${escapeHtml(pixel.id)}</span>`;
   } else {
     idHtml = 'Detected';
   }

@@ -19,6 +19,9 @@ const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST || 'https://eu.i.posthog.
 // ---- Singleton ----
 let posthog = null;
 
+// ---- Super Properties (merged into every event) ----
+let _superProperties = {};
+
 /**
  * Initialize PostHog analytics.
  * Call once at app startup (sidepanel open).
@@ -56,15 +59,33 @@ export function initAnalytics() {
 }
 
 /**
+ * Set super properties that are merged into every subsequent trackEvent call.
+ */
+export function setSuperProperties(props) {
+  _superProperties = { ..._superProperties, ...props };
+}
+
+/**
  * Track a named event with optional properties.
+ * Super properties are automatically merged (event props take precedence).
  */
 export function trackEvent(eventName, properties = {}) {
   if (!posthog) return;
   try {
-    posthog.capture(eventName, properties);
+    posthog.capture(eventName, { ..._superProperties, ...properties });
   } catch (e) {
     // Silent — never break the app for analytics
   }
+}
+
+/**
+ * Flush pending events immediately (useful before page unload).
+ */
+export function flushAnalytics() {
+  if (!posthog) return;
+  try {
+    posthog.flush?.();
+  } catch (e) {}
 }
 
 /**

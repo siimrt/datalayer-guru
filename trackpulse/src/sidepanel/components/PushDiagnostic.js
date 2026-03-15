@@ -7,6 +7,7 @@
 
 import { EXPECTED_EVENTS_BY_PAGE, EXPECTED_EVENTS_BY_PAGE_LEADGEN } from '../../shared/canonical-audit.js';
 import { isServerSideRequest } from '../../content/parsers/network-request-parser.js';
+import { trackEvent } from '../../shared/analytics.js';
 
 // Build reverse map: eventName → [pageType, ...]
 const EVENT_TO_PAGES = {};
@@ -63,6 +64,13 @@ export function showPushDiagnostic(opts) {
   const overlay = document.createElement('div');
   overlay.className = 'tp-push-diagnostic animate-slide-in-up';
   overlay.innerHTML = buildPhase1HTML(eventName, target, currentPageType, hasSGTM);
+
+  const pageMismatch = eventName && EVENT_TO_PAGES[eventName] && currentPageType && !EVENT_TO_PAGES[eventName].includes(currentPageType);
+  trackEvent('push_diagnostic_shown', {
+    result: pageMismatch ? 'warning_page_mismatch' : (hasSGTM ? 'info_sgtm' : 'success'),
+    platform: 'ga4',
+    eventName: eventName || 'unknown',
+  });
 
   // Close button handler
   overlay.addEventListener('click', (e) => {

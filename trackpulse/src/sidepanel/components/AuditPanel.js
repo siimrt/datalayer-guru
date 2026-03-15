@@ -9,6 +9,7 @@
 import { escapeHtml } from '../../shared/utils.js';
 import { PAGE_TYPE_LABELS, PLATFORM_LABELS } from '../../shared/constants.js';
 import { renderSectionPaywall } from './Paywall.js';
+import { trackEvent } from '../../shared/analytics.js';
 import { enhanceAuditWithNetworkData, findNetworkMatchForEvent } from '../utils/network-audit-enhancer.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { isServerSideRequest } from '../../content/parsers/network-request-parser.js';
@@ -226,6 +227,9 @@ export function renderAuditPanel(container, state, actions) {
         if (key) {
           if (isHidden) {
             expandedAuditRows.add(key);
+            if (key.startsWith('net_')) {
+              trackEvent('network_request_expanded', { platform: key.replace('net_', '') });
+            }
           } else {
             expandedAuditRows.delete(key);
           }
@@ -253,6 +257,10 @@ export function renderAuditPanel(container, state, actions) {
 
   container.querySelector('#copy-audit')?.addEventListener('click', () => {
     const report = generateTextAuditReport(state, diff);
+    const eventCount = diff.length;
+    const detected = diff.filter(d => d.status === 'match' || d.status === 'partial' || d.status === 'network_confirmed').length;
+    const score = eventCount > 0 ? Math.round((detected / eventCount) * 100) : 0;
+    trackEvent('audit_report_copied', { score, eventCount });
     actions.copyCode(report);
   });
 

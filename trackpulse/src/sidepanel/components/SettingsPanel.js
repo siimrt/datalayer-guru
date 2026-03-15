@@ -4,6 +4,7 @@
 
 import { renderPlanBadge } from './PlanBadge.js';
 import { PLAN_CONFIG } from '../../shared/plans.js';
+import { trackEvent } from '../../shared/analytics.js';
 
 // Dev/admin mode: show debug info only when extension is loaded unpacked (no update_url)
 function isDevMode() {
@@ -239,6 +240,7 @@ export function renderSettingsPanel(container, state, actions) {
   const manageBtn = container.querySelector('#settings-manage-btn');
   if (manageBtn) {
     manageBtn.addEventListener('click', () => {
+      trackEvent('manage_subscription_clicked', { plan: state.plan || 'free' });
       chrome.runtime.sendMessage({ type: 'TRACKPULSE_OPEN_MANAGEMENT' });
     });
     manageBtn.addEventListener('mouseenter', () => { manageBtn.style.borderColor = 'var(--tp-primary)'; });

@@ -8,6 +8,15 @@ import { MSG } from '../shared/messaging.js';
 import { CMS_INFO } from '../shared/constants.js';
 import { planManager } from '../licensing/plan-manager.js';
 import { resolvePlanFromId } from '../shared/plans.js';
+import { initAnalytics, trackEvent } from '../shared/analytics.js';
+
+// Track extension install
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === 'install') {
+    initAnalytics();
+    trackEvent('extension_installed', { version: chrome.runtime.getManifest().version });
+  }
+});
 
 // Initialize ExtensionPay on extension startup
 planManager.init().then(() => {

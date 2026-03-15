@@ -3,6 +3,8 @@
  * Displays CMP name, Google Consent Mode status, and the 4 consent signals.
  */
 
+import { trackEvent } from '../../shared/analytics.js';
+
 const CMP_NAMES = {
   cookieyes: 'CookieYes', cookiebot: 'Cookiebot', onetrust: 'OneTrust',
   didomi: 'Didomi', axeptio: 'Axeptio', tarteaucitron: 'Tarteaucitron',
@@ -144,6 +146,7 @@ export function showConsentOverlay(consent, callbacks, changeType = 'denied') {
   // Close button handler
   overlay.addEventListener('click', (e) => {
     if (e.target.closest('.tp-consent-close') || e.target === overlay) {
+      trackEvent('consent_overlay_action', { action: 'close' });
       cleanup();
     }
   });
@@ -151,6 +154,7 @@ export function showConsentOverlay(consent, callbacks, changeType = 'denied') {
   // Reopen CMP handler
   overlay.addEventListener('click', (e) => {
     if (e.target.closest('.tp-consent-reopen')) {
+      trackEvent('consent_overlay_action', { action: 'reopen' });
       cleanup();
       if (typeof onReopenCMP === 'function') {
         onReopenCMP(cmpDetected);
@@ -161,11 +165,17 @@ export function showConsentOverlay(consent, callbacks, changeType = 'denied') {
   // Reload page handler
   overlay.addEventListener('click', (e) => {
     if (e.target.closest('.tp-consent-reload')) {
+      trackEvent('consent_overlay_action', { action: 'reload' });
       cleanup();
       if (typeof onReloadPage === 'function') {
         onReloadPage();
       }
     }
+  });
+
+  trackEvent('consent_overlay_shown', {
+    cmpName: cmpDetected || 'unknown',
+    status: changeType,
   });
 
   document.body.appendChild(overlay);

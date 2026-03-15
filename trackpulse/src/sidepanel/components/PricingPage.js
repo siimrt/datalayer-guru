@@ -5,6 +5,7 @@
  */
 
 import { PLAN_CONFIG } from '../../shared/plans.js';
+import { trackEvent } from '../../shared/analytics.js';
 
 // ExtensionPay plan nicknames (must match dashboard config)
 const PLAN_NICKNAMES = {
@@ -46,6 +47,7 @@ const FEATURE_TABLE = [
 let billingCycle = 'annual'; // pre-selected
 
 export function renderPricingPage(container, state, onBack) {
+  trackEvent('pricing_page_viewed', { source: state.previousTab || 'unknown' });
   const currentPlan = state.plan || 'free';
 
   container.innerHTML = `
@@ -324,11 +326,21 @@ function bindPricingEvents(container, state, onBack) {
   container.querySelector('#pricing-back')?.addEventListener('click', onBack);
 
   container.querySelector('#toggle-monthly')?.addEventListener('click', () => {
+    trackEvent('pricing_billing_toggled', {
+      from: billingCycle,
+      to: 'monthly',
+      currentPlan: state.plan || 'free',
+    });
     billingCycle = 'monthly';
     renderPricingPage(container, state, onBack);
   });
 
   container.querySelector('#toggle-annual')?.addEventListener('click', () => {
+    trackEvent('pricing_billing_toggled', {
+      from: billingCycle,
+      to: 'annual',
+      currentPlan: state.plan || 'free',
+    });
     billingCycle = 'annual';
     renderPricingPage(container, state, onBack);
   });
@@ -336,7 +348,15 @@ function bindPricingEvents(container, state, onBack) {
   // Bind CTA buttons
   container.querySelectorAll('[data-plan-nickname]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      handlePlanSelect(btn.dataset.planNickname);
+      const nickname = btn.dataset.planNickname;
+      const planKey = nickname.replace(/-monthly|-annual/, '');
+      trackEvent('pricing_plan_selected', {
+        selectedPlan: planKey,
+        billingCycle,
+        planNickname: nickname,
+        currentPlan: state.plan || 'free',
+      });
+      handlePlanSelect(nickname);
     });
     // Hover effects
     const isProBtn = btn.dataset.planNickname?.includes('pro');
