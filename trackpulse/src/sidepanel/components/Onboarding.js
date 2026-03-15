@@ -205,6 +205,27 @@ export function showOnboarding(container, onComplete) {
     content.querySelector('.tp-ob-btn-skip').addEventListener('click', () => finish(true));
   }
 
+  // ---- Confetti rain ----
+  function spawnConfetti() {
+    const COLORS = ['#006d77', '#83c5be', '#ffddd2', '#00B894', '#e0f4f1', '#b8e0d9'];
+    const count = 55;
+    for (let i = 0; i < count; i++) {
+      const el = document.createElement('div');
+      el.className = 'tp-ob-confetti';
+      el.style.left = Math.random() * 100 + '%';
+      el.style.background = COLORS[Math.floor(Math.random() * COLORS.length)];
+      el.style.setProperty('--drift', (Math.random() - 0.5) * 150 + 'px');
+      el.style.setProperty('--rot', Math.random() * 720 - 360 + 'deg');
+      el.style.animationDelay = Math.random() * 0.5 + 's';
+      el.style.animationDuration = 1.4 + Math.random() * 1 + 's';
+      el.style.width = Math.random() * 6 + 6 + 'px';
+      el.style.height = Math.random() * 8 + 8 + 'px';
+      el.style.borderRadius = Math.random() > 0.5 ? '50%' : '2px';
+      overlay.appendChild(el);
+      el.addEventListener('animationend', () => el.remove());
+    }
+  }
+
   // ---- Step 2: Savings reveal ----
   function buildSavings() {
     const hours = HOUR_VALUES[sliderIndex];
@@ -214,46 +235,42 @@ export function showOnboarding(container, onComplete) {
     const weeklyEur = Math.round(weeklyH * HOURLY_RATE);
     const monthlyEur = Math.round(monthlyH * HOURLY_RATE);
     const yearlyEur = Math.round(yearlyH * HOURLY_RATE);
+    const socialProofH = Math.round(hours * 0.7 * 4.33);
 
-    // Typewriter title
     content.innerHTML = `
       <div class="tp-ob-savings-page">
         <h1 class="tp-ob-typewriter"></h1>
         <div class="tp-ob-hero">
           <span class="tp-ob-hero-number">0</span>
-          <span class="tp-ob-hero-suffix">h / week</span>
+          <span class="tp-ob-hero-suffix">h / year</span>
         </div>
-        <div class="tp-ob-cards">
-          <div class="tp-ob-card tp-ob-card-0">
+        <p class="tp-ob-hero-eur">≈ <span class="tp-ob-hero-eur-num">0</span> €/year <span class="tp-ob-hero-eur-note">(based on €35/h)</span></p>
+        <p class="tp-ob-social-proof">Tracking devs save an average of ${socialProofH}h/month with Traacky</p>
+        <div class="tp-ob-cards-row">
+          <div class="tp-ob-card-sm tp-ob-card-0">
             <span class="tp-ob-card-label">Weekly</span>
             <div class="tp-ob-card-row">
-              <span class="tp-ob-num" data-t="${weeklyH}" data-s="h">0h</span> saved ·
-              <span class="tp-ob-num" data-t="${weeklyEur}" data-s=" €">0 €</span>
+              <span class="tp-ob-num" data-t="${weeklyH}" data-s="h">0h</span>
+              <span class="tp-ob-num tp-ob-num-eur" data-t="${weeklyEur}" data-s=" €">0 €</span>
             </div>
           </div>
-          <div class="tp-ob-card tp-ob-card-1">
+          <div class="tp-ob-card-sm tp-ob-card-1">
             <span class="tp-ob-card-label">Monthly</span>
             <div class="tp-ob-card-row">
-              <span class="tp-ob-num" data-t="${monthlyH}" data-s="h">0h</span> saved ·
-              <span class="tp-ob-num" data-t="${monthlyEur}" data-s=" €">0 €</span>
-            </div>
-          </div>
-          <div class="tp-ob-card tp-ob-card-2">
-            <span class="tp-ob-card-label">Yearly</span>
-            <div class="tp-ob-card-row">
-              <span class="tp-ob-num" data-t="${yearlyH}" data-s="h">0h</span> saved ·
-              <span class="tp-ob-num" data-t="${yearlyEur}" data-s=" €">0 €</span>
+              <span class="tp-ob-num" data-t="${monthlyH}" data-s="h">0h</span>
+              <span class="tp-ob-num tp-ob-num-eur" data-t="${monthlyEur}" data-s=" €">0 €</span>
             </div>
           </div>
         </div>
-        <button class="tp-ob-btn-primary tp-ob-btn-final">Start using Traacky</button>
+        <button class="tp-ob-btn-primary tp-ob-btn-final">Run my first audit →</button>
       </div>
     `;
 
     const titleEl = content.querySelector('.tp-ob-typewriter');
     const heroNum = content.querySelector('.tp-ob-hero-number');
     const heroWrap = content.querySelector('.tp-ob-hero');
-    const allNums = content.querySelectorAll('.tp-ob-num');
+    const heroEurNum = content.querySelector('.tp-ob-hero-eur-num');
+    const heroEurLine = content.querySelector('.tp-ob-hero-eur');
     const finalBtn = content.querySelector('.tp-ob-btn-final');
 
     // Phase 1: typewriter (0–600ms)
@@ -265,38 +282,42 @@ export function showOnboarding(container, onComplete) {
       if (charIdx >= titleText.length) clearInterval(typeInterval);
     }, 25);
 
-    // Phase 2: hero counter (600ms)
+    // Phase 2: hero yearly hours counter (600ms)
     setTimeout(() => {
       heroWrap.classList.add('tp-ob-hero-visible');
-      animateCounter(heroNum, weeklyH, '', 1400);
+      animateCounter(heroNum, yearlyH, '', 1600);
     }, 600);
 
-    // Phase 3: sparkles when hero done (2000ms)
+    // Phase 2b: euro line appears + animates (1400ms)
+    setTimeout(() => {
+      heroEurLine.classList.add('visible');
+      animateCounter(heroEurNum, yearlyEur, '', 1200);
+    }, 1400);
+
+    // Phase 3: sparkles + confetti when hero lands (2200ms)
     setTimeout(() => {
       spawnSparkles(heroNum);
-    }, 2100);
+      spawnConfetti();
+      heroWrap.classList.add('tp-ob-hero-settle');
+    }, 2300);
 
-    // Phase 4: cards cascade (1200ms start, 200ms apart)
-    [0, 1, 2].forEach((i) => {
+    // Phase 4: weekly & monthly cards side by side (2600ms)
+    [0, 1].forEach((i) => {
       setTimeout(() => {
         const card = content.querySelector(`.tp-ob-card-${i}`);
         if (card) card.classList.add('visible');
-        // Animate numbers in this card
         card?.querySelectorAll('.tp-ob-num').forEach((el, j) => {
           setTimeout(() => {
-            animateCounter(el, parseFloat(el.dataset.t), el.dataset.s, 1200);
-          }, j * 300);
+            animateCounter(el, parseFloat(el.dataset.t), el.dataset.s, 1000);
+          }, j * 250);
         });
-      }, 1200 + i * 200);
+      }, 2600 + i * 150);
     });
 
-    // Phase 5: final button (2400ms)
+    // Phase 5: final button (3500ms — after confetti)
     setTimeout(() => {
       finalBtn.classList.add('visible');
-      // Pulse the yearly card
-      const yearlyCard = content.querySelector('.tp-ob-card-2');
-      if (yearlyCard) yearlyCard.classList.add('tp-ob-pulse-once');
-    }, 2400);
+    }, 3500);
 
     finalBtn.addEventListener('click', () => finish(false));
   }

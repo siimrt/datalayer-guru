@@ -1345,9 +1345,10 @@ html.dark .tp-consent-modal {
 /* ---- Step 0: Welcome ---- */
 
 .tp-ob-logo {
+  display: block;
+  margin: 0 auto 20px;
   width: 72px;
   height: 72px;
-  margin-bottom: 20px;
   animation: ob-logo-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -1446,7 +1447,7 @@ html.dark .tp-consent-modal {
 }
 
 .tp-ob-slider-wrap {
-  margin-bottom: 4px;
+  margin-bottom: 24px;
 }
 
 .tp-ob-range {
@@ -1518,41 +1519,17 @@ html.dark .tp-consent-modal {
 }
 
 .tp-ob-hero-number {
-  font-size: 44px;
+  font-size: 52px;
   font-weight: 800;
   color: var(--tp-success);
-  letter-spacing: -1px;
+  letter-spacing: -2px;
 }
 
 .tp-ob-hero-suffix {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--tp-text-muted);
-  margin-left: 4px;
-}
-
-/* Savings cards */
-.tp-ob-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.tp-ob-card {
-  background: var(--tp-surface);
-  border: 1px solid var(--tp-border);
-  border-radius: 10px;
-  padding: 12px 16px;
-  text-align: left;
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.tp-ob-card.visible {
-  opacity: 1;
-  transform: translateY(0);
+  margin-left: 2px;
 }
 
 .tp-ob-card-label {
@@ -1575,14 +1552,101 @@ html.dark .tp-consent-modal {
   font-size: 15px;
 }
 
-.tp-ob-card.tp-ob-pulse-once {
-  animation: ob-card-pulse 0.6s ease;
+/* Hero euro sub-line */
+.tp-ob-hero-eur {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s, transform 0.4s ease;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--tp-text-secondary);
+  text-align: center;
+  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
-@keyframes ob-card-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.3); }
-  50% { box-shadow: 0 0 0 6px rgba(0, 184, 148, 0); }
-  100% { box-shadow: none; }
+.tp-ob-hero-eur.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tp-ob-hero-eur-num {
+  color: var(--tp-success);
+  font-weight: 700;
+}
+
+.tp-ob-hero-eur-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--tp-text-muted);
+}
+
+/* Hero settle: scale 1 → 1.08 → 1 when counter lands */
+.tp-ob-hero.tp-ob-hero-settle {
+  animation: ob-scale-settle 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes ob-scale-settle {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* Social proof */
+.tp-ob-social-proof {
+  margin-top: 6px;
+  margin-bottom: 20px;
+  font-size: 11px;
+  color: var(--tp-text-muted);
+  font-style: italic;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Side-by-side weekly/monthly cards */
+.tp-ob-cards-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.tp-ob-card-sm {
+  flex: 1;
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tp-ob-card-sm.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tp-ob-card-sm .tp-ob-card-label {
+  font-size: 10px;
+}
+
+.tp-ob-card-sm .tp-ob-card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.tp-ob-card-sm .tp-ob-num {
+  font-size: 14px;
+}
+
+.tp-ob-num-eur {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: var(--tp-text-muted) !important;
 }
 
 /* Final button */
@@ -1613,4 +1677,19 @@ html.dark .tp-consent-modal {
 @keyframes ob-sparkle {
   0% { opacity: 1; transform: translate(0, 0) scale(1); }
   100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
+}
+
+/* Confetti */
+.tp-ob-confetti {
+  position: fixed;
+  top: -10px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 10;
+  animation: ob-confetti-fall ease-out forwards;
+}
+
+@keyframes ob-confetti-fall {
+  0% { opacity: 1; transform: translateY(0) translateX(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(calc(100vh + 20px)) translateX(var(--drift)) rotate(var(--rot)); }
 }
