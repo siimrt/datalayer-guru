@@ -390,6 +390,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     }
 
+    case MSG.RELOAD_TAB: {
+      getActiveTabId().then((activeTabId) => {
+        if (activeTabId) {
+          chrome.tabs.reload(activeTabId);
+        }
+      });
+      sendResponse({ success: true });
+      return true;
+    }
+
     case MSG.REOPEN_CMP: {
       const { cmp } = msg.payload || {};
       getActiveTabId().then(async (activeTabId) => {

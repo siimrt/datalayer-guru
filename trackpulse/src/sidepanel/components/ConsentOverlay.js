@@ -26,11 +26,12 @@ function escapeHTML(str) {
 
 /**
  * Determines whether the consent overlay should be shown.
- * Returns true when any consent signal changes to 'denied'.
+ * Returns 'denied' when a signal changes to denied, 'granted' when
+ * a signal changes from denied to granted, or false otherwise.
  *
  * @param {object} newConsent
  * @param {object|null|undefined} previousConsent
- * @returns {boolean}
+ * @returns {'denied'|'granted'|false}
  */
 export function shouldShowConsentOverlay(newConsent, previousConsent) {
   // First load — ignore first detection
@@ -39,32 +40,44 @@ export function shouldShowConsentOverlay(newConsent, previousConsent) {
   const prevSignals = previousConsent.googleConsent || {};
   const newSignals = newConsent.googleConsent || {};
 
+  let newlyDenied = false;
+  let newlyGranted = false;
+
   for (const key of Object.keys(CONSENT_LABELS)) {
     if (newSignals[key] === 'denied' && prevSignals[key] !== 'denied') {
-      return true;
+      newlyDenied = true;
+    }
+    if (newSignals[key] === 'granted' && prevSignals[key] === 'denied') {
+      newlyGranted = true;
     }
   }
 
+  if (newlyGranted) return 'granted';
+  if (newlyDenied) return 'denied';
   return false;
 }
 
 /**
  * Show the consent overlay modal.
  *
- * @param {object} consent - { cmpDetected, consentModeActive, googleConsent: { ad_storage, analytics_storage, ad_user_data, ad_personalization } }
- * @param {Function} onReopenCMP - Called with cmpName string when user clicks "Reopen Cookies"
+ * @param {object} consent - { cmpDetected, consentModeActive, googleConsent }
+ * @param {object} callbacks - { onReopenCMP, onReloadPage }
+ * @param {'denied'|'granted'} changeType - What kind of consent change triggered this
  */
-export function showConsentOverlay(consent, onReopenCMP) {
+export function showConsentOverlay(consent, callbacks, changeType = 'denied') {
   // Clean up previous overlay
   if (_currentOverlay) {
     _currentOverlay.remove();
     _currentOverlay = null;
   }
 
+  const { onReopenCMP, onReloadPage } = callbacks;
   const { cmpDetected, consentModeActive, googleConsent } = consent;
   const cmpLabel = CMP_NAMES[cmpDetected] || escapeHTML(cmpDetected || 'Unknown');
   const gcmStatus = consentModeActive ? 'Active' : 'Inactive';
   const gcmClass = consentModeActive ? 'success' : 'warning';
+
+  const isGrantedChange = changeType === 'granted';
 
   // Build signal rows
   const signalRows = Object.entries(CONSENT_LABELS).map(([key, label]) => {
@@ -82,17 +95,34 @@ export function showConsentOverlay(consent, onReopenCMP) {
     `;
   }).join('');
 
-  // Reopen button (only when a CMP is detected)
-  const reopenBtn = cmpDetected !== 'none'
-    ? `<button class="tp-btn tp-btn-primary tp-consent-reopen">Reopen Cookies</button>`
-    : '';
+  // Action buttons depending on consent change type
+  let actionBtns = '';
+  if (isGrantedChange) {
+    // Consent accepted → suggest reload so tags fire
+    actionBtns = `
+      <div class="tp-consent-hint" style="font-size: 11px; color: var(--tp-text-secondary); margin-bottom: 8px;">
+        Reload the page to activate tracking tags.
+      </div>
+      <button class="tp-btn tp-btn-primary tp-consent-reload" style="width:100%; justify-content:center;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;">
+          <path d="M13.65 2.35A7.958 7.958 0 008 0C3.58 0 .01 3.58.01 8S3.58 16 8 16c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 018 14 6 6 0 018 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35z" fill="currentColor"/>
+        </svg>
+        Reload Page
+      </button>
+    `;
+  } else if (cmpDetected !== 'none') {
+    // Consent denied → offer to reopen CMP
+    actionBtns = `<button class="tp-btn tp-btn-primary tp-consent-reopen" style="width:100%; justify-content:center;">🍪 Reopen Cookies</button>`;
+  }
+
+  const title = isGrantedChange ? 'Cookies Accepted' : 'Consent Status';
 
   const overlay = document.createElement('div');
   overlay.className = 'tp-consent-overlay';
   overlay.innerHTML = `
     <div class="tp-consent-modal">
       <div class="tp-consent-modal-header">
-        <span>Consent Status</span>
+        <span>${escapeHTML(title)}</span>
         <button class="tp-consent-close" title="Close">&times;</button>
       </div>
       <div class="tp-consent-modal-body">
@@ -106,7 +136,7 @@ export function showConsentOverlay(consent, onReopenCMP) {
         <div class="tp-consent-signals">
           ${signalRows}
         </div>
-        ${reopenBtn}
+        ${actionBtns}
       </div>
     </div>
   `;
@@ -119,16 +149,24 @@ export function showConsentOverlay(consent, onReopenCMP) {
   });
 
   // Reopen CMP handler
-  if (cmpDetected !== 'none') {
-    overlay.addEventListener('click', (e) => {
-      if (e.target.closest('.tp-consent-reopen')) {
-        cleanup();
-        if (typeof onReopenCMP === 'function') {
-          onReopenCMP(cmpDetected);
-        }
+  overlay.addEventListener('click', (e) => {
+    if (e.target.closest('.tp-consent-reopen')) {
+      cleanup();
+      if (typeof onReopenCMP === 'function') {
+        onReopenCMP(cmpDetected);
       }
-    });
-  }
+    }
+  });
+
+  // Reload page handler
+  overlay.addEventListener('click', (e) => {
+    if (e.target.closest('.tp-consent-reload')) {
+      cleanup();
+      if (typeof onReloadPage === 'function') {
+        onReloadPage();
+      }
+    }
+  });
 
   document.body.appendChild(overlay);
   _currentOverlay = overlay;

@@ -570,11 +570,13 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.timestamp = payload.timestamp;
       state.loading = false;
 
-      // Show consent overlay when a signal changes to 'denied'
-      if (shouldShowConsentOverlay(payload.consent, previousConsent)) {
-        showConsentOverlay(payload.consent, (cmpName) => {
-          chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } });
-        });
+      // Show consent overlay on consent change (denied or granted)
+      const consentChange = shouldShowConsentOverlay(payload.consent, previousConsent);
+      if (consentChange) {
+        showConsentOverlay(payload.consent, {
+          onReopenCMP: (cmpName) => chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } }),
+          onReloadPage: () => chrome.runtime.sendMessage({ type: MSG.RELOAD_TAB }),
+        }, consentChange);
       }
 
       recomputeDetectedPlatforms();
@@ -801,11 +803,13 @@ chrome.runtime.onMessage.addListener((msg) => {
 
       state.consent = newConsent;
 
-      // Show overlay if a signal changed to denied
-      if (shouldShowConsentOverlay(newConsent, previousConsent)) {
-        showConsentOverlay(newConsent, (cmpName) => {
-          chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } });
-        });
+      // Show overlay on consent change (denied or granted)
+      const liveConsentChange = shouldShowConsentOverlay(newConsent, previousConsent);
+      if (liveConsentChange) {
+        showConsentOverlay(newConsent, {
+          onReopenCMP: (cmpName) => chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } }),
+          onReloadPage: () => chrome.runtime.sendMessage({ type: MSG.RELOAD_TAB }),
+        }, liveConsentChange);
       }
 
       // Re-render to update consent display and header cookie button

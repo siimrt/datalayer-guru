@@ -27,6 +27,9 @@ export const MSG = {
   // Custom Pixel Frame -> Background -> SidePanel: detected pixels in frame
   FRAME_PIXELS: 'TRACKPULSE_FRAME_PIXELS',
 
+  // SidePanel -> Background: reload active tab
+  RELOAD_TAB: 'TRACKPULSE_RELOAD_TAB',
+
   // SidePanel -> Content: reopen CMP cookie popup
   REOPEN_CMP: 'TRACKPULSE_REOPEN_CMP',
 
