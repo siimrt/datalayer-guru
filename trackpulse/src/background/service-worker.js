@@ -202,7 +202,8 @@ function extractBodyFromRequestBody(requestBody) {
 if (chrome.webRequest?.onBeforeRequest) {
   chrome.webRequest.onBeforeRequest.addListener(
     (details) => {
-      if (details.tabId < 0) return;
+      // Skip extension-internal requests but allow site Service Worker requests (tabId=-1)
+      if (details.initiator?.startsWith('chrome-extension://')) return;
 
       const platform = matchPlatformFromUrl(details.url);
       if (!platform) return;
@@ -226,7 +227,10 @@ const _seenWebRequestPixels = new Set(); // Track pixel IDs already forwarded as
 if (chrome.webRequest?.onCompleted) {
   chrome.webRequest.onCompleted.addListener(
     (details) => {
-      if (details.tabId < 0) return;
+      // Skip extension-internal requests but allow site Service Worker requests (tabId=-1).
+      // Some sites (e.g. Zadig & Voltaire) fire tracking pixels from their Service Worker,
+      // which Chrome reports with tabId=-1 and type=xmlhttprequest.
+      if (details.initiator?.startsWith('chrome-extension://')) return;
 
       const url = details.url;
       const platform = matchPlatformFromUrl(url);

@@ -36,7 +36,7 @@ function getSiteTypeStyle(siteType) {
   return styles[siteType] || 'background:#F1F5F9;color:#334155;border:none;padding:4px 10px';
 }
 
-export function renderHeader(container, state, onRefresh, onUpgrade) {
+export function renderHeader(container, state, onRefresh, onUpgrade, onReopenCMP) {
   const cms = state.cms?.cms || 'unknown';
   const cmsInfo = CMS_INFO[cms] || CMS_INFO.unknown;
   const confidence = state.cms?.confidence || 0;
@@ -55,6 +55,8 @@ export function renderHeader(container, state, onRefresh, onUpgrade) {
     hostname = '';
   }
 
+  const showCookieBtn = state.consent?.cmpDetected && state.consent.cmpDetected !== 'none';
+
   container.innerHTML = `
     <div class="tp-header">
       <div class="tp-header-row">
@@ -70,6 +72,16 @@ export function renderHeader(container, state, onRefresh, onUpgrade) {
         </div>
         <div class="tp-header-actions">
           <span id="header-plan-badge"></span>
+          ${showCookieBtn ? `<button class="tp-refresh-btn" id="reopen-cmp-btn" title="Reopen cookie banner">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <circle cx="5.5" cy="6" r="1" fill="currentColor"/>
+              <circle cx="10" cy="5.5" r="0.8" fill="currentColor"/>
+              <circle cx="6" cy="10" r="0.8" fill="currentColor"/>
+              <circle cx="10.5" cy="9" r="1" fill="currentColor"/>
+              <circle cx="8" cy="7.5" r="0.7" fill="currentColor"/>
+            </svg>
+          </button>` : ''}
           <button class="tp-refresh-btn" id="refresh-btn" title="Re-detect">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M13.65 2.35A7.958 7.958 0 008 0C3.58 0 .01 3.58.01 8S3.58 16 8 16c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 018 14 6 6 0 018 2c1.66 0 3.14.69 4.22 1.78L9 7h7V0l-2.35 2.35z" fill="currentColor"/>
@@ -87,6 +99,10 @@ export function renderHeader(container, state, onRefresh, onUpgrade) {
 
   // Bind refresh
   container.querySelector('#refresh-btn')?.addEventListener('click', onRefresh);
+
+  if (onReopenCMP) {
+    container.querySelector('#reopen-cmp-btn')?.addEventListener('click', () => onReopenCMP(state.consent.cmpDetected));
+  }
 
   // Render plan badge
   const planBadgeEl = container.querySelector('#header-plan-badge');

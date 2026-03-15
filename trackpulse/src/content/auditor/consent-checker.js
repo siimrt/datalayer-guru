@@ -14,11 +14,13 @@ export class ConsentChecker {
     const cmpDetected = this._detectCMP(pageContext);
     const googleConsent = this._getGoogleConsentState(pageContext);
     const consentModeActive = this._isConsentModeActive(pageContext);
+    const cmpDetails = this._getCMPDetails(pageContext, cmpDetected);
 
     return {
       cmpDetected,
       googleConsent,
       consentModeActive,
+      cmpDetails,
       raw: pageContext.consent || null,
     };
   }
@@ -157,5 +159,67 @@ export class ConsentChecker {
     }
 
     return false;
+  }
+
+  /**
+   * Extract CMP-specific details for display in the consent overlay.
+   */
+  _getCMPDetails(pageContext, cmpName) {
+    const consent = pageContext.consent || {};
+    const details = { cmp: cmpName };
+
+    try {
+      switch (cmpName) {
+        case 'cookiebot':
+          if (consent.cookiebot && typeof consent.cookiebot === 'object') {
+            details.consent = consent.cookiebot.consent || null;
+            details.consentID = consent.cookiebot.consentID || null;
+          }
+          break;
+        case 'onetrust':
+          if (consent.oneTrust && typeof consent.oneTrust === 'object') {
+            details.activeGroups = consent.oneTrust.activeGroups || null;
+          }
+          break;
+        case 'didomi':
+          if (consent.didomi && typeof consent.didomi === 'object') {
+            details.userStatus = consent.didomi.userStatus || null;
+            details.currentUserStatus = consent.didomi.currentUserStatus || null;
+          }
+          break;
+        case 'tarteaucitron':
+          if (consent.tarteaucitron && typeof consent.tarteaucitron === 'object') {
+            details.state = consent.tarteaucitron.state || null;
+          }
+          break;
+        case 'complianz':
+          if (consent.complianz && typeof consent.complianz === 'object') {
+            details.categories = consent.complianz.categories || null;
+          }
+          break;
+        case 'axeptio':
+          if (consent.axeptio && typeof consent.axeptio === 'object') {
+            details.settings = consent.axeptio.settings || null;
+          }
+          break;
+        case 'iubenda':
+          if (consent.iubenda && typeof consent.iubenda === 'object') {
+            details.consent = consent.iubenda.consent || null;
+          }
+          break;
+        case 'usercentrics':
+          if (consent.usercentrics && typeof consent.usercentrics === 'object') {
+            details.services = consent.usercentrics.services || null;
+          }
+          break;
+        case 'quantcast':
+          if (consent.quantcast && typeof consent.quantcast === 'object') {
+            details.tcfData = consent.quantcast.tcfData || null;
+          }
+          break;
+      }
+    } catch (e) {}
+
+    return details;
   }
 }

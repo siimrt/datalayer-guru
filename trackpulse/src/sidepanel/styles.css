@@ -1095,3 +1095,148 @@ html.dark .tp-push-diagnostic {
 html.dark .tp-funnel-quickpush {
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.3);
 }
+
+/* ---- Consent Overlay Modal ---- */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tp-consent-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.2s ease-out;
+}
+
+html.dark .tp-consent-overlay {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.tp-consent-modal {
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border);
+  border-radius: 12px;
+  width: calc(100% - 32px);
+  max-width: 360px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  animation: slide-in 0.2s ease-out;
+}
+
+html.dark .tp-consent-modal {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.tp-consent-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tp-border);
+}
+
+.tp-consent-modal-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--tp-text);
+}
+
+.tp-consent-modal-close {
+  background: none;
+  border: none;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tp-consent-modal-close:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+
+.tp-consent-modal-body {
+  padding: 12px 16px;
+}
+
+.tp-consent-signal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.tp-consent-modal-actions {
+  padding: 12px 16px;
+  border-top: 1px solid var(--tp-border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tp-consent-close {
+  background: none;
+  border: none;
+  color: var(--tp-text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tp-consent-close:hover {
+  background: var(--tp-surface-hover);
+  color: var(--tp-text);
+}
+
+.tp-consent-info-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--tp-text);
+}
+
+.tp-consent-gcm-status {
+  font-weight: 500;
+}
+
+.tp-consent-gcm-status.success {
+  color: var(--tp-success);
+}
+
+.tp-consent-gcm-status.warning {
+  color: var(--tp-text-muted);
+}
+
+.tp-consent-signals {
+  margin: 8px 0;
+  padding: 8px 0;
+  border-top: 1px solid var(--tp-border);
+  border-bottom: 1px solid var(--tp-border);
+}
+
+.tp-consent-signal-row {
+  gap: 8px;
+}
+
+.tp-consent-signal-value {
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.tp-consent-reopen {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}

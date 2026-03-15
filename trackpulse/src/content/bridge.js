@@ -65,6 +65,14 @@ export function initBridge() {
       sendMessage(MSG.NETWORK_REQUEST, payload);
     }
 
+    if (type === 'TRACKPULSE_TCF_DATA') {
+      sendMessage(MSG.TCF_DATA, payload);
+    }
+
+    if (type === 'TRACKPULSE_CONSENT_UPDATE') {
+      sendMessage(MSG.CONSENT_UPDATE, payload);
+    }
+
     if (type === 'TRACKPULSE_EXECUTE_RESULT') {
       // Could dispatch a custom event for code that's waiting on execution results
       document.dispatchEvent(

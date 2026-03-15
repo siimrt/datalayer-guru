@@ -36,10 +36,14 @@ const CMP_NAMES = {
   axeptio: 'Axeptio',
   tarteaucitron: 'Tarteaucitron',
   complianz: 'Complianz',
+  acceptio: 'Acceptio',
+  iubenda: 'Iubenda',
+  usercentrics: 'Usercentrics',
+  quantcast: 'Quantcast (TCF)',
   none: 'None detected',
 };
 
-export function renderPixelStatus(container, state) {
+export function renderPixelStatus(container, state, onReopenCMP) {
   const rawPixels = state.pixels || [];
   const consent = state.consent || {};
 
@@ -65,7 +69,8 @@ export function renderPixelStatus(container, state) {
   }
 
   // Consent section
-  const consentHtml = renderConsentSection(consent);
+  const showReopenBtn = consent.cmpDetected && consent.cmpDetected !== 'none';
+  const consentHtml = renderConsentSection(consent, showReopenBtn);
 
   container.innerHTML = `
     <div class="tp-card">
@@ -94,6 +99,13 @@ export function renderPixelStatus(container, state) {
       }).catch(() => {});
     });
   });
+
+  // Bind reopen CMP button
+  if (onReopenCMP) {
+    container.querySelector('.tp-reopen-cmp-btn')?.addEventListener('click', () => {
+      onReopenCMP(consent.cmpDetected);
+    });
+  }
 }
 
 function renderPixelRow(pixel, detected) {
@@ -128,17 +140,24 @@ function renderPixelRow(pixel, detected) {
   `;
 }
 
-function renderConsentSection(consent) {
+function renderConsentSection(consent, showReopenBtn) {
   const cmpName = CMP_NAMES[consent.cmpDetected] || consent.cmpDetected || 'None';
   const consentModeActive = consent.consentModeActive;
   const googleConsent = consent.googleConsent || {};
 
   const hasConsentData = Object.values(googleConsent).some((v) => v != null);
 
+  const reopenBtnHtml = showReopenBtn
+    ? `<button class="tp-btn tp-btn-sm tp-reopen-cmp-btn" title="Reopen cookie banner" style="font-size: 11px; padding: 2px 8px;">🍪 Reopen</button>`
+    : '';
+
   return `
     <div class="tp-card">
       <div class="p-3">
-        <div class="text-[12px] font-medium mb-2">Consent Status</div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-[12px] font-medium">Consent Status</div>
+          ${reopenBtnHtml}
+        </div>
         <div class="tp-consent-row">
           <span class="text-tp-text-secondary">CMP</span>
           <span class="font-medium">${escapeHtml(cmpName)}</span>

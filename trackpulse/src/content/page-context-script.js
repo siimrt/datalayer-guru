@@ -7,6 +7,154 @@
    * via window.postMessage.
    */
 
+  // --- Reusable consent collection helpers ---
+  function collectConsentData() {
+    var consent = {
+      cookieyes: false,
+      cookiebot: null,
+      oneTrust: null,
+      axeptio: false,
+      didomi: false,
+      tarteaucitron: false,
+      complianz: false,
+      acceptio: false,
+      iubenda: false,
+      usercentrics: false,
+      quantcast: false,
+    };
+
+    // CookieYes — no rich API
+    consent.cookieyes = !!(window.CookieYes || window.ckyConsent);
+
+    // Cookiebot — already rich
+    if (window.Cookiebot) {
+      try {
+        consent.cookiebot = {
+          consent: window.Cookiebot.consent
+            ? JSON.parse(JSON.stringify(window.Cookiebot.consent))
+            : null,
+          consentID: window.Cookiebot.consentID || null,
+        };
+      } catch (e) {
+        consent.cookiebot = { detected: true };
+      }
+    }
+
+    // OneTrust — already rich
+    if (window.OneTrust) {
+      consent.oneTrust = {
+        activeGroups: window.OptanonActiveGroups || null,
+      };
+    }
+
+    // Didomi — rich extraction
+    if (typeof window.Didomi !== 'undefined') {
+      try {
+        var didomiData = { detected: true };
+        if (window.Didomi.getUserStatus) {
+          didomiData.userStatus = JSON.parse(JSON.stringify(window.Didomi.getUserStatus()));
+        }
+        if (window.Didomi.getCurrentUserStatus) {
+          didomiData.currentUserStatus = JSON.parse(JSON.stringify(window.Didomi.getCurrentUserStatus()));
+        }
+        consent.didomi = didomiData;
+      } catch (e) {
+        consent.didomi = { detected: true };
+      }
+    }
+
+    // Axeptio — rich extraction
+    if (typeof window._axcb !== 'undefined') {
+      try {
+        var axeptioData = { detected: true };
+        if (window.axeptioSettings) {
+          axeptioData.settings = JSON.parse(JSON.stringify(window.axeptioSettings));
+        }
+        consent.axeptio = axeptioData;
+      } catch (e) {
+        consent.axeptio = { detected: true };
+      }
+    }
+
+    // Tarteaucitron — rich extraction
+    if (typeof window.tarteaucitron !== 'undefined') {
+      try {
+        var tartData = { detected: true };
+        if (window.tarteaucitron.state) {
+          tartData.state = JSON.parse(JSON.stringify(window.tarteaucitron.state));
+        }
+        consent.tarteaucitron = tartData;
+      } catch (e) {
+        consent.tarteaucitron = { detected: true };
+      }
+    }
+
+    // Complianz — rich extraction
+    if (typeof window.complianz !== 'undefined') {
+      try {
+        var complianzData = { detected: true };
+        if (window.complianz.categories) {
+          complianzData.categories = JSON.parse(JSON.stringify(window.complianz.categories));
+        }
+        consent.complianz = complianzData;
+      } catch (e) {
+        consent.complianz = { detected: true };
+      }
+    }
+
+    // Acceptio — no rich API known
+    consent.acceptio = typeof window.acceptioSdk !== 'undefined' || typeof window.Acceptio !== 'undefined';
+
+    // Iubenda — rich extraction
+    if (typeof window._iub !== 'undefined') {
+      try {
+        var iubData = { detected: true };
+        if (window._iub.cs && window._iub.cs.consent) {
+          iubData.consent = JSON.parse(JSON.stringify(window._iub.cs.consent));
+        }
+        consent.iubenda = iubData;
+      } catch (e) {
+        consent.iubenda = { detected: true };
+      }
+    }
+
+    // Usercentrics — rich extraction
+    if (typeof window.UC_UI !== 'undefined') {
+      try {
+        var ucData = { detected: true };
+        if (window.UC_UI.getServicesBaseInfo) {
+          var services = window.UC_UI.getServicesBaseInfo();
+          ucData.services = JSON.parse(JSON.stringify(services));
+        }
+        consent.usercentrics = ucData;
+      } catch (e) {
+        consent.usercentrics = { detected: true };
+      }
+    }
+
+    // Quantcast / TCF — detection only (async TCF handled separately via postMessage)
+    if (typeof window.__tcfapi !== 'undefined') {
+      consent.quantcast = { detected: true };
+    }
+
+    return consent;
+  }
+
+  function collectGoogleConsentEvents() {
+    if (window.dataLayer && Array.isArray(window.dataLayer)) {
+      var consentEvents = window.dataLayer.filter(function (e) {
+        return (Array.isArray(e) && e[0] === 'consent') ||
+          (typeof e === 'object' && !Array.isArray(e) && e['0'] === 'consent') ||
+          (e && e.event === 'consent_update') ||
+          (e && e.event === 'gtm.init_consent');
+      });
+      if (consentEvents.length > 0) {
+        return JSON.parse(JSON.stringify(consentEvents));
+      }
+    }
+    return null;
+  }
+
   function collectPageContext() {
     const context = {};
 
@@ -227,62 +375,13 @@
 
     // --- Consent ---
     try {
-      context.consent = {
-        cookieyes: false,
-        cookiebot: null,
-        oneTrust: null,
-        axeptio: false,
-        didomi: false,
-        tarteaucitron: false,
-        complianz: false,
-      };
-
-      context.consent.cookieyes = !!(window.CookieYes || window.ckyConsent);
-
-      if (window.Cookiebot) {
-        try {
-          context.consent.cookiebot = {
-            consent: window.Cookiebot.consent
-              ? JSON.parse(JSON.stringify(window.Cookiebot.consent))
-              : null,
-            consentID: window.Cookiebot.consentID || null,
-          };
-        } catch (e) {}
-      }
-
-      if (window.OneTrust) {
-        context.consent.oneTrust = {
-          activeGroups: window.OptanonActiveGroups || null,
-        };
-      }
-
-      context.consent.axeptio = typeof window._axcb !== 'undefined';
-      context.consent.didomi = typeof window.Didomi !== 'undefined';
-      context.consent.tarteaucitron =
-        typeof window.tarteaucitron !== 'undefined';
-      context.consent.complianz = typeof window.complianz !== 'undefined';
-      context.consent.acceptio = typeof window.acceptioSdk !== 'undefined' || typeof window.Acceptio !== 'undefined';
-      context.consent.iubenda = typeof window._iub !== 'undefined';
-      context.consent.usercentrics = typeof window.UC_UI !== 'undefined';
-      context.consent.quantcast = typeof window.__tcfapi !== 'undefined';
+      context.consent = collectConsentData();
     } catch (e) {}
 
     // --- Google Consent Mode ---
     try {
-      if (window.dataLayer && Array.isArray(window.dataLayer)) {
-        const consentEvents = window.dataLayer.filter(
-          (e) =>
-            (Array.isArray(e) && e[0] === 'consent') ||
-            (typeof e === 'object' && !Array.isArray(e) && e['0'] === 'consent') ||
-            e?.event === 'consent_update' ||
-            e?.event === 'gtm.init_consent'
-        );
-        if (consentEvents.length > 0) {
-          context.googleConsentEvents = JSON.parse(
-            JSON.stringify(consentEvents)
-          );
-        }
-      }
+      var gce = collectGoogleConsentEvents();
+      if (gce) context.googleConsentEvents = gce;
     } catch (e) {}
 
     // --- JS Globals existence (for CMS scoring) ---
@@ -345,6 +444,20 @@
             },
             '*'
           );
+        } catch (e) {}
+        // Check if this push is a consent-related event and trigger update
+        try {
+          for (var ci = 0; ci < args.length; ci++) {
+            var entry = args[ci];
+            if (entry && (
+              (Array.isArray(entry) && entry[0] === 'consent') ||
+              (typeof entry === 'object' && !Array.isArray(entry) && entry['0'] === 'consent') ||
+              (entry && entry.event === 'consent_update')
+            )) {
+              if (typeof window.__trackpulsePostConsentUpdate === 'function') window.__trackpulsePostConsentUpdate();
+              break;
+            }
+          }
         } catch (e) {}
         return result;
       };
@@ -573,4 +686,133 @@
       }
     });
   }
+
+  // --- TCF async data collection (Quantcast / IAB TCF) ---
+  try {
+    if (typeof window.__tcfapi !== 'undefined' && !window.__TRACKPULSE_TCF_QUERIED__) {
+      window.__TRACKPULSE_TCF_QUERIED__ = true;
+      window.__tcfapi('getTCData', 2, function(tcData, success) {
+        try {
+          if (success && tcData) {
+            window.postMessage({
+              type: 'TRACKPULSE_TCF_DATA',
+              payload: {
+                tcfPolicyVersion: tcData.tcfPolicyVersion || null,
+                cmpId: tcData.cmpId || null,
+                purpose: tcData.purpose || null,
+                vendor: tcData.vendor ? { consents: tcData.vendor.consents } : null,
+              },
+            }, '*');
+          }
+        } catch (e) {}
+      });
+    }
+  } catch (e) {}
+  // --- Consent change watchers (guard to prevent double-registration on re-injection) ---
+  try {
+    if (!window.__TRACKPULSE_CONSENT_WATCHER__) {
+      window.__TRACKPULSE_CONSENT_WATCHER__ = true;
+
+      var postConsentUpdate = function() {
+        try {
+          var consent = collectConsentData();
+          var googleConsentEvents = collectGoogleConsentEvents();
+          window.postMessage({
+            type: 'TRACKPULSE_CONSENT_UPDATE',
+            payload: { consent: consent, googleConsentEvents: googleConsentEvents }
+          }, '*');
+        } catch(e) {}
+      };
+      // Expose for dataLayer hook to call
+      window.__trackpulsePostConsentUpdate = postConsentUpdate;
+
+      // Didomi
+      try { window.addEventListener('didomi:consent.changed', postConsentUpdate); } catch (e) {}
+
+      // OneTrust
+      try { window.addEventListener('consent.onetrust', postConsentUpdate); } catch (e) {}
+
+      // Cookiebot
+      try {
+        window.addEventListener('CookiebotOnAccept', postConsentUpdate);
+        window.addEventListener('CookiebotOnDecline', postConsentUpdate);
+      } catch (e) {}
+
+      // CookieYes
+      try { window.addEventListener('cookieyes_consent_update', postConsentUpdate); } catch (e) {}
+
+      // Axeptio
+      try {
+        if (window._axcb) {
+          window._axcb.push(function() { postConsentUpdate(); });
+        }
+      } catch (e) {}
+
+      // Tarteaucitron
+      try { document.addEventListener('tarteaucitron_response', postConsentUpdate); } catch (e) {}
+
+      // Complianz
+      try { document.addEventListener('cmplz_status_change', postConsentUpdate); } catch (e) {}
+
+      // Iubenda
+      try {
+        if (window._iub && window._iub.cs && window._iub.cs.api && window._iub.cs.api.onPreferenceExpressed) {
+          window._iub.cs.api.onPreferenceExpressed(postConsentUpdate);
+        }
+      } catch (e) {}
+
+      // Usercentrics
+      try { window.addEventListener('UC_UI_CMP_EVENT', postConsentUpdate); } catch (e) {}
+
+      // Quantcast / TCF
+      try {
+        if (window.__tcfapi) {
+          window.__tcfapi('addEventListener', 2, function(tcData, success) {
+            if (success && tcData.eventStatus === 'useractioncomplete') postConsentUpdate();
+          });
+        }
+      } catch (e) {}
+    }
+  } catch (e) {}
+
+  // --- Early CMP polling (detect async-loaded CMPs) ---
+  try {
+    if (!window.__TRACKPULSE_CMP_POLL__) {
+      window.__TRACKPULSE_CMP_POLL__ = true;
+
+      var hasAnyCMP = function() {
+        return !!(window.CookieYes || window.ckyConsent || window.Cookiebot ||
+                  window.OneTrust || window.Didomi || window._axcb ||
+                  window.tarteaucitron || window.complianz || window.acceptioSdk ||
+                  window.Acceptio || window._iub || window.UC_UI || window.__tcfapi);
+      };
+
+      // Only poll if no CMP was detected during initial collection
+      if (!hasAnyCMP()) {
+        var _cmpPollCount = 0;
+        var _cmpPollMax = 20; // 20 * 500ms = 10s
+        var _cmpPoller = setInterval(function () {
+          try {
+            _cmpPollCount++;
+            if (hasAnyCMP()) {
+              clearInterval(_cmpPoller);
+              // CMP found — post updated consent data
+              try {
+                var consent = collectConsentData();
+                var googleConsentEvents = collectGoogleConsentEvents();
+                window.postMessage({
+                  type: 'TRACKPULSE_CONSENT_UPDATE',
+                  payload: { consent: consent, googleConsentEvents: googleConsentEvents }
+                }, '*');
+              } catch (e) {}
+            } else if (_cmpPollCount >= _cmpPollMax) {
+              clearInterval(_cmpPoller);
+            }
+          } catch (e) {
+            clearInterval(_cmpPoller);
+          }
+        }, 500);
+      }
+    }
+  } catch (e) {}
 })();

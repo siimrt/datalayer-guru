@@ -30,6 +30,12 @@ export const MSG = {
   // SidePanel -> Content: reopen CMP cookie popup
   REOPEN_CMP: 'TRACKPULSE_REOPEN_CMP',
 
+  // Content -> SidePanel: TCF async data from __tcfapi
+  TCF_DATA: 'TRACKPULSE_TCF_DATA',
+
+  // Content -> SidePanel: live consent state update from CMP watchers
+  CONSENT_UPDATE: 'TRACKPULSE_CONSENT_UPDATE',
+
   // SidePanel -> Content: check if page was already loaded
   CHECK_PAGE_LOAD_STATE: 'TRACKPULSE_CHECK_PAGE_LOAD_STATE',
 

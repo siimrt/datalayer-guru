@@ -5,10 +5,12 @@
  */
 
 import { MSG } from '../shared/messaging.js';
+import { ConsentChecker } from '../content/auditor/consent-checker.js';
 import { getPlanCapabilities } from '../licensing/feature-gates.js';
 import { initAnalytics, trackEvent, identifyUser } from '../shared/analytics.js';
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
+import { shouldShowConsentOverlay, showConsentOverlay } from './components/ConsentOverlay.js';
 
 // ---- Anti-flicker: skip re-render when detection data hasn't changed ----
 let _lastDetectionFingerprint = null;
@@ -562,10 +564,18 @@ chrome.runtime.onMessage.addListener((msg) => {
       state.pixels = payload.pixels || [];
       state.leadgenTools = payload.leadgenTools || [];
       state.forms = payload.forms || [];
+      const previousConsent = state.consent;
       state.consent = payload.consent;
       state.url = payload.url || '';
       state.timestamp = payload.timestamp;
       state.loading = false;
+
+      // Show consent overlay when a signal changes to 'denied'
+      if (shouldShowConsentOverlay(payload.consent, previousConsent)) {
+        showConsentOverlay(payload.consent, (cmpName) => {
+          chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } });
+        });
+      }
 
       recomputeDetectedPlatforms();
 
@@ -766,6 +776,43 @@ chrome.runtime.onMessage.addListener((msg) => {
       break;
     }
 
+    case MSG.TCF_DATA: {
+      // Merge async TCF data into consent state
+      if (state.consent) {
+        state.consent.tcfData = msg.payload;
+        if (state.consent.cmpDetails) {
+          state.consent.cmpDetails.tcfData = msg.payload;
+        }
+      }
+      break;
+    }
+
+    case MSG.CONSENT_UPDATE: {
+      const consentPayload = msg.payload;
+      const previousConsent = state.consent;
+
+      // Re-run consent checker with fresh data
+      const checker = new ConsentChecker();
+      const newConsent = checker.check({
+        consent: consentPayload.consent,
+        googleConsentEvents: consentPayload.googleConsentEvents,
+        dataLayer: [],
+      });
+
+      state.consent = newConsent;
+
+      // Show overlay if a signal changed to denied
+      if (shouldShowConsentOverlay(newConsent, previousConsent)) {
+        showConsentOverlay(newConsent, (cmpName) => {
+          chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } });
+        });
+      }
+
+      // Re-render to update consent display and header cookie button
+      render({ preserveContent: true });
+      break;
+    }
+
     case 'TRACKPULSE_PAGE_NAVIGATED': {
       // Clear live streams on navigation (URL change or tab switch).
       // Fired by the service worker BEFORE new page scripts run,
@@ -870,7 +917,9 @@ function render(options = {}) {
     return;
   }
 
-  renderHeader(headerEl, state, actions.refresh, actions.handleUpgrade);
+  renderHeader(headerEl, state, actions.refresh, actions.handleUpgrade, (cmpName) => {
+    chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } });
+  });
   renderTabNav(tabNavEl, state.activeTab, handleTabChange, state.capabilities);
 
   // Skip re-rendering tab content when detection fires but current tab is already mounted.
@@ -895,7 +944,9 @@ function renderActiveTab() {
       renderDataLayerLive(tabContentEl, state, actions);
       break;
     case 'pixels':
-      renderPixelStatus(tabContentEl, state);
+      renderPixelStatus(tabContentEl, state, (cmpName) => {
+        chrome.runtime.sendMessage({ type: MSG.REOPEN_CMP, payload: { cmp: cmpName } });
+      });
       break;
     case 'funnel':
       renderFunnelMode(tabContentEl, funnelSession, state.capabilities, state.funnelReport, state, actions);
