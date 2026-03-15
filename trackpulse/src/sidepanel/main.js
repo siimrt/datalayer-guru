@@ -12,6 +12,7 @@ import { setCurrentPlan } from './components/Paywall.js';
 import { renderHeader } from './components/Header.js';
 import { renderTabNav } from './components/TabNav.js';
 import { shouldShowConsentOverlay, showConsentOverlay } from './components/ConsentOverlay.js';
+import { shouldShowOnboarding, showOnboarding } from './components/Onboarding.js';
 
 // ---- Session Tracking ----
 const _sessionStart = Date.now();
@@ -93,6 +94,15 @@ chrome.storage.local.get(['tp_session_number', 'tp_install_ts'], (data) => {
 });
 
 trackEvent('sidepanel_opened');
+
+// Onboarding check (first open)
+shouldShowOnboarding().then(show => {
+  if (show) {
+    showOnboarding(document.getElementById('app'), () => {
+      // Onboarding terminé, le render() sera appelé par le message listener
+    });
+  }
+});
 
 // ---- Session Duration (fire on close/hide) ----
 function _sendSessionDuration() {

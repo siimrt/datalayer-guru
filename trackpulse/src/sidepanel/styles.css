@@ -1240,3 +1240,377 @@ html.dark .tp-consent-modal {
   justify-content: center;
   margin-top: 8px;
 }
+
+/* ---- Onboarding — Full-page immersive ---- */
+
+/* Overlay */
+.tp-ob {
+  position: fixed;
+  inset: 0;
+  background: var(--tp-bg);
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.4s ease-out;
+}
+
+.tp-ob.tp-ob-fadeout {
+  animation: ob-fadeout 0.35s ease-in forwards;
+}
+
+@keyframes ob-fadeout {
+  to { opacity: 0; transform: scale(0.98); }
+}
+
+/* Particle canvas */
+.tp-ob-particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Content area */
+.tp-ob-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  padding: 24px 20px;
+  max-width: 360px;
+  text-align: center;
+}
+
+/* Step transitions */
+.tp-ob-enter {
+  animation: ob-slide-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tp-ob-exit {
+  animation: ob-slide-out 0.25s ease-in forwards;
+}
+
+@keyframes ob-slide-in {
+  from { opacity: 0; transform: translateX(40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes ob-slide-out {
+  to { opacity: 0; transform: translateX(-40px); }
+}
+
+/* Progress dots */
+.tp-ob-dots {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 1;
+}
+
+.tp-ob-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tp-border);
+  transition: all 0.3s ease;
+}
+
+.tp-ob-dot.active {
+  width: 24px;
+  border-radius: 4px;
+  background: var(--tp-primary);
+}
+
+.tp-ob-dot.done {
+  background: var(--tp-primary);
+  opacity: 0.4;
+}
+
+/* Stagger animations */
+.tp-ob-stagger-1 { animation: ob-stagger 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both; }
+.tp-ob-stagger-2 { animation: ob-stagger 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both; }
+.tp-ob-stagger-3 { animation: ob-stagger 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.25s both; }
+.tp-ob-stagger-4 { animation: ob-stagger 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both; }
+
+@keyframes ob-stagger {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Step 0: Welcome ---- */
+
+.tp-ob-logo {
+  width: 72px;
+  height: 72px;
+  margin-bottom: 20px;
+  animation: ob-logo-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes ob-logo-in {
+  0% { opacity: 0; transform: scale(0); }
+  60% { transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+.tp-ob-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--tp-text);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.tp-ob-subtitle {
+  font-size: 14px;
+  color: var(--tp-text-muted);
+  margin-bottom: 32px;
+}
+
+/* ---- Buttons ---- */
+
+.tp-ob-btn-primary {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  background: var(--tp-primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.tp-ob-btn-primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(0, 109, 119, 0.35);
+}
+
+.tp-ob-btn-primary:active {
+  transform: scale(0.98);
+}
+
+.tp-ob-btn-skip {
+  display: block;
+  margin: 14px auto 0;
+  background: none;
+  border: none;
+  color: var(--tp-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.tp-ob-btn-skip:hover {
+  color: var(--tp-text-secondary);
+}
+
+/* ---- Step 1: Slider ---- */
+
+.tp-ob-question {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--tp-text);
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.tp-ob-hint {
+  font-size: 12px;
+  color: var(--tp-text-muted);
+  margin-bottom: 20px;
+}
+
+.tp-ob-slider-value {
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--tp-primary);
+  margin-bottom: 20px;
+  transition: transform 0.15s;
+}
+
+.tp-ob-slider-value.tp-ob-bounce {
+  animation: ob-bounce 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes ob-bounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.tp-ob-slider-wrap {
+  margin-bottom: 4px;
+}
+
+.tp-ob-range {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--tp-border);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.tp-ob-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--tp-primary);
+  cursor: pointer;
+  border: 3px solid var(--tp-surface);
+  box-shadow: 0 2px 8px rgba(0, 109, 119, 0.3);
+  transition: box-shadow 0.15s;
+}
+
+.tp-ob-range::-webkit-slider-thumb:hover {
+  box-shadow: 0 2px 16px rgba(0, 109, 119, 0.5);
+}
+
+.tp-ob-range-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tp-text-muted);
+}
+
+.tp-ob-range-labels span {
+  transition: color 0.2s, transform 0.2s;
+}
+
+.tp-ob-range-labels span.active {
+  color: var(--tp-primary);
+  font-weight: 700;
+  transform: scale(1.1);
+}
+
+/* ---- Step 2: Savings ---- */
+
+.tp-ob-typewriter {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--tp-text);
+  min-height: 1.4em;
+  margin-bottom: 12px;
+}
+
+.tp-ob-hero {
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.5s, transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  margin-bottom: 8px;
+}
+
+.tp-ob-hero.tp-ob-hero-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.tp-ob-hero-number {
+  font-size: 44px;
+  font-weight: 800;
+  color: var(--tp-success);
+  letter-spacing: -1px;
+}
+
+.tp-ob-hero-suffix {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--tp-text-muted);
+  margin-left: 4px;
+}
+
+/* Savings cards */
+.tp-ob-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.tp-ob-card {
+  background: var(--tp-surface);
+  border: 1px solid var(--tp-border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tp-ob-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tp-ob-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tp-ob-card-row {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--tp-text-secondary);
+}
+
+.tp-ob-num {
+  color: var(--tp-success);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.tp-ob-card.tp-ob-pulse-once {
+  animation: ob-card-pulse 0.6s ease;
+}
+
+@keyframes ob-card-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(0, 184, 148, 0); }
+  100% { box-shadow: none; }
+}
+
+/* Final button */
+.tp-ob-btn-final {
+  margin-top: 20px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.4s, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tp-ob-btn-final.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Sparkles */
+.tp-ob-sparkle {
+  position: fixed;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--tp-success);
+  pointer-events: none;
+  z-index: 10;
+  animation: ob-sparkle 0.7s ease-out forwards;
+}
+
+@keyframes ob-sparkle {
+  0% { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--sx), var(--sy)) scale(0); }
+}
