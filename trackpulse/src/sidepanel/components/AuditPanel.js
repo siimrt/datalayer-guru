@@ -13,10 +13,12 @@ import { trackEvent } from '../../shared/analytics.js';
 import { enhanceAuditWithNetworkData, findNetworkMatchForEvent } from '../utils/network-audit-enhancer.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { isServerSideRequest } from '../../content/parsers/network-request-parser.js';
+import { auditNetworkQuality, isConversionEvent } from '../utils/network-quality-auditor.js';
 import {
   CANONICAL_EVENTS, CANONICAL_EVENTS_LEADGEN,
   EXPECTED_EVENTS_BY_PAGE, EXPECTED_EVENTS_BY_PAGE_LEADGEN,
   extractEventNameFromStreamEntry,
+  getCapiEventName,
 } from '../../shared/canonical-audit.js';
 
 const LEADGEN_TOOL_COLORS = {
@@ -47,8 +49,16 @@ export function renderAuditPanel(container, state, actions) {
   const existingEvents = state.audit?.existingEvents || [];
   const networkRequests = state.networkRequests || [];
   const dataLayerStream = state.dataLayerStream || [];
+  const currentHostname = state.url ? (() => { try { return new URL(state.url).hostname; } catch { return ''; } })() : '';
+  const capiPatterns = state.capiPatterns || {};
+  const capiOverrides = state.capiOverrides || {};
 
   const diff = enhanceAuditWithNetworkData(rawDiff, networkRequests);
+
+  // Compute quality report for inline badges
+  const qualityReport = networkRequests.length > 0
+    ? auditNetworkQuality(networkRequests, currentHostname)
+    : null;
 
   // Precompute stream event names into Sets for O(1) lookups (avoids O(N*M) scanning)
   const streamEventNames = new Set();
@@ -104,7 +114,7 @@ export function renderAuditPanel(container, state, actions) {
 
   // Forms section (if detected)
   const forms = state.forms || [];
-  if (forms.length > 0) {
+  if (forms.length > 0 && effectiveSiteType !== 'ecommerce') {
     auditHtml += `
       <div class="tp-card">
         <div class="p-3">
@@ -134,7 +144,7 @@ export function renderAuditPanel(container, state, actions) {
     const eventRows = expectedKeys.map((key) => {
       const canonical = allCanonicalEvents[key];
       if (!canonical) return '';
-      return renderCanonicalEventRow(canonical, key, diff, existingEvents, networkRequests, streamEventNames, streamEventNamesLower, installedPlatforms);
+      return renderCanonicalEventRow(canonical, key, diff, existingEvents, networkRequests, streamEventNames, streamEventNamesLower, installedPlatforms, currentHostname, capiPatterns, capiOverrides, qualityReport);
     }).join('');
 
     auditHtml = `
@@ -270,9 +280,24 @@ export function renderAuditPanel(container, state, actions) {
 }
 
 /**
+ * Check if there's a CAPI server-side match for a platform event via GA4 sGTM.
+ * Looks for GA4 server-side requests with event names matching the CAPI pattern (e.g. meta_capi_AddToCart).
+ */
+function findCapiServerSideMatch(platform, eventName, networkRequests, currentHostname, capiPatterns, capiOverrides) {
+  const capiEventName = getCapiEventName(platform, eventName, capiPatterns, capiOverrides);
+  if (!capiEventName) return false;
+
+  return networkRequests.some(r =>
+    r.platform === 'ga4'
+    && isServerSideRequest(r.url, currentHostname)
+    && r.eventName === capiEventName
+  );
+}
+
+/**
  * Render a canonical event row (e.g. "Begin Checkout") showing which platforms detected it.
  */
-function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkRequests, streamEventNames, streamEventNamesLower, installedPlatforms) {
+function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkRequests, streamEventNames, streamEventNamesLower, installedPlatforms, currentHostname, capiPatterns, capiOverrides, qualityReport) {
   // Filter to only platforms actually detected on this site
   const platformEntries = Object.entries(canonical.platforms)
     .filter(([platform]) => installedPlatforms.has(platform));
@@ -285,6 +310,19 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
   for (const [platform, eventName] of platformEntries) {
     let status = 'missing';
     let source = '';
+    let networkMatchRef = null;
+
+    // GA4: network-only detection (dataLayer is fed by CMS, not GA4)
+    if (platform === 'ga4') {
+      const netMatch = findNetworkMatchForEvent(platform, eventName, networkRequests);
+      if (netMatch) {
+        status = 'network';
+        source = netMatch.source === 'custom_pixel' ? 'Custom Pixel' : 'network';
+        networkMatchRef = netMatch;
+      }
+      platformResults.push({ platform, eventName, status, source, networkMatchRef });
+      continue;
+    }
 
     // Check in enhanced diff (exact match first, then case-insensitive)
     const eventLower = eventName.toLowerCase();
@@ -313,7 +351,6 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
     }
 
     // Check network fallback
-    let networkMatchRef = null;
     if (status === 'missing') {
       const netMatch = findNetworkMatchForEvent(platform, eventName, networkRequests);
       if (netMatch) {
@@ -361,18 +398,21 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
   const detailRows = platformResults.map((p) => {
     const pLabel = PLATFORM_LABELS[p.platform] || p.platform;
     const icon = platformIconHtml(p.platform, 13);
-    let statusHtml;
-    if (p.status === 'found') {
-      statusHtml = `<span style="color: #00B894;">Found in dataLayer</span>`;
+    let statusHtml = '';
+    if (p.status === 'found' || p.status === 'network') {
+      const isCS = p.status === 'found' || (p.networkMatchRef && !isServerSideRequest(p.networkMatchRef.url, currentHostname));
+      const isSS = p.networkMatchRef && isServerSideRequest(p.networkMatchRef.url, currentHostname);
+      // Check for CAPI server-side match for this platform via GA4 sGTM
+      const hasCapiSS = findCapiServerSideMatch(p.platform, p.eventName, networkRequests, currentHostname, capiPatterns, capiOverrides);
+
+      if (isCS) {
+        statusHtml += `<span style="color: #00CEC9; font-size: 10px; font-weight: 600; background: rgba(0,206,201,0.1); padding: 1px 6px; border-radius: 10px; margin-left: 2px; white-space: nowrap;">Client-Side</span>`;
+      }
+      if (isSS || hasCapiSS) {
+        statusHtml += `<span class="tp-badge-ss" style="margin-left: 2px; white-space: nowrap;">Server-Side</span>`;
+      }
     } else if (p.status === 'partial') {
       statusHtml = `<span style="color: #F0932B;">Partial match</span>`;
-    } else if (p.status === 'network') {
-      const isSSR = p.networkMatchRef && isServerSideRequest(p.networkMatchRef.url);
-      if (isSSR) {
-        statusHtml = `<span class="tp-badge-ss">Server-Side</span>`;
-      } else {
-        statusHtml = `<span style="color: #00CEC9;">Sent via network</span>`;
-      }
     } else {
       statusHtml = `<span style="color: #FF6B6B; opacity: 0.6;">Tag detected, no events</span>`;
     }
@@ -396,6 +436,29 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
       }
     }
 
+    // Quality badges (dedup, user data) — only for detected events with network data
+    let qualityHtml = '';
+    if (qualityReport && p.status !== 'missing' && p.networkMatchRef) {
+      const qKey = `${p.platform}::${p.eventName}`;
+      const eq = qualityReport.eventQuality.get(qKey);
+      if (eq) {
+        if (eq.isDuplicate) {
+          qualityHtml += '<span class="tp-badge-q-crit">dup!</span>';
+        } else if (eq.dedupPresent) {
+          qualityHtml += '<span class="tp-badge-q-ok">dedup</span>';
+        } else if (isConversionEvent(p.platform, p.eventName)) {
+          qualityHtml += '<span class="tp-badge-q-warn">no dedup</span>';
+        }
+        if (['meta', 'tiktok', 'pinterest'].includes(p.platform)) {
+          if (eq.userDataPresent) {
+            qualityHtml += '<span class="tp-badge-q-ok">user data</span>';
+          } else {
+            qualityHtml += '<span class="tp-badge-q-warn">no user data</span>';
+          }
+        }
+      }
+    }
+
     const rowOpacity = p.status === 'missing' ? 'opacity: 0.55;' : '';
     return `
       <div style="display: flex; flex-direction: column; padding: 3px 0; font-size: 11px; ${rowOpacity}">
@@ -403,7 +466,7 @@ function renderCanonicalEventRow(canonical, key, diffs, existingEvents, networkR
           ${icon}
           <span style="color: var(--tp-text); min-width: 55px;">${pLabel}</span>
           <span style="color: var(--tp-text-muted);">${escapeHtml(p.eventName)}</span>
-          <span style="margin-left: auto;">${statusHtml}</span>
+          <span style="margin-left: auto; display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end;">${statusHtml}${qualityHtml}</span>
         </div>
         ${conversionLabelHtml}
       </div>

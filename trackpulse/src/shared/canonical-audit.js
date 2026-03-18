@@ -11,21 +11,21 @@ import { enhanceAuditWithNetworkData, findNetworkMatchForEvent } from '../sidepa
 // ─── Canonical Events ────────────────────────────────────────────────────────
 
 export const CANONICAL_EVENTS = {
-  view_item: { label: 'Product View', platforms: { ga4: 'view_item', google_ads: 'conversion', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit' } },
+  view_item: { label: 'Product View', platforms: { ga4: 'view_item', google_ads: 'conversion', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit', snapchat: 'VIEW_CONTENT' } },
   add_to_cart: { label: 'Add to Cart', platforms: { ga4: 'add_to_cart', google_ads: 'conversion', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart', snapchat: 'ADD_CART' } },
-  view_item_list: { label: 'Collection View', platforms: { ga4: 'view_item_list', meta: 'ViewCategory', tiktok: 'ViewContent', pinterest: 'viewcategory' } },
+  view_item_list: { label: 'Collection View', platforms: { ga4: 'view_item_list', meta: 'ViewCategory', tiktok: 'ViewContent', pinterest: 'viewcategory', snapchat: 'LIST_VIEW' } },
   view_cart: { label: 'View Cart', platforms: { ga4: 'view_cart', meta: 'ViewCart', tiktok: 'ViewCart' } },
-  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', google_ads: 'conversion', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout' } },
+  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', google_ads: 'conversion', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout', snapchat: 'START_CHECKOUT' } },
   add_shipping_info: { label: 'Add Shipping Info', platforms: { ga4: 'add_shipping_info' } },
-  add_payment_info: { label: 'Add Payment Info', platforms: { ga4: 'add_payment_info' } },
-  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', google_ads: 'conversion', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout' } },
-  search: { label: 'Search', platforms: { ga4: 'search', meta: 'Search', tiktok: 'Search', pinterest: 'search' } },
+  add_payment_info: { label: 'Add Payment Info', platforms: { ga4: 'add_payment_info', snapchat: 'ADD_BILLING' } },
+  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', google_ads: 'conversion', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout', snapchat: 'PURCHASE' } },
+  search: { label: 'Search', platforms: { ga4: 'search', meta: 'Search', tiktok: 'Search', pinterest: 'search', snapchat: 'SEARCH' } },
 };
 
 export const CANONICAL_EVENTS_LEADGEN = {
-  generate_lead: { label: 'Lead Generated', platforms: { ga4: 'generate_lead', meta: 'Lead', tiktok: 'SubmitForm', pinterest: 'lead' } },
+  generate_lead: { label: 'Lead Generated', platforms: { ga4: 'generate_lead', meta: 'Lead', tiktok: 'SubmitForm', pinterest: 'lead', snapchat: 'SIGN_UP' } },
   contact: { label: 'Contact', platforms: { ga4: 'generate_lead', meta: 'Contact', tiktok: 'Contact' } },
-  sign_up: { label: 'Sign Up', platforms: { ga4: 'sign_up', meta: 'CompleteRegistration', tiktok: 'CompleteRegistration', pinterest: 'signup' } },
+  sign_up: { label: 'Sign Up', platforms: { ga4: 'sign_up', meta: 'CompleteRegistration', tiktok: 'CompleteRegistration', pinterest: 'signup', snapchat: 'SIGN_UP' } },
   schedule: { label: 'Schedule / Demo', platforms: { ga4: 'schedule', meta: 'Schedule' } },
 };
 
@@ -65,6 +65,27 @@ export function extractEventNameFromStreamEntry(entry) {
   if (data.event) return data.event;
   if (data['0'] === 'event' && data['1']) return data['1'];
   return null;
+}
+
+/**
+ * Resolve the effective CAPI event name for a platform event.
+ * Uses per-event overrides if set, otherwise falls back to prefix + standard name.
+ *
+ * @param {string} platform - Platform key (e.g. 'meta', 'tiktok')
+ * @param {string} platformEventName - Standard platform event name (e.g. 'ViewContent')
+ * @param {object} capiPatterns - Prefix patterns per platform (e.g. { meta: 'meta_capi_' })
+ * @param {object} capiOverrides - Per-event overrides (e.g. { meta: { ViewContent: 'meta_capi_view_item' } })
+ * @returns {string|null} Effective CAPI event name, or null if no pattern configured
+ */
+export function getCapiEventName(platform, platformEventName, capiPatterns, capiOverrides) {
+  // Check per-event override first
+  if (capiOverrides && capiOverrides[platform] && capiOverrides[platform][platformEventName]) {
+    return capiOverrides[platform][platformEventName];
+  }
+  // Fall back to prefix + standard name
+  const pattern = capiPatterns && capiPatterns[platform];
+  if (!pattern) return null;
+  return pattern + platformEventName;
 }
 
 // ─── Canonical Audit Resolver ────────────────────────────────────────────────
@@ -137,6 +158,17 @@ export function resolveCanonicalAudit(state) {
     for (const [platform, eventName] of platformEntries) {
       let status = 'missing';
       let source = '';
+
+      // GA4: network-only detection (dataLayer is fed by CMS, not GA4)
+      if (platform === 'ga4') {
+        const netMatch = findNetworkMatchForEvent(platform, eventName, networkRequests);
+        if (netMatch) {
+          status = 'network';
+          source = netMatch.source === 'custom_pixel' ? 'Custom Pixel' : 'network';
+        }
+        platformResults.push({ platform, eventName, status, source });
+        continue;
+      }
 
       const eventLower = eventName.toLowerCase();
 

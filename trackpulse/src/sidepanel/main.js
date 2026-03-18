@@ -65,12 +65,18 @@ if (IS_POPUP) {
 // Apply saved theme before first paint to avoid flash
 (async function initTheme() {
   try {
-    const data = await chrome.storage.local.get(['tp_theme', 'tp_auto_switch_tab', 'tp_auto_reload']);
+    const data = await chrome.storage.local.get(['tp_theme', 'tp_auto_switch_tab', 'tp_auto_reload', 'tp_capi_patterns', 'tp_capi_overrides']);
     if ((data.tp_theme || 'light') === 'dark') {
       document.documentElement.classList.add('dark');
     }
     state.autoSwitchTab = !!data.tp_auto_switch_tab;
     state.autoReload = data.tp_auto_reload !== undefined ? !!data.tp_auto_reload : true;
+    const defaultCapiPatterns = {
+      meta: 'meta_capi_', tiktok: 'tiktok_capi_', pinterest: 'pinterest_capi_',
+      snapchat: 'snapchat_capi_', linkedin: 'linkedin_capi_', google_ads: 'gads_capi_',
+    };
+    state.capiPatterns = data.tp_capi_patterns || defaultCapiPatterns;
+    state.capiOverrides = data.tp_capi_overrides || {};
   } catch (e) {}
 })();
 
@@ -182,6 +188,10 @@ const state = {
   // V2 Settings
   autoSwitchTab: false,  // Auto-reload detection on tab switch
   autoReload: false,     // Auto-reload page when sidepanel opens on already-loaded page
+
+  // CAPI patterns for server-side detection via sGTM
+  capiPatterns: {},
+  capiOverrides: {},   // Per-event CAPI name overrides { platform: { eventName: 'custom_name' } }
 
   // Page load state detection
   pageAlreadyLoaded: false,
@@ -299,6 +309,7 @@ const actions = {
           target: 'top',
           currentPageType: state.pageType?.pageType || null,
           getNetworkRequests: () => state.networkRequests,
+          currentHostname: state.url ? (() => { try { return new URL(state.url).hostname; } catch { return ''; } })() : '',
         });
       } else {
         showToast('No active tab found', 'error');
@@ -375,6 +386,7 @@ const actions = {
       target: target && target !== 'top' ? target : 'top',
       currentPageType: state.pageType?.pageType || null,
       getNetworkRequests: () => state.networkRequests,
+      currentHostname: state.url ? (() => { try { return new URL(state.url).hostname; } catch { return ''; } })() : '',
     };
 
     if (target && target !== 'top') {
@@ -470,6 +482,18 @@ const actions = {
     state.autoReload = enabled;
     chrome.storage.local.set({ tp_auto_reload: enabled });
     trackEvent('auto_reload_toggled', { enabled });
+  },
+
+  setCapiPatterns(patterns) {
+    state.capiPatterns = patterns;
+    chrome.storage.local.set({ tp_capi_patterns: patterns });
+    renderActiveTab();
+  },
+
+  setCapiOverrides(overrides) {
+    state.capiOverrides = overrides;
+    chrome.storage.local.set({ tp_capi_overrides: overrides });
+    renderActiveTab();
   },
 
   dismissMissedEventsBanner() {
@@ -811,6 +835,8 @@ chrome.runtime.onMessage.addListener((msg) => {
         measurementId: parsed.measurementId || null,
         pixelId: parsed.pixelId || netPayload.pixelId || null,
         source: netPayload.source || 'top',
+        dedup: parsed.dedup || null,
+        quality: parsed.quality || null,
       };
       state._netDedupMap.set(netUrlKey, { ts: netNow, hasBody: !!netPayload.body, entryId: netEntry.id });
       if (state._netDedupMap.size > 300) {
