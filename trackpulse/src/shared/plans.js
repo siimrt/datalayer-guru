@@ -10,6 +10,9 @@ export const PLANS = {
   agency: 3,
 };
 
+// Whitelist of valid plan names — reject anything not in this set
+export const VALID_PLANS = new Set(Object.keys(PLANS));
+
 // Map ExtensionPay plan IDs to internal plan names
 export const PLAN_ID_MAP = {
   // Bare plan names (ExtensionPay may return these directly)

@@ -1,9 +1,19 @@
 /**
  * Tracks usage metrics per billing period (calendar month).
- * Stored in chrome.storage.local.
+ * Stored in chrome.storage.local with HMAC signature to prevent tampering.
  */
 
+import { computeUsageSignature } from '../shared/crypto.js';
+
 const STORAGE_KEY = 'tp_usage';
+const SIG_KEY = 'tp_usage_sig';
+
+// Max limits used when signature is invalid (anti-tamper: reset to MAX, not 0)
+const TAMPERED_USAGE = {
+  domains: Array.from({ length: 50 }, (_, i) => `blocked-${i}.invalid`),
+  pdfReportsCount: 9999,
+  funnelAuditsCount: 9999,
+};
 
 function getCurrentPeriod() {
   const now = new Date();
@@ -11,7 +21,7 @@ function getCurrentPeriod() {
 }
 
 async function getUsage() {
-  const data = await chrome.storage.local.get(STORAGE_KEY);
+  const data = await chrome.storage.local.get([STORAGE_KEY, SIG_KEY]);
   const usage = data[STORAGE_KEY] || {};
   const period = getCurrentPeriod();
 
@@ -25,11 +35,29 @@ async function getUsage() {
     };
   }
 
+  // Verify signature — if tampered, return maxed-out usage
+  if (usage.period) {
+    try {
+      const expectedSig = await computeUsageSignature(usage);
+      if (data[SIG_KEY] !== expectedSig) {
+        return { period, ...TAMPERED_USAGE };
+      }
+    } catch (e) {
+      // Crypto failure — allow usage to avoid blocking legit users
+    }
+  }
+
   return usage;
 }
 
 async function saveUsage(usage) {
-  await chrome.storage.local.set({ [STORAGE_KEY]: usage });
+  try {
+    const sig = await computeUsageSignature(usage);
+    await chrome.storage.local.set({ [STORAGE_KEY]: usage, [SIG_KEY]: sig });
+  } catch (e) {
+    // Fallback: save without signature (crypto may be unavailable in some contexts)
+    await chrome.storage.local.set({ [STORAGE_KEY]: usage });
+  }
 }
 
 /**
@@ -108,5 +136,5 @@ export async function getUsageStats() {
  * Reset usage (for testing).
  */
 export async function resetUsage() {
-  await chrome.storage.local.remove(STORAGE_KEY);
+  await chrome.storage.local.remove([STORAGE_KEY, SIG_KEY]);
 }

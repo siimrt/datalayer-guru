@@ -4,9 +4,23 @@
  */
 
 import ExtPay from 'extpay';
-import { PLANS, PLAN_ID_MAP, resolvePlanFromId } from '../shared/plans.js';
+import { PLANS, PLAN_ID_MAP, VALID_PLANS, resolvePlanFromId } from '../shared/plans.js';
+import { computePlanSignature, verifyPlanSignature } from '../shared/crypto.js';
 
 const extpay = ExtPay('datalayer-guru');
+
+// --- Dev-only logging ---
+let _isDevMode = null;
+function isDevMode() {
+  if (_isDevMode === null) {
+    try { _isDevMode = !chrome.runtime.getManifest().update_url; }
+    catch (e) { _isDevMode = false; }
+  }
+  return _isDevMode;
+}
+const _log = (...args) => { if (isDevMode()) console.log('[Traacky]', ...args); };
+
+// --- Plan Manager ---
 
 class PlanManager {
   constructor() {
@@ -15,13 +29,20 @@ class PlanManager {
     this.listeners = new Set();
     this._initialized = false;
     this._initPromise = null;
-    this._storedPlan = null; // Plan stored locally when user clicks CTA (ExtensionPay doesn't return planId)
+    this._storedPlan = null;
+    this._lastPlanChange = 0;
+  }
+
+  /**
+   * Validate a plan value against the whitelist. Returns 'free' for invalid values.
+   */
+  _validatePlan(plan) {
+    return VALID_PLANS.has(plan) ? plan : 'free';
   }
 
   /**
    * Initialize ExtensionPay and load user state.
    * Call this ONCE in the service worker on extension startup.
-   * Returns a promise that resolves when init is complete.
    */
   async init() {
     if (this._initialized) return;
@@ -33,28 +54,45 @@ class PlanManager {
 
   async _doInit() {
     try {
-      // ExtensionPay background setup
       extpay.startBackground();
 
-      // Load locally stored plan selection (ExtensionPay doesn't return planId)
-      const stored = await chrome.storage.local.get('tp_selected_plan');
-      this._storedPlan = stored.tp_selected_plan || null;
+      // Load locally stored plan selection — sync first, fallback local
+      let stored;
+      try {
+        stored = await chrome.storage.sync.get('tp_selected_plan');
+      } catch (e) {
+        _log('sync read failed:', e.message);
+      }
+      if (!stored?.tp_selected_plan) {
+        stored = await chrome.storage.local.get('tp_selected_plan');
+      }
+      this._storedPlan = this._validatePlan(stored.tp_selected_plan || 'free') === 'free'
+        ? null
+        : stored.tp_selected_plan;
 
       // Get current user
       this.user = await extpay.getUser();
-      console.log('[Traacky] ExtPay user:', JSON.stringify(this.user));
+      _log('ExtPay user loaded');
       this._resolvePlan();
-      console.log('[Traacky] Resolved plan:', this.currentPlan);
+      _log('Resolved plan:', this.currentPlan);
 
       // Listen for payment events
       extpay.onPaid.addListener((user) => {
-        console.log('[Traacky] onPaid fired:', JSON.stringify(user));
+        _log('onPaid fired');
         this.user = user;
         this._resolvePlan();
-        console.log('[Traacky] Plan after payment:', this.currentPlan);
         this._persistPlanCache();
         this._notifyListeners();
         this._broadcastPlanChanged();
+      });
+
+      // Listen for sync changes — don't trust the value, re-verify with ExtensionPay (Fix 2)
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'sync') return;
+        if (changes.tp_plan && changes.tp_plan.newValue !== this.currentPlan) {
+          _log('Sync plan change detected — triggering refresh');
+          this.refreshPlan();
+        }
       });
 
       // Cache plan in chrome.storage for quick access
@@ -63,22 +101,13 @@ class PlanManager {
       this._initialized = true;
     } catch (err) {
       console.error('[Traacky] ExtensionPay init error:', err);
-      // Fallback to cached plan
       await this._loadCachedPlan();
-      this._initialized = true; // Mark as initialized even on error to avoid retry loops
+      this._initialized = true;
     }
   }
 
   /**
    * Resolve the internal plan name from ExtensionPay user data.
-   *
-   * ExtensionPay user object shape:
-   *   { paid: boolean, paidAt: Date|null, email: string,
-   *     installedAt: Date, trialStartedAt: Date|null,
-   *     subscriptionPlanId?: string, subscriptionStatus?: string }
-   *
-   * If the user has paid but we can't determine a specific plan from the planId,
-   * we default to 'starter' (the lowest paid tier) to be safe.
    */
   _resolvePlan() {
     if (!this.user) {
@@ -86,21 +115,9 @@ class PlanManager {
       return;
     }
 
-    // Log ALL user properties for debugging
-    console.log('[Traacky] _resolvePlan user keys:', Object.keys(this.user));
-    console.log('[Traacky] user.paid:', this.user.paid, typeof this.user.paid);
-    console.log('[Traacky] user.subscriptionStatus:', this.user.subscriptionStatus);
-    console.log('[Traacky] user.paidAt:', this.user.paidAt);
-
-    // Multiple ways to detect paid status:
-    // 1. user.paid === true (standard ExtensionPay)
-    // 2. user.subscriptionStatus === 'active' (active subscription)
-    // 3. user.paidAt is truthy (has a payment date)
     const isPaid = !!this.user.paid
       || this.user.subscriptionStatus === 'active'
       || !!this.user.paidAt;
-
-    console.log('[Traacky] isPaid resolved to:', isPaid);
 
     if (!isPaid) {
       this.currentPlan = 'free';
@@ -108,22 +125,18 @@ class PlanManager {
     }
 
     // User has paid — determine which plan
-    // Try multiple possible property names from ExtensionPay
     const planId = this.user.subscriptionPlanId
       || this.user.planId
       || this.user.plan_id
       || this.user.subscription_plan_id
       || '';
 
-    console.log('[Traacky] User isPaid=true, planId="' + planId + '"');
-
     const resolved = resolvePlanFromId(planId);
     if (resolved) {
-      this.currentPlan = resolved;
-    } else if (this._storedPlan) {
-      // ExtensionPay doesn't return planId — use locally stored selection from checkout
-      console.log('[Traacky] Using stored plan selection:', this._storedPlan);
-      this.currentPlan = this._storedPlan;
+      this.currentPlan = this._validatePlan(resolved);
+    } else if (this._storedPlan && isPaid) {
+      // Only use stored plan selection if user actually paid (Fix 4)
+      this.currentPlan = this._validatePlan(this._storedPlan);
     } else {
       // Paid but no recognizable plan ID and no stored selection — default to 'starter'
       this.currentPlan = 'starter';
@@ -131,29 +144,54 @@ class PlanManager {
   }
 
   /**
-   * Cache plan in chrome.storage.local for fast access across contexts.
+   * Cache plan in chrome.storage.local with HMAC signature (Fix 3).
    */
   async _persistPlanCache() {
+    const email = this.user?.email || null;
+    const sig = await computePlanSignature(this.currentPlan, email);
+
     const data = {
       tp_plan: this.currentPlan,
       tp_plan_updated: Date.now(),
-      tp_user_email: this.user?.email || null,
+      tp_user_email: email,
       tp_paid: !!this.user?.paid,
+      tp_plan_sig: sig,
     };
-    console.log('[Traacky] Persisting plan cache:', JSON.stringify(data));
+    _log('Persisting signed plan cache');
     await chrome.storage.local.set(data);
+    // Dual-write to sync for cross-browser/cross-device sync
+    try {
+      await chrome.storage.sync.set(data);
+    } catch (err) {
+      _log('sync write failed:', err.message);
+    }
   }
 
   /**
    * Load cached plan (used as fallback when ExtensionPay is unreachable).
+   * Verifies HMAC signature before trusting cached value (Fix 3).
    */
   async _loadCachedPlan() {
-    const data = await chrome.storage.local.get(['tp_plan', 'tp_plan_updated']);
+    const data = await chrome.storage.local.get([
+      'tp_plan', 'tp_plan_updated', 'tp_user_email', 'tp_plan_sig',
+    ]);
+
     if (data.tp_plan) {
-      this.currentPlan = data.tp_plan;
-      console.log('[Traacky] Loaded cached plan:', this.currentPlan);
-      // If cache is older than 24h, try to refresh
-      if (Date.now() - (data.tp_plan_updated || 0) > 86400000) {
+      const validated = this._validatePlan(data.tp_plan);
+
+      // Verify signature — reject tampered cache
+      const sigValid = await verifyPlanSignature(validated, data.tp_user_email, data.tp_plan_sig);
+      if (!sigValid) {
+        _log('Plan cache signature invalid — falling back to free');
+        this.currentPlan = 'free';
+        return;
+      }
+
+      this.currentPlan = validated;
+      _log('Loaded verified cached plan:', this.currentPlan);
+
+      // If cache is older than 1h, try to refresh (Fix 6 — reduced from 24h)
+      if (Date.now() - (data.tp_plan_updated || 0) > 3600000) {
         this.refreshPlan();
       }
     }
@@ -161,18 +199,31 @@ class PlanManager {
 
   /**
    * Force refresh plan status from ExtensionPay.
-   * Returns the resolved plan name.
    */
   async refreshPlan() {
+    // Rate-limit: max once per 30 seconds (Fix 8)
+    if (this._lastPlanChange && Date.now() - this._lastPlanChange < 30000) {
+      _log('Refresh rate-limited');
+      return this.currentPlan;
+    }
+    this._lastPlanChange = Date.now();
+
     try {
-      // Reload stored plan selection in case it was updated
-      const stored = await chrome.storage.local.get('tp_selected_plan');
-      this._storedPlan = stored.tp_selected_plan || this._storedPlan;
+      // Reload stored plan selection
+      let stored;
+      try {
+        stored = await chrome.storage.sync.get('tp_selected_plan');
+      } catch (e) { /* sync unavailable */ }
+      if (!stored?.tp_selected_plan) {
+        stored = await chrome.storage.local.get('tp_selected_plan');
+      }
+      const storedVal = stored.tp_selected_plan || null;
+      this._storedPlan = storedVal && this._validatePlan(storedVal) !== 'free' ? storedVal : this._storedPlan;
 
       this.user = await extpay.getUser();
-      console.log('[Traacky] Refresh - ExtPay user:', JSON.stringify(this.user));
+      _log('Refresh - user loaded');
       this._resolvePlan();
-      console.log('[Traacky] Refresh - resolved plan:', this.currentPlan);
+      _log('Refresh - resolved plan:', this.currentPlan);
       await this._persistPlanCache();
       this._notifyListeners();
       this._broadcastPlanChanged();
@@ -188,7 +239,6 @@ class PlanManager {
    */
   async waitForInit() {
     if (!this._initPromise && !this._initialized) {
-      // Service worker may have restarted — re-initialize
       this.init();
     }
     if (this._initPromise) {
@@ -227,6 +277,13 @@ class PlanManager {
    */
   openManagementPage() {
     extpay.openPaymentPage();
+  }
+
+  /**
+   * Open the ExtensionPay login page (for restoring license on another browser/device).
+   */
+  openLoginPage() {
+    extpay.openLoginPage();
   }
 
   /**
