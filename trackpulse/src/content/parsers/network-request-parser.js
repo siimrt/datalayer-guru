@@ -21,7 +21,7 @@ export function parseNetworkRequest(platform, url, body) {
   try {
     return parser(url, body);
   } catch (e) {
-    return { eventName: null, params: {}, items: null };
+    return { eventName: null, params: {}, items: null, dedup: buildDedup(null, null), quality: buildQuality() };
   }
 }
 
@@ -55,6 +55,24 @@ function tryParseJsonBody(body) {
   } catch (e) {
     return null;
   }
+}
+
+// ---- Dedup & Quality Helpers ----
+
+function buildDedup(eventId, transactionId) {
+  return { eventId: eventId || null, transactionId: transactionId || null };
+}
+
+function buildQuality(opts = {}) {
+  const udf = opts.userDataFields || [];
+  return {
+    userDataFields: udf,
+    userDataCount: udf.length,
+    hasAdvancedMatching: udf.length > 0,
+    hasValue: !!opts.hasValue,
+    hasCurrency: !!opts.hasCurrency,
+    hasItems: !!opts.hasItems,
+  };
 }
 
 // ---- Platform Parsers ----
@@ -128,6 +146,8 @@ function parseGA4Request(url, body) {
     params: eventParams,
     items: items.length > 0 ? items : null,
     measurementId: allParams.tid || null,
+    dedup: buildDedup(null, eventParams.transaction_id),
+    quality: buildQuality({ hasValue: !!eventParams.value, hasCurrency: !!eventParams.currency, hasItems: items.length > 0 }),
   };
 }
 
@@ -161,12 +181,14 @@ function parseMetaRequest(url, body) {
   const searchSources = [urlObj.search];
   if (body && typeof body === 'string') searchSources.push('&' + body);
 
+  const userDataFields = [];
+
   if (!parsedCdJson) {
     for (const searchStr of searchSources) {
-      const bracketRegex = /(?:^|&)(cd|ap|pmd)\[([^\]]+)\]=([^&]*)/g;
+      const bracketRegex = /(?:^|&)(cd|ap|pmd|ud|udff)\[([^\]]+)\]=([^&]*)/g;
       let match;
       while ((match = bracketRegex.exec(searchStr)) !== null) {
-        const prefix = match[1]; // cd, ap, or pmd
+        const prefix = match[1]; // cd, ap, pmd, ud, or udff
         const key = decodeURIComponent(match[2]);
         let value = decodeURIComponent(match[3]);
 
@@ -179,6 +201,8 @@ function parseMetaRequest(url, body) {
           eventParams[key] = value;
         } else if (prefix === 'ap') {
           eventParams[`ap_${key}`] = value;
+        } else if (prefix === 'ud' || prefix === 'udff') {
+          if (!userDataFields.includes(key)) userDataFields.push(key);
         }
         // Skip pmd (page metadata) — too verbose
       }
@@ -190,6 +214,8 @@ function parseMetaRequest(url, body) {
     params: eventParams,
     items: eventParams.contents || null,
     pixelId: params.id || null,
+    dedup: buildDedup(params.eid, null),
+    quality: buildQuality({ userDataFields, hasValue: !!eventParams.value, hasCurrency: !!eventParams.currency, hasItems: !!eventParams.contents }),
   };
 }
 
@@ -257,8 +283,21 @@ function parseTikTokRequest(url, body) {
     if (sdkid) eventParams.pixelId = sdkid;
   }
 
+  // Extract event_id for dedup from various formats
+  let eventId = null;
+  if (jsonData) {
+    eventId = jsonData.event_id || null;
+    if (!eventId && Array.isArray(jsonData.batch) && jsonData.batch.length > 0) eventId = jsonData.batch[0].event_id || null;
+    if (!eventId && Array.isArray(jsonData.data) && jsonData.data.length > 0) eventId = jsonData.data[0].event_id || null;
+    if (!eventId && Array.isArray(jsonData.events) && jsonData.events.length > 0) eventId = jsonData.events[0].event_id || null;
+  }
+
   // Return pixelId as top-level field (consistent with other parsers)
-  const result = { eventName, params: eventParams, items: null };
+  const result = {
+    eventName, params: eventParams, items: null,
+    dedup: buildDedup(eventId, null),
+    quality: buildQuality({ hasValue: !!eventParams.value, hasCurrency: !!eventParams.currency, hasItems: !!eventParams.contents }),
+  };
   if (eventParams.pixelId) result.pixelId = eventParams.pixelId;
   return result;
 }
@@ -290,8 +329,19 @@ function parsePinterestRequest(url, body) {
     } catch (e) {}
   }
 
+  // Check for enhanced match user data
+  const userDataFields = [];
+  for (const key of Object.keys(params)) {
+    const pdMatch = key.match(/^pd\[(\w+)\]$/);
+    if (pdMatch && !userDataFields.includes(pdMatch[1])) userDataFields.push(pdMatch[1]);
+  }
+
   const pixelId = params.tid || null;
-  return { eventName, params: eventParams, items: null, pixelId };
+  return {
+    eventName, params: eventParams, items: null, pixelId,
+    dedup: buildDedup(params.event_id || null, null),
+    quality: buildQuality({ userDataFields, hasValue: !!eventParams.value, hasCurrency: !!eventParams.currency, hasItems: !!eventParams.line_items }),
+  };
 }
 
 /**
@@ -312,7 +362,7 @@ function parseSnapchatRequest(url, body) {
 
     // Cookie matching endpoint — flag it
     if (urlObj.pathname.includes('/cm/')) {
-      return { eventName: 'cookie_match', params: {}, items: null };
+      return { eventName: 'cookie_match', params: {}, items: null, dedup: buildDedup(null, null), quality: buildQuality() };
     }
 
     eventName = allParams.ev || allParams.event || allParams.type || null;
@@ -333,17 +383,27 @@ function parseSnapchatRequest(url, body) {
   } catch (e) {}
 
   // Try JSON body (Conversions API v3)
+  let snapJsonData = null;
   if (!eventName) {
-    const jsonData = tryParseJsonBody(body);
-    if (jsonData) {
-      eventName = jsonData.event_type || jsonData.event_name || jsonData.event || null;
-      if (jsonData.event_conversion_type) eventParams.conversion_type = jsonData.event_conversion_type;
-      if (jsonData.price) eventParams.price = jsonData.price;
-      if (jsonData.currency) eventParams.currency = jsonData.currency;
+    snapJsonData = tryParseJsonBody(body);
+    if (snapJsonData) {
+      eventName = snapJsonData.event_type || snapJsonData.event_name || snapJsonData.event || null;
+      if (snapJsonData.event_conversion_type) eventParams.conversion_type = snapJsonData.event_conversion_type;
+      if (snapJsonData.price) eventParams.price = snapJsonData.price;
+      if (snapJsonData.currency) eventParams.currency = snapJsonData.currency;
     }
   }
 
-  const result = { eventName, params: eventParams, items: null };
+  // Extract dedup fields from URL params or JSON body
+  const { params: snapAllParams } = mergeUrlAndBodyParams(url, body);
+  const snapDedupId = snapAllParams.client_dedup_id || (snapJsonData && snapJsonData.client_dedup_id) || null;
+  const snapTransactionId = snapAllParams.transaction_id || (snapJsonData && snapJsonData.transaction_id) || eventParams.transaction_id || null;
+
+  const result = {
+    eventName, params: eventParams, items: null,
+    dedup: buildDedup(snapDedupId, snapTransactionId),
+    quality: buildQuality({ hasValue: !!eventParams.price, hasCurrency: !!eventParams.currency }),
+  };
   if (pixelId) result.pixelId = pixelId;
   return result;
 }
@@ -370,12 +430,12 @@ function parseLinkedInRequest(url, body) {
 
     // Cookie sync endpoints
     if (host === 'p.adsymptotic.com' || urlObj.pathname.includes('/px/li_sync')) {
-      return { eventName: 'cookie_sync', params: {}, items: null };
+      return { eventName: 'cookie_sync', params: {}, items: null, dedup: buildDedup(null, null), quality: buildQuality() };
     }
 
     // Firmographic enrichment
     if (host === 'sjs.bizographics.com') {
-      return { eventName: 'firmographic_enrichment', params: { pid: allParams.pid || null }, items: null };
+      return { eventName: 'firmographic_enrichment', params: { pid: allParams.pid || null }, items: null, dedup: buildDedup(null, null), quality: buildQuality() };
     }
 
     // Main tracking endpoints (px.ads.linkedin.com, px4, dc)
@@ -408,7 +468,16 @@ function parseLinkedInRequest(url, body) {
     }
   }
 
-  const result = { eventName, params: eventParams, items: null };
+  // Check for li_fat_id as user data
+  const liUserDataFields = [];
+  const { params: liAllParams } = mergeUrlAndBodyParams(url, body);
+  if (liAllParams.li_fat_id) liUserDataFields.push('li_fat_id');
+
+  const result = {
+    eventName, params: eventParams, items: null,
+    dedup: buildDedup(null, null),
+    quality: buildQuality({ userDataFields: liUserDataFields }),
+  };
   if (eventParams.partnerId) result.pixelId = eventParams.partnerId;
   return result;
 }
@@ -457,7 +526,11 @@ function parseGoogleAdsRequest(url, body) {
     }
   } catch (e) {}
 
-  const result = { eventName, params: eventParams, items: null };
+  const result = {
+    eventName, params: eventParams, items: null,
+    dedup: buildDedup(null, eventParams.order_id),
+    quality: buildQuality({ hasValue: !!eventParams.value, hasCurrency: !!eventParams.currency }),
+  };
   if (pixelId) result.pixelId = pixelId;
   return result;
 }
@@ -478,31 +551,43 @@ function parseGenericRequest(url, body) {
     }
   }
 
-  return { eventName, params: allParams, items: null };
+  return { eventName, params: allParams, items: null, dedup: buildDedup(null, null), quality: buildQuality() };
 }
 
 // ---- Server-Side Detection ----
 
-const GOOGLE_OWNED_SUFFIXES = [
-  'google.com', 'google-analytics.com', 'googleapis.com',
-  'googleadservices.com', 'doubleclick.net', 'googlesyndication.com',
-];
+function extractRootDomain(hostname) {
+  const parts = hostname.split('.');
+  const multiPartTLDs = new Set([
+    'co.uk','co.jp','co.kr','co.nz','co.za','co.in','co.il',
+    'com.au','com.br','com.cn','com.mx','com.tw','com.sg',
+    'org.uk','net.au','ac.uk','gov.uk','ne.jp','or.jp'
+  ]);
+  if (parts.length >= 3) {
+    const lastTwo = parts.slice(-2).join('.');
+    if (multiPartTLDs.has(lastTwo)) return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+}
 
-export function isServerSideRequest(url) {
+export function isServerSideRequest(url, currentHostname) {
   try {
-    const host = new URL(url).hostname;
-    return !GOOGLE_OWNED_SUFFIXES.some(s => host === s || host.endsWith('.' + s));
+    if (!currentHostname) return false;
+    const requestHost = new URL(url).hostname;
+    const requestRoot = extractRootDomain(requestHost);
+    const siteRoot = extractRootDomain(currentHostname);
+    return requestRoot === siteRoot && requestHost !== currentHostname;
   } catch { return false; }
 }
 
 // ---- Network → GeneratedEvent Converter ----
 
-export function networkRequestToGeneratedEvent(netEntry) {
+export function networkRequestToGeneratedEvent(netEntry, currentHostname) {
   if (!netEntry.eventName) return null;
   const { platform, eventName } = netEntry;
   const params = netEntry.params || {};
   const items = netEntry.items;
-  const serverSide = isServerSideRequest(netEntry.url);
+  const serverSide = isServerSideRequest(netEntry.url, currentHostname);
 
   let data, code;
   if (platform === 'ga4') {

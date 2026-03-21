@@ -305,20 +305,12 @@ if (chrome.webRequest?.onCompleted) {
   );
 }
 
-// --- Side Panel / Popup Fallback ---
+// --- Side Panel ---
 
-// Chrome supports side panel natively. Other Chromium browsers (Arc, etc.) define
-// chrome.sidePanel but silently consume the click without opening anything.
-// For those, we fall back to an extension popup (dropdown attached to the icon).
-const IS_GOOGLE_CHROME = navigator.userAgentData?.brands?.some(
-  (b) => b.brand === 'Google Chrome'
-) ?? false;
-
-if (IS_GOOGLE_CHROME && chrome.sidePanel?.setPanelBehavior) {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
-} else {
-  chrome.action.setPopup({ popup: 'src/sidepanel/index.html?popup=1' });
-}
+// Open side panel programmatically on action click (works in Chrome, Dia, etc.)
+chrome.action.onClicked.addListener(async (tab) => {
+  await chrome.sidePanel.open({ windowId: tab.windowId });
+});
 
 // --- Message Routing ---
 
@@ -504,6 +496,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const selectedPlan = resolvePlanFromId(planNickname);
         if (selectedPlan) {
           chrome.storage.local.set({ tp_selected_plan: selectedPlan });
+          chrome.storage.sync.set({ tp_selected_plan: selectedPlan }).catch(() => {});
           planManager._storedPlan = selectedPlan;
         }
         planManager.openPaymentPage(planNickname);
@@ -518,6 +511,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       planManager.openManagementPage();
       sendResponse({ success: true });
       break;
+    }
+
+    case 'TRACKPULSE_RESTORE_LICENSE': {
+      planManager.openLoginPage();
+      // Schedule a refresh after login to pick up the restored license
+      setTimeout(() => {
+        planManager.refreshPlan().then((plan) => {
+          console.log('[Traacky] Post-restore refresh, plan:', plan);
+        }).catch(() => {});
+      }, 5000);
+      sendResponse({ success: true });
+      break;
+    }
+
+    case 'TRACKPULSE_TOGGLE_SIMULATE_FREE': {
+      planManager.toggleSimulateFree().then((result) => {
+        sendResponse(result);
+      });
+      return true; // Async sendResponse
     }
 
     case 'TRACKPULSE_REFRESH_PLAN': {

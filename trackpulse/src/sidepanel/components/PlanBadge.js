@@ -1,6 +1,6 @@
 /**
  * PlanBadge Component — Shows current plan in the header area.
- * Free = gray, Starter = blue, Pro = purple (primary), Agency = gold
+ * Free = gray, Pro = teal (primary)
  */
 
 import { PLAN_CONFIG } from '../../shared/plans.js';
@@ -26,7 +26,7 @@ export function renderPlanBadge(container, plan, onUpgrade) {
     transition: all 0.2s;
   `;
   badge.title = isFree ? 'Click to upgrade' : `${c.label} plan`;
-  badge.innerHTML = isFree ? `&#9889; ${c.label} &mdash; Upgrade` : c.label;
+  badge.innerHTML = isFree ? c.label : c.label;
 
   if (isFree && onUpgrade) {
     badge.addEventListener('click', onUpgrade);

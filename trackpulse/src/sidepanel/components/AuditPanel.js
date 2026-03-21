@@ -1,14 +1,13 @@
 /**
  * AuditPanel Component — Shows tracking audit results (expected vs actual events).
- * V2: Gated for Free/Starter users — shows paywall overlay.
- * V2.2: Event-grouped audit view — groups by canonical event (begin_checkout,
- *        add_shipping_info, etc.) and shows which platforms detected it with icons.
- *        Also checks network requests, not just dataLayer.
+ * V2.1: Free for all users.
+ * Event-grouped audit view — groups by canonical event (begin_checkout,
+ * add_shipping_info, etc.) and shows which platforms detected it with icons.
+ * Also checks network requests, not just dataLayer.
  */
 
 import { escapeHtml } from '../../shared/utils.js';
 import { PAGE_TYPE_LABELS, PLATFORM_LABELS } from '../../shared/constants.js';
-import { renderSectionPaywall } from './Paywall.js';
 import { trackEvent } from '../../shared/analytics.js';
 import { enhanceAuditWithNetworkData, findNetworkMatchForEvent } from '../utils/network-audit-enhancer.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
@@ -38,10 +37,7 @@ export function resetAuditPanelState() {
 // Constants and helpers are now imported from shared/canonical-audit.js
 
 export function renderAuditPanel(container, state, actions) {
-  if (state.capabilities && !state.capabilities.canAudit) {
-    renderSectionPaywall(container, 'auditDiff', 'pro');
-    return;
-  }
+  // V2.1: Audit is now free for all users
 
   const pageType = state.pageType?.pageType || 'unknown';
   const pageLabel = PAGE_TYPE_LABELS[pageType] || 'Unknown';

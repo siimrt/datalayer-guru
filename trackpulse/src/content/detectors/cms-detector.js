@@ -135,8 +135,20 @@ export function detectCMS(pageContext = {}) {
     }
   }
 
-  // Check minimum threshold
+  // WooCommerce runs ON WordPress, so WordPress always out-scores it.
+  // If WordPress won but WooCommerce has any signals, prefer WooCommerce.
+  if (bestCms === CMS.WORDPRESS && scores[CMS.WOOCOMMERCE] > 0) {
+    bestCms = CMS.WOOCOMMERCE;
+    bestScore = scores[CMS.WOOCOMMERCE];
+    matchedSignals[CMS.WOOCOMMERCE].push('override:wordpress+woocommerce');
+  }
+
+  // Check minimum threshold — fall back to tech stack detection
   if (bestScore < CMS_MIN_THRESHOLD) {
+    const stackResult = detectTechStack(pageContext);
+    if (stackResult) {
+      return stackResult;
+    }
     bestCms = CMS.UNKNOWN;
   }
 
@@ -154,6 +166,107 @@ export function detectCMS(pageContext = {}) {
     version,
     allScores: scores,
   };
+}
+
+/**
+ * Detect tech stack (framework) when no CMS is identified.
+ * Returns a result object like detectCMS, or null if nothing found.
+ */
+function detectTechStack(pageContext) {
+  const globals = pageContext.jsGlobals || {};
+  const checks = [];
+
+  // Next.js: __NEXT_DATA__ global OR <script id="__NEXT_DATA__"> OR /_next/ in scripts
+  if (globals.__NEXT_DATA__ || safeQuerySelector('script#__NEXT_DATA__') || safeQuerySelector('script[src*="/_next/"]')) {
+    checks.push({ cms: CMS.NEXTJS, confidence: 90, signals: ['stack:nextjs'] });
+  }
+
+  // Nuxt.js: __NUXT__ or __nuxt global OR <div id="__nuxt"> OR /_nuxt/ in scripts
+  if (globals.__NUXT__ || globals.__nuxt || safeQuerySelector('#__nuxt') || safeQuerySelector('script[src*="/_nuxt/"]')) {
+    checks.push({ cms: CMS.NUXTJS, confidence: 90, signals: ['stack:nuxtjs'] });
+  }
+
+  // Gatsby: ___gatsby global OR <div id="___gatsby">
+  if (globals.___gatsby || safeQuerySelector('#___gatsby')) {
+    checks.push({ cms: CMS.GATSBY, confidence: 90, signals: ['stack:gatsby'] });
+  }
+
+  // Remix: __remixContext global
+  if (globals.__remixContext) {
+    checks.push({ cms: CMS.REMIX, confidence: 85, signals: ['stack:remix'] });
+  }
+
+  // SvelteKit: [data-sveltekit] in DOM
+  if (safeQuerySelector('[data-sveltekit-preload-data]') || safeQuerySelector('[data-sveltekit]')) {
+    checks.push({ cms: CMS.SVELTEKIT, confidence: 85, signals: ['stack:sveltekit'] });
+  }
+
+  // Astro: <astro-island> custom elements
+  if (safeQuerySelector('astro-island')) {
+    checks.push({ cms: CMS.ASTRO, confidence: 85, signals: ['stack:astro'] });
+  }
+
+  // Angular: [ng-version] or [_nghost-] or [_ngcontent-]
+  if (safeQuerySelector('[ng-version]') || safeQuerySelector('[_nghost-]') || document.querySelector('[class*="_ngcontent-"]')) {
+    checks.push({ cms: CMS.ANGULAR, confidence: 80, signals: ['stack:angular'] });
+  }
+
+  // React: [data-reactroot] or [data-reactid]
+  if (safeQuerySelector('[data-reactroot]') || safeQuerySelector('[data-reactid]')) {
+    checks.push({ cms: CMS.REACT, confidence: 70, signals: ['stack:react'] });
+  }
+
+  // Vue.js: data-v- attributes in DOM (Vue scoped CSS adds data-v-xxxx attrs)
+  const hasVueAttrs = (() => {
+    try {
+      const el = document.querySelector('[data-v-app]');
+      if (el) return true;
+      // Check for Vue scoped style attributes (data-v-xxxxxxxx)
+      const allEls = document.querySelectorAll('*');
+      for (let i = 0; i < Math.min(allEls.length, 100); i++) {
+        for (const attr of allEls[i].attributes) {
+          if (/^data-v-[a-f0-9]+$/.test(attr.name)) return true;
+        }
+      }
+      return false;
+    } catch (e) { return false; }
+  })();
+  if (hasVueAttrs) {
+    checks.push({ cms: CMS.VUE, confidence: 70, signals: ['stack:vue'] });
+  }
+
+  // Laravel: <meta name="csrf-token"> (without WordPress)
+  if (safeQuerySelector('meta[name="csrf-token"]') && !safeQuerySelector('script[src*="wp-includes"]')) {
+    checks.push({ cms: CMS.LARAVEL, confidence: 65, signals: ['stack:laravel'] });
+  }
+
+  // PHP: .php in the URL, PHPSESSID cookie, or PHP clues in scripts/links
+  const pageUrl = window.location.href;
+  const phpSignals = [];
+  if (/\.php(\?|$|#|\/)/i.test(pageUrl)) phpSignals.push('url:.php');
+  if (safeQuerySelector('script[src*=".php"]') || safeQuerySelector('link[href*=".php"]')) phpSignals.push('dom:.php');
+  if (cookieExists('PHPSESSID')) phpSignals.push('cookie:PHPSESSID');
+  // Check for PHP-specific meta/headers hints in the DOM
+  if (safeQuerySelector('input[name="csrf_token"]') || safeQuerySelector('input[name="_token"]')) phpSignals.push('dom:csrf_input');
+  if (phpSignals.length > 0) {
+    const phpConf = Math.min(80, 45 + phpSignals.length * 12);
+    checks.push({ cms: CMS.PHP, confidence: phpConf, signals: phpSignals.map(s => `stack:php:${s}`) });
+  }
+
+  // Return the highest-confidence match
+  if (checks.length > 0) {
+    checks.sort((a, b) => b.confidence - a.confidence);
+    const best = checks[0];
+    return {
+      cms: best.cms,
+      confidence: best.confidence,
+      signals: best.signals,
+      version: null,
+      allScores: {},
+    };
+  }
+
+  return null;
 }
 
 /**

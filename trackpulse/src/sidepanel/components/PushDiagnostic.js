@@ -53,12 +53,12 @@ export function showPushDiagnostic(opts) {
   // Clean up previous diagnostic
   cleanup();
 
-  const { eventName, target, currentPageType, getNetworkRequests } = opts;
+  const { eventName, target, currentPageType, getNetworkRequests, currentHostname } = opts;
   const pushTimestamp = Date.now();
 
   // Detect sGTM from existing network requests
   const existingRequests = getNetworkRequests();
-  const hasSGTM = existingRequests.some(r => r.platform === 'ga4' && isServerSideRequest(r.url));
+  const hasSGTM = existingRequests.some(r => r.platform === 'ga4' && isServerSideRequest(r.url, currentHostname));
 
   // Build overlay
   const overlay = document.createElement('div');
@@ -105,7 +105,7 @@ export function showPushDiagnostic(opts) {
       if (!detected.get(platform).has(evName)) {
         detected.get(platform).add(evName);
         // Check if this is sGTM transport
-        const isSS = req.platform === 'ga4' && isServerSideRequest(req.url);
+        const isSS = req.platform === 'ga4' && isServerSideRequest(req.url, currentHostname);
         appendDetectedLine(resultsEl, platform, evName, isSS);
       }
     }

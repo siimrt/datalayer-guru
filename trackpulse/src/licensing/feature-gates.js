@@ -1,6 +1,10 @@
 /**
  * Feature access control per plan.
- * Defines exactly which features are available at each plan level.
+ * V2.1: Simplified two-tier model (Free + Pro).
+ *
+ * Principle: Free shows the value, Pro lets you exploit it.
+ * - All detection, generation, and audit features are FREE
+ * - Actions (copy, push, export, funnel, CAPI config) are PRO
  */
 
 import { PLANS } from '../shared/plans.js';
@@ -18,136 +22,34 @@ function isDevMode() {
 
 /**
  * FEATURE GATE DEFINITIONS
- * Each feature has:
- * - minPlan: minimum plan required
- * - upgradeMessage: shown when user hits the gate
- * - upgradePlan: which plan to suggest for upgrade
- * - limits: optional per-plan usage limits (null = unlimited)
+ * Only 5 gated features — everything else is free.
  */
 export const FEATURES = {
-  // === CMS Detection (always free) ===
-  cmsDetection: { minPlan: 'free' },
-  pageTypeDetection: { minPlan: 'free' },
-  dataExtraction: { minPlan: 'free' },
-  dataLayerLive: { minPlan: 'free' },
-  pixelDetection: { minPlan: 'free' },
-  consentStatus: { minPlan: 'free' },
-
-  // === Event Generation (gated) ===
-  eventGeneration: {
-    minPlan: 'free',
-    freeMode: 'ga4_full', // GA4: full code visible; Meta: blurred preview; TikTok/Pinterest: locked cards
-  },
   eventCopy: {
-    minPlan: 'starter',
-    upgradeMessage: 'Copy events — available from Starter ($9/mo)',
-    upgradePlan: 'starter',
+    minPlan: 'pro',
+    upgradeMessage: 'Copy events to clipboard — available in Pro.',
+    upgradePlan: 'pro',
   },
   eventPush: {
     minPlan: 'pro',
-    upgradeMessage: 'Push to dataLayer — available in Pro ($19/mo)',
+    upgradeMessage: 'Push events to dataLayer for testing — available in Pro.',
     upgradePlan: 'pro',
-  },
-
-  // === CMS Support ===
-  cmsShopify: { minPlan: 'free' },
-  cmsWooCommerce: { minPlan: 'free' },
-  cmsPrestaShop: {
-    minPlan: 'starter',
-    upgradeMessage: 'PrestaShop support is available from Starter.',
-    upgradePlan: 'starter',
-  },
-  cmsMagento: {
-    minPlan: 'pro',
-    upgradeMessage: 'Magento/Adobe Commerce support is available in Pro.',
-    upgradePlan: 'pro',
-  },
-  cmsWebflow: {
-    minPlan: 'pro',
-    upgradeMessage: 'Webflow Commerce support is available in Pro.',
-    upgradePlan: 'pro',
-  },
-  cmsCustom: { minPlan: 'pro' },
-
-  // === Platform Support ===
-  platformGA4: { minPlan: 'free' },
-  platformMeta: {
-    minPlan: 'starter',
-    upgradeMessage: 'Generate Meta/Facebook Pixel events — available from Starter.',
-    upgradePlan: 'starter',
-  },
-  platformTikTok: {
-    minPlan: 'pro',
-    upgradeMessage: 'Generate TikTok Pixel events — available in Pro.',
-    upgradePlan: 'pro',
-  },
-  platformPinterest: {
-    minPlan: 'pro',
-    upgradeMessage: 'Generate Pinterest Tag events — available in Pro.',
-    upgradePlan: 'pro',
-  },
-  platformGoogleAds: {
-    minPlan: 'starter',
-    upgradeMessage: 'Google Ads conversion tracking — available from Starter.',
-    upgradePlan: 'starter',
-  },
-  platformSnapchat: {
-    minPlan: 'pro',
-    upgradeMessage: 'Generate Snapchat Pixel events — available in Pro.',
-    upgradePlan: 'pro',
-  },
-
-  // === Audit Features ===
-  auditDiff: {
-    minPlan: 'pro',
-    upgradeMessage: 'Event audit & diff — available in Pro ($19/mo)',
-    upgradePlan: 'pro',
-  },
-  consentDiagnostic: { minPlan: 'pro' },
-
-  // === V2 Premium Features ===
-  funnelMode: {
-    minPlan: 'pro',
-    upgradeMessage: 'Funnel Mode — audit entire purchase flows. Available in Pro.',
-    upgradePlan: 'pro',
-    limits: { pro: 20, agency: null },
   },
   pdfExport: {
     minPlan: 'pro',
-    upgradeMessage: 'PDF reports for your clients — available in Pro.',
+    upgradeMessage: 'Export professional PDF audit reports — available in Pro.',
     upgradePlan: 'pro',
-    limits: { pro: 10, agency: null },
   },
-  pdfWhiteLabel: {
-    minPlan: 'agency',
-    upgradeMessage: 'Add your agency logo to reports — available in Agency.',
-    upgradePlan: 'agency',
-  },
-  customTemplates: {
+  funnelMode: {
     minPlan: 'pro',
-    limits: { pro: 10, agency: null },
+    upgradeMessage: 'Audit entire purchase funnels across multiple pages — available in Pro.',
+    upgradePlan: 'pro',
   },
-  auditHistory: {
+  capiConfig: {
     minPlan: 'pro',
-    limits: { pro: 30, agency: 90 },
+    upgradeMessage: 'Customise CAPI event names — available in Pro.',
+    upgradePlan: 'pro',
   },
-  debugSnippets: {
-    minPlan: 'agency',
-    upgradeMessage: 'Debug snippet library — available in Agency.',
-    upgradePlan: 'agency',
-  },
-  teamSeats: {
-    minPlan: 'agency',
-    limits: { agency: 5 },
-  },
-};
-
-// Domain limits (separate since it's per-plan, not feature-gated)
-export const DOMAIN_LIMITS = {
-  free: 0,
-  starter: 5,
-  pro: null,
-  agency: null,
 };
 
 /**
@@ -155,8 +57,8 @@ export const DOMAIN_LIMITS = {
  * Returns { allowed: boolean, reason?: string, upgradePlan?: string }
  */
 export function checkFeature(featureName, plan) {
-  // Dev mode: everything unlocked
-  if (isDevMode()) return { allowed: true };
+  // Dev mode: everything unlocked (unless plan is explicitly 'free' from simulate toggle)
+  if (isDevMode() && plan !== 'free') return { allowed: true };
 
   const feature = FEATURES[featureName];
   if (!feature) return { allowed: true };
@@ -171,51 +73,9 @@ export function checkFeature(featureName, plan) {
 
   return {
     allowed: false,
-    reason: feature.upgradeMessage || `This feature requires the ${feature.minPlan} plan.`,
-    upgradePlan: feature.upgradePlan || feature.minPlan,
+    reason: feature.upgradeMessage || 'This feature requires the Pro plan.',
+    upgradePlan: feature.upgradePlan || 'pro',
   };
-}
-
-/**
- * Get the usage limit for a feature at a given plan.
- * Returns number or null (unlimited).
- */
-export function getFeatureLimit(featureName, plan) {
-  const feature = FEATURES[featureName];
-  if (!feature || !feature.limits) return null;
-  return feature.limits[plan] ?? null;
-}
-
-/**
- * Check if a specific CMS is supported at the given plan.
- */
-export function isCMSSupported(cmsName, plan) {
-  const mapping = {
-    shopify: 'cmsShopify',
-    woocommerce: 'cmsWooCommerce',
-    prestashop: 'cmsPrestaShop',
-    magento: 'cmsMagento',
-    webflow: 'cmsWebflow',
-    unknown: 'cmsCustom',
-  };
-  const key = mapping[cmsName] || `cms${cmsName.charAt(0).toUpperCase() + cmsName.slice(1)}`;
-  return checkFeature(key, plan).allowed;
-}
-
-/**
- * Check if a specific platform's events are accessible.
- */
-export function isPlatformSupported(platformName, plan) {
-  const mapping = {
-    ga4: 'platformGA4',
-    google_ads: 'platformGoogleAds',
-    meta: 'platformMeta',
-    tiktok: 'platformTikTok',
-    pinterest: 'platformPinterest',
-    snapchat: 'platformSnapchat',
-  };
-  const key = mapping[platformName];
-  return key ? checkFeature(key, plan).allowed : false;
 }
 
 /**
@@ -223,50 +83,27 @@ export function isPlatformSupported(platformName, plan) {
  * Used to show/hide UI elements.
  */
 export function getPlanCapabilities(plan) {
-  // Dev mode: full access to everything
-  if (isDevMode()) {
+  // Dev mode: full access (unless plan is explicitly 'free' from simulate toggle)
+  if (isDevMode() && plan !== 'free') {
     return {
-      plan: 'agency',
+      plan: 'pro',
       canCopyEvents: true,
       canPushEvents: true,
-      canAudit: true,
       canExportPDF: true,
-      canWhiteLabel: true,
       canFunnelMode: true,
-      supportedCMS: getSupportedCMSList('agency'),
-      supportedPlatforms: getSupportedPlatformsList('agency'),
-      domainLimit: null,
-      pdfLimit: null,
-      funnelPageLimit: null,
-      templateLimit: null,
+      canCapiConfig: true,
     };
   }
 
   const level = PLANS[plan] || 0;
+  const isPro = level >= PLANS.pro;
 
   return {
     plan,
-    canCopyEvents: level >= PLANS.starter,
-    canPushEvents: level >= PLANS.pro,
-    canAudit: level >= PLANS.pro,
-    canExportPDF: level >= PLANS.pro,
-    canWhiteLabel: level >= PLANS.agency,
-    canFunnelMode: level >= PLANS.pro,
-    supportedCMS: getSupportedCMSList(plan),
-    supportedPlatforms: getSupportedPlatformsList(plan),
-    domainLimit: DOMAIN_LIMITS[plan] ?? null,
-    pdfLimit: getFeatureLimit('pdfExport', plan),
-    funnelPageLimit: getFeatureLimit('funnelMode', plan),
-    templateLimit: getFeatureLimit('customTemplates', plan),
+    canCopyEvents: isPro,
+    canPushEvents: isPro,
+    canExportPDF: isPro,
+    canFunnelMode: isPro,
+    canCapiConfig: isPro,
   };
-}
-
-function getSupportedCMSList(plan) {
-  const all = ['shopify', 'woocommerce', 'prestashop', 'magento', 'webflow'];
-  return all.filter((cms) => isCMSSupported(cms, plan));
-}
-
-function getSupportedPlatformsList(plan) {
-  const all = ['ga4', 'google_ads', 'meta', 'tiktok', 'pinterest', 'snapchat'];
-  return all.filter((p) => isPlatformSupported(p, plan));
 }

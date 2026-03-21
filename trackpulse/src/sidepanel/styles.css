@@ -253,7 +253,25 @@ html.dark .tp-badge-pill {
 
 .tp-tab.active {
   color: var(--tp-primary);
-  border-bottom-color: var(--tp-primary);
+  border-bottom-color: transparent;
+  position: relative;
+}
+
+.tp-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--tp-primary);
+  border-radius: 2px 2px 0 0;
+  animation: tab-indicator 0.2s ease-out;
+}
+
+@keyframes tab-indicator {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
 }
 
 /* Card */
@@ -427,7 +445,7 @@ html.dark .tp-badge-pill {
   border: 1px solid #E2E8F0;
   background: #FFFFFF;
   color: #1E293B;
-  transition: all 0.15s;
+  transition: all 0.15s, filter 0.3s ease, opacity 0.3s ease;
   opacity: 0.45;
   filter: grayscale(1);
 }
@@ -635,14 +653,50 @@ html.dark .tp-toast {
   pointer-events: none;
 }
 
-/* Locked button style */
+/* Locked button style — designed to attract, not repel */
 .locked-btn {
-  opacity: 0.6;
   position: relative;
+  opacity: 1;
+  background: linear-gradient(135deg, rgba(0, 109, 119, 0.08), rgba(0, 109, 119, 0.03));
+  border: 1px dashed rgba(0, 109, 119, 0.4) !important;
+  color: var(--tp-primary) !important;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.2s ease;
 }
 
 .locked-btn:hover {
-  opacity: 0.8;
+  opacity: 1;
+  background: linear-gradient(135deg, rgba(0, 109, 119, 0.15), rgba(0, 109, 119, 0.08));
+  border-color: var(--tp-primary) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 109, 119, 0.2);
+}
+
+.locked-btn::after {
+  content: 'PRO';
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  background: var(--tp-primary);
+  color: white;
+  padding: 1px 4px;
+  border-radius: 0 6px 0 4px;
+  line-height: 1.3;
+}
+
+html.dark .locked-btn {
+  background: linear-gradient(135deg, rgba(0, 180, 196, 0.1), rgba(0, 180, 196, 0.04));
+  border-color: rgba(0, 180, 196, 0.4) !important;
+  color: var(--tp-primary) !important;
+}
+
+html.dark .locked-btn:hover {
+  background: linear-gradient(135deg, rgba(0, 180, 196, 0.18), rgba(0, 180, 196, 0.08));
+  border-color: var(--tp-primary) !important;
 }
 
 /* Plan badge animations */
@@ -652,6 +706,19 @@ html.dark .tp-toast {
 
 .plan-badge:hover {
   filter: brightness(1.1);
+}
+
+/* Copy success feedback */
+.tp-btn.copy-success {
+  background: rgba(0, 184, 148, 0.15) !important;
+  border-color: var(--tp-success) !important;
+  color: var(--tp-success) !important;
+  transform: scale(1.05);
+  transition: all 0.15s ease;
+}
+
+.tp-btn.copy-success svg {
+  display: none;
 }
 
 /* Upgrade prompt pulse animation */
@@ -730,6 +797,38 @@ html.dark .tp-badge-ss {
 }
 html.dark .tp-badge-cs {
   background: rgba(96, 165, 250, 0.15); color: #60A5FA;
+}
+
+/* Quality badges (dedup, user data) */
+.tp-badge-q-ok {
+  display: inline-flex; align-items: center;
+  padding: 1px 5px; border-radius: 10px;
+  font-size: 9px; font-weight: 600;
+  background: rgba(0, 184, 148, 0.1); color: #00B894;
+  margin-left: 2px; white-space: nowrap;
+}
+html.dark .tp-badge-q-ok {
+  background: rgba(0, 184, 148, 0.15); color: #55EFC4;
+}
+.tp-badge-q-warn {
+  display: inline-flex; align-items: center;
+  padding: 1px 5px; border-radius: 10px;
+  font-size: 9px; font-weight: 600;
+  background: rgba(240, 147, 43, 0.1); color: #F0932B;
+  margin-left: 2px; white-space: nowrap;
+}
+html.dark .tp-badge-q-warn {
+  background: rgba(253, 203, 110, 0.15); color: #FDCB6E;
+}
+.tp-badge-q-crit {
+  display: inline-flex; align-items: center;
+  padding: 1px 5px; border-radius: 10px;
+  font-size: 9px; font-weight: 600;
+  background: rgba(255, 107, 107, 0.1); color: #FF6B6B;
+  margin-left: 2px; white-space: nowrap;
+}
+html.dark .tp-badge-q-crit {
+  background: rgba(255, 107, 107, 0.15); color: #FF7675;
 }
 
 /* ---- Quick Push Section ---- */

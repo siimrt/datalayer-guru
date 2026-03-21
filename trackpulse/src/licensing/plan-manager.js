@@ -31,6 +31,7 @@ class PlanManager {
     this._initPromise = null;
     this._storedPlan = null;
     this._lastPlanChange = 0;
+    this._simulateFree = false;
   }
 
   /**
@@ -55,6 +56,14 @@ class PlanManager {
   async _doInit() {
     try {
       extpay.startBackground();
+
+      // Load simulate-free toggle (dev mode only)
+      if (isDevMode()) {
+        try {
+          const simData = await chrome.storage.local.get('tp_simulate_free');
+          this._simulateFree = !!simData.tp_simulate_free;
+        } catch (e) {}
+      }
 
       // Load locally stored plan selection — sync first, fallback local
       let stored;
@@ -110,6 +119,13 @@ class PlanManager {
    * Resolve the internal plan name from ExtensionPay user data.
    */
   _resolvePlan() {
+    // Dev mode: simulate free plan toggle
+    if (isDevMode() && this._simulateFree) {
+      this.currentPlan = 'free';
+      _log('Simulate Free active — forcing plan to free');
+      return;
+    }
+
     if (!this.user) {
       this.currentPlan = 'free';
       return;
@@ -138,8 +154,8 @@ class PlanManager {
       // Only use stored plan selection if user actually paid (Fix 4)
       this.currentPlan = this._validatePlan(this._storedPlan);
     } else {
-      // Paid but no recognizable plan ID and no stored selection — default to 'starter'
-      this.currentPlan = 'starter';
+      // Paid but no recognizable plan ID and no stored selection — default to 'pro'
+      this.currentPlan = 'pro';
     }
   }
 
@@ -303,6 +319,24 @@ class PlanManager {
       type: 'TRACKPULSE_PLAN_CHANGED',
       payload: { plan: this.currentPlan },
     }).catch(() => {}); // Ignore if no listeners
+  }
+
+  /**
+   * Toggle simulate-free mode (dev only). Resolves plan and broadcasts change.
+   */
+  async toggleSimulateFree() {
+    this._simulateFree = !this._simulateFree;
+    await chrome.storage.local.set({ tp_simulate_free: this._simulateFree });
+    this._resolvePlan();
+    await this._persistPlanCache();
+    this._notifyListeners();
+    this._broadcastPlanChanged();
+    _log('Simulate Free toggled:', this._simulateFree, '→ plan:', this.currentPlan);
+    return { simulateFree: this._simulateFree, plan: this.currentPlan };
+  }
+
+  isSimulatingFree() {
+    return this._simulateFree;
   }
 }
 

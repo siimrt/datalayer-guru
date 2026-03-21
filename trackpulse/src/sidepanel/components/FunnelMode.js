@@ -26,90 +26,47 @@ import { enhanceAuditWithNetworkData } from '../utils/network-audit-enhancer.js'
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { PAGE_TYPE_LABELS, PLATFORM_LABELS } from '../../shared/constants.js';
 import { trackEvent } from '../../shared/analytics.js';
+import {
+  ECOM_FUNNEL_SEQUENCE, LEADGEN_FUNNEL_SEQUENCE,
+  buildFunnelEvents,
+} from '../../shared/canonical-audit.js';
 
 const FUNNEL_STORAGE_KEY = 'tp_funnel_session';
 
-/**
- * Expected funnel events — the canonical ecommerce funnel sequence.
- * Each entry maps platform-specific event names.
- */
-const EXPECTED_FUNNEL_EVENTS = [
-  {
-    key: 'view_item',
-    label: 'Product View',
-    events: { ga4: 'view_item', meta: 'ViewContent', tiktok: 'ViewContent' },
-  },
-  {
-    key: 'add_to_cart',
-    label: 'Add to Cart',
-    events: { ga4: 'add_to_cart', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart' },
-  },
-  {
-    key: 'begin_checkout',
-    label: 'Checkout Started',
-    events: { ga4: 'begin_checkout', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout' },
-  },
-  {
-    key: 'add_shipping_info',
-    label: 'Shipping Info',
-    events: { ga4: 'add_shipping_info', meta: 'AddShippingInfo', tiktok: 'AddShippingInfo', google_ads: 'conversion' },
-  },
-  {
-    key: 'add_payment_info',
-    label: 'Payment Info',
-    events: { ga4: 'add_payment_info', meta: 'AddPaymentInfo', tiktok: 'AddPaymentInfo', google_ads: 'conversion' },
-  },
-  {
-    key: 'purchase',
-    label: 'Purchase',
-    events: { ga4: 'purchase', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout' },
-  },
-];
-
-const EXPECTED_FUNNEL_EVENTS_LEADGEN = [
-  {
-    key: 'page_view',
-    label: 'Landing Page View',
-    events: { ga4: 'page_view', meta: 'PageView' },
-  },
-  {
-    key: 'form_start',
-    label: 'Form Interaction',
-    events: { ga4: 'form_start' },
-  },
-  {
-    key: 'generate_lead',
-    label: 'Lead Generated',
-    events: { ga4: 'generate_lead', meta: 'Lead', tiktok: 'SubmitForm', pinterest: 'lead' },
-  },
-  {
-    key: 'confirmation',
-    label: 'Confirmation',
-    events: { ga4: 'sign_up', meta: 'CompleteRegistration', tiktok: 'CompleteRegistration', pinterest: 'signup' },
-  },
-];
+// Derived from canonical-audit.js — single source of truth
+const EXPECTED_FUNNEL_EVENTS = buildFunnelEvents(ECOM_FUNNEL_SEQUENCE);
+const EXPECTED_FUNNEL_EVENTS_LEADGEN = buildFunnelEvents(LEADGEN_FUNNEL_SEQUENCE, true);
 
 // Reverse lookup: platform-specific eventName → canonical funnel key
+// Skip 'conversion' (Google Ads) — it's the same name for ALL event types,
+// so it can't be reverse-mapped to a single funnel key. Google Ads conversions
+// are matched via user-configured labels (gadsLabels) instead.
+const AMBIGUOUS_EVENT_NAMES = new Set(['conversion']);
 const EVENT_TO_FUNNEL_KEY = {};
 for (const fe of EXPECTED_FUNNEL_EVENTS) {
   for (const eventName of Object.values(fe.events)) {
-    EVENT_TO_FUNNEL_KEY[eventName] = fe.key;
+    if (!AMBIGUOUS_EVENT_NAMES.has(eventName)) {
+      EVENT_TO_FUNNEL_KEY[eventName] = fe.key;
+    }
   }
 }
 for (const fe of EXPECTED_FUNNEL_EVENTS_LEADGEN) {
   for (const eventName of Object.values(fe.events)) {
-    if (!EVENT_TO_FUNNEL_KEY[eventName]) {
+    if (!EVENT_TO_FUNNEL_KEY[eventName] && !AMBIGUOUS_EVENT_NAMES.has(eventName)) {
       EVENT_TO_FUNNEL_KEY[eventName] = fe.key;
     }
   }
 }
 
-// Additional Snapchat ecommerce event names → funnel keys
+// Additional event name aliases → funnel keys
 const EXTRA_EVENT_MAPPINGS = {
   VIEW_CONTENT: 'view_item',
   ADD_CART: 'add_to_cart',
   START_CHECKOUT: 'begin_checkout',
+  ADD_BILLING: 'add_payment_info',
   PURCHASE: 'purchase',       // Snapchat PURCHASE
+  PAGE_VIEW: 'page_view',     // Snapchat PAGE_VIEW
+  SIGN_UP: 'generate_lead',   // Snapchat SIGN_UP
   CompletePayment: 'purchase', // TikTok alternate
 };
 Object.assign(EVENT_TO_FUNNEL_KEY, EXTRA_EVENT_MAPPINGS);
@@ -125,6 +82,7 @@ const DATALAYER_EVENT_TO_FUNNEL_KEY = {
   view_item: 'view_item',
   add_to_cart: 'add_to_cart',
   begin_checkout: 'begin_checkout',
+  checkout: 'begin_checkout',           // "checkout" in dataLayer = begin_checkout, NOT purchase
   add_shipping_info: 'add_shipping_info',
   add_payment_info: 'add_payment_info',
   add_contact_info: 'add_shipping_info', // contact info is part of shipping step
@@ -149,6 +107,18 @@ const GENERIC_EVENT_NAMES = new Set([
   'pagevisit', 'page_view', 'pageview',                // generic pageviews
   'cookie_match', 'cookie_sync', 'firmographic_enrichment', // utility pings
 ]);
+
+// Page types where each funnel event is expected — used in addStep() to filter
+// network events from the initial page scan (prevents false positives like
+// ViewContent on homepage being counted as view_item).
+const FUNNEL_KEY_VALID_PAGES = {
+  view_item: new Set(['product']),
+  add_to_cart: new Set(['product', 'collection', 'cart']),
+  begin_checkout: new Set(['checkout', 'cart']),
+  add_shipping_info: new Set(['checkout']),
+  add_payment_info: new Set(['checkout']),
+  purchase: new Set(['thank_you']),
+};
 
 // Pre-sorted canonical names for substring matching (longest first to avoid partial false positives)
 const _ALL_CANONICAL_NAMES = [
@@ -211,19 +181,24 @@ const COLORS = {
   teal: '#00CEC9',
 };
 
+// Canonical display order for platform icons
+const PLATFORM_ORDER = ['ga4', 'google_ads', 'meta', 'tiktok', 'pinterest', 'snapchat', 'linkedin'];
+
 // ---- Platform Mapping ----
 
 const PIXEL_TO_FUNNEL_PLATFORM = {
-  ga4: 'ga4', gtm: 'ga4', meta: 'meta', tiktok: 'tiktok',
+  ga4: 'ga4', gtm: 'ga4', google_ads: 'google_ads',
+  meta: 'meta', tiktok: 'tiktok',
   pinterest: 'pinterest', snapchat: 'snapchat',
+  linkedin: 'linkedin',
 };
 
-function getRelevantFunnelPlatforms(detectedPlatformsSet) {
+function getRelevantFunnelPlatforms(detectedPlatformsSet, excludedPlatforms) {
   if (!detectedPlatformsSet || detectedPlatformsSet.size === 0) return new Set(['ga4']);
   const relevant = new Set();
   for (const p of detectedPlatformsSet) {
     const mapped = PIXEL_TO_FUNNEL_PLATFORM[p];
-    if (mapped) relevant.add(mapped);
+    if (mapped && !(excludedPlatforms && excludedPlatforms.has(mapped))) relevant.add(mapped);
   }
   if (relevant.size === 0) relevant.add('ga4');
   return relevant;
@@ -238,6 +213,10 @@ export class FunnelSession {
     this.startTime = null;
     // Multi-platform: { [key]: { firstDetected, detections: [{ timestamp, source, platform, eventName }] } }
     this.detectedEvents = {};
+    // Accumulative set of all platforms seen during this funnel recording (never shrinks)
+    this.seenPlatforms = new Set(['ga4']);
+    // Google Ads conversion label → funnel key mapping (loaded from chrome.storage.local)
+    this.gadsLabels = {};
   }
 
   async start() {
@@ -245,6 +224,7 @@ export class FunnelSession {
     this.steps = [];
     this.detectedEvents = {};
     this.startTime = Date.now();
+    this.seenPlatforms = new Set(['ga4']);
     await this._persist();
   }
 
@@ -295,14 +275,32 @@ export class FunnelSession {
       }
     }
 
-    // Scan ALL network requests passed with this step
+    // Scan ALL network requests passed with this step (filter by pageType context)
     for (const nr of step.networkRequests || []) {
       if (nr.eventName) {
-        const funnelKey = resolveFunnelKey(nr.eventName);
+        let funnelKey = resolveFunnelKey(nr.eventName);
+        // Google Ads label matching
+        if (!funnelKey && nr.platform === 'google_ads' && this.gadsLabels) {
+          const m = nr.eventName.match(/^(?:conversion|view_through)\/(.+)$/);
+          if (m) {
+            for (const [key, label] of Object.entries(this.gadsLabels)) {
+              if (label && label === m[1]) { funnelKey = key; break; }
+            }
+          }
+        }
         if (funnelKey) {
-          this._recordEvent(funnelKey, 'network', nr.platform, nr.eventName);
+          const validPages = FUNNEL_KEY_VALID_PAGES[funnelKey];
+          if (!validPages || validPages.has(step.pageType)) {
+            this._recordEvent(funnelKey, 'network', nr.platform, nr.eventName);
+          }
         }
       }
+    }
+
+    // Accumulate platforms from step pixels into seenPlatforms
+    for (const px of step.pixels || []) {
+      const mapped = PIXEL_TO_FUNNEL_PLATFORM[px.platform];
+      if (mapped) this.seenPlatforms.add(mapped);
     }
 
     await this._persist();
@@ -312,11 +310,32 @@ export class FunnelSession {
    * Record a detected funnel event from any source.
    * Called by main.js when a dataLayer push or network request matches a funnel event.
    */
-  recordEvent(eventName, source, platform) {
+  recordEvent(eventName, source, platform, currentPageType) {
     if (!this.isRecording) return false;
 
-    const funnelKey = resolveFunnelKey(eventName);
+    let funnelKey = resolveFunnelKey(eventName);
+
+    // Google Ads special handling: match by user-configured conversion label
+    if (!funnelKey && platform === 'google_ads' && this.gadsLabels) {
+      const labelMatch = eventName.match(/^(?:conversion|view_through)\/(.+)$/);
+      if (labelMatch) {
+        const label = labelMatch[1];
+        for (const [key, configuredLabel] of Object.entries(this.gadsLabels)) {
+          if (configuredLabel && configuredLabel === label) {
+            funnelKey = key;
+            break;
+          }
+        }
+      }
+    }
+
     if (!funnelKey) return false;
+
+    // Page-type filtering (same as addStep/rescanNetworkRequests)
+    if (currentPageType) {
+      const validPages = FUNNEL_KEY_VALID_PAGES[funnelKey];
+      if (validPages && !validPages.has(currentPageType)) return false;
+    }
 
     const resolvedPlatform = platform || 'unknown';
     const isNew = this._recordEvent(funnelKey, source, resolvedPlatform, eventName);
@@ -329,13 +348,25 @@ export class FunnelSession {
    * Safe to call repeatedly — deduped internally.
    * Returns true if any new events were recorded.
    */
-  rescanNetworkRequests(networkRequests) {
+  rescanNetworkRequests(networkRequests, currentPageType) {
     if (!this.isRecording || !networkRequests) return false;
     let anyNew = false;
     for (const nr of networkRequests) {
       if (nr.eventName) {
-        const fk = resolveFunnelKey(nr.eventName);
+        let fk = resolveFunnelKey(nr.eventName);
+        // Google Ads label matching
+        if (!fk && nr.platform === 'google_ads' && this.gadsLabels) {
+          const m = nr.eventName.match(/^(?:conversion|view_through)\/(.+)$/);
+          if (m) {
+            for (const [key, label] of Object.entries(this.gadsLabels)) {
+              if (label && label === m[1]) { fk = key; break; }
+            }
+          }
+        }
         if (fk) {
+          // Apply same page-type filtering as addStep()
+          const validPages = FUNNEL_KEY_VALID_PAGES[fk];
+          if (validPages && currentPageType && !validPages.has(currentPageType)) continue;
           const added = this._recordEvent(fk, 'network', nr.platform, nr.eventName);
           if (added) anyNew = true;
         }
@@ -370,6 +401,7 @@ export class FunnelSession {
       platform: platform || 'unknown',
       eventName,
     });
+    if (platform && platform !== 'unknown') this.seenPlatforms.add(platform);
     return true;
   }
 
@@ -382,6 +414,7 @@ export class FunnelSession {
         detectedEvents: this.detectedEvents,
         startTime: this.startTime,
         endTime: Date.now(),
+        seenPlatforms: [...this.seenPlatforms],
       },
     });
     return this.generateFunnelReport(relevantPlatforms);
@@ -447,6 +480,7 @@ export class FunnelSession {
           steps: this.steps,
           detectedEvents: this.detectedEvents,
           startTime: this.startTime,
+          seenPlatforms: [...this.seenPlatforms],
         },
       });
     } catch (e) {}
@@ -461,7 +495,26 @@ export class FunnelSession {
         this.steps = session.steps || [];
         this.detectedEvents = session.detectedEvents || {};
         this.startTime = session.startTime;
+        this.seenPlatforms = new Set(session.seenPlatforms || ['ga4']);
       }
+    } catch (e) {}
+    // Load Google Ads labels from persistent storage
+    await this.loadGadsLabels();
+  }
+
+  async loadGadsLabels() {
+    try {
+      const data = await chrome.storage.local.get('tp_gads_labels');
+      this.gadsLabels = data.tp_gads_labels || {};
+    } catch (e) {
+      this.gadsLabels = {};
+    }
+  }
+
+  async saveGadsLabels(labels) {
+    this.gadsLabels = labels || {};
+    try {
+      await chrome.storage.local.set({ tp_gads_labels: this.gadsLabels });
     } catch (e) {}
   }
 }
@@ -505,7 +558,7 @@ function sourceLabel(source) {
 function getEventPlatformStatus(funnelEventDef, detectedEvent, relevantPlatforms) {
   const allDefined = Object.keys(funnelEventDef.events);
   const expectedPlatforms = relevantPlatforms
-    ? allDefined.filter(p => relevantPlatforms.has(p))
+    ? [...relevantPlatforms]
     : allDefined;
   const detections = detectedEvent?.detections || [];
   const detectedPlatformSet = new Set(detections.map((d) => d.platform).filter((p) => p !== 'unknown'));
@@ -536,20 +589,20 @@ function getEventPlatformStatus(funnelEventDef, detectedEvent, relevantPlatforms
  */
 function renderPlatformIconsRow(detectedPlatforms, waitingPlatforms, size = 14) {
   const detectedSet = new Set(detectedPlatforms);
+  const allPlatforms = [...new Set([...detectedPlatforms, ...waitingPlatforms])];
+  allPlatforms.sort((a, b) => {
+    const ia = PLATFORM_ORDER.indexOf(a);
+    const ib = PLATFORM_ORDER.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
   let html = '';
-
-  // Show detected icons (full color)
-  for (const p of detectedPlatforms) {
-    html += platformIconHtml(p, size, 'margin-right: 2px;');
-  }
-
-  // Show waiting icons (grayed out)
-  for (const p of waitingPlatforms) {
-    if (!detectedSet.has(p)) {
+  for (const p of allPlatforms) {
+    if (detectedSet.has(p)) {
+      html += platformIconHtml(p, size, 'margin-right: 2px;');
+    } else {
       html += platformIconHtml(p, size, 'margin-right: 2px; opacity: 0.25; filter: grayscale(100%);');
     }
   }
-
   return html;
 }
 
@@ -569,9 +622,18 @@ export function renderFunnelMode(container, funnelSession, capabilities, lastRep
     return;
   }
 
-  // Safety net: re-scan ALL current network requests for missed funnel events
+  // Safety net: re-scan current network requests for missed funnel events (filtered by page type)
   if (funnelSession.isRecording && state?.networkRequests) {
-    funnelSession.rescanNetworkRequests(state.networkRequests);
+    const currentPageType = state?.pageType?.pageType || 'unknown';
+    funnelSession.rescanNetworkRequests(state.networkRequests, currentPageType);
+  }
+
+  // Accumulate current page's detected platforms into seenPlatforms
+  if (funnelSession.isRecording && state?.detectedPlatforms) {
+    for (const p of state.detectedPlatforms) {
+      const mapped = PIXEL_TO_FUNNEL_PLATFORM[p];
+      if (mapped) funnelSession.seenPlatforms.add(mapped);
+    }
   }
 
   if (lastReport) {
@@ -597,12 +659,23 @@ function renderIdleState(container, funnelSession, capabilities, state, actions)
         Record your navigation through a purchase funnel.<br>
         Traacky tracks key events: view, add to cart, checkout, purchase.
       </div>
-      <button id="funnel-start-btn" style="
-        background: ${COLORS.primary}; color: white; border: none;
-        padding: 10px 24px; border-radius: 8px;
-        font-size: 13px; font-weight: 600; cursor: pointer;
-        transition: all 0.2s;
-      ">&#9654; Start Funnel Recording</button>
+      <div style="display: flex; gap: 6px; justify-content: center; position: relative;">
+        <button id="funnel-start-btn" style="
+          background: ${COLORS.primary}; color: white; border: none;
+          padding: 10px 24px; border-radius: 8px;
+          font-size: 13px; font-weight: 600; cursor: pointer;
+          transition: all 0.2s;
+        ">&#9654; Start Funnel Recording</button>
+        <button id="funnel-settings-btn" style="
+          width: 34px; height: 34px; flex-shrink: 0;
+          border: 1px solid var(--tp-border); border-radius: 6px;
+          background: var(--tp-surface); color: var(--tp-text-muted);
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+        " title="Filter platforms">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+        </button>
+        <div id="funnel-platform-popover" style="display: none;"></div>
+      </div>
     </div>
   `;
 
@@ -612,9 +685,17 @@ function renderIdleState(container, funnelSession, capabilities, state, actions)
     await funnelSession.start();
     trackEvent('funnel_started');
     renderRecordingState(container, funnelSession, capabilities, state, actions);
+    // Auto-reload the current page so network requests are captured from the start
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id) chrome.tabs.reload(tab.id);
+    } catch (e) { /* ignore */ }
   });
   startBtn.addEventListener('mouseenter', () => { startBtn.style.background = '#005a63'; });
   startBtn.addEventListener('mouseleave', () => { startBtn.style.background = COLORS.primary; });
+
+  // Wire platform filter settings button
+  _wirePlatformFilterButton(container, state, actions);
 }
 
 function buildPurchaseCode(ecommerceData) {
@@ -633,110 +714,11 @@ const CHECKOUT_QUICK_PUSH_EVENTS = [
   { key: 'purchase', label: 'Purchase', code: null },
 ];
 
-function renderRecordingState(container, funnelSession, capabilities, state, actions) {
-  const steps = funnelSession.steps || [];
-  const detected = funnelSession.detectedEvents || {};
-  const detectedKeys = Object.keys(detected);
-  const elapsed = funnelSession.startTime ? Date.now() - funnelSession.startTime : 0;
+// ---- Funnel HTML Builders ----
 
-  // Compute relevant platforms from detected pixels
-  const relevant = getRelevantFunnelPlatforms(state?.detectedPlatforms);
-  const filteredExpected = EXPECTED_FUNNEL_EVENTS.filter(fe => Object.keys(fe.events).some(p => relevant.has(p)));
-  const detectedCount = detectedKeys.filter(k => filteredExpected.some(fe => fe.key === k)).length;
-  const expectedTotal = filteredExpected.length;
-
-  // Build progressive timeline — only detected events, in funnel order
-  const detectedInOrder = filteredExpected.filter((fe) => detected[fe.key]);
-
-  const timelineHtml = detectedInOrder.length > 0
-    ? detectedInOrder.map((fe, i) => {
-        const det = detected[fe.key];
-        const ps = getEventPlatformStatus(fe, det, relevant);
-        const isLast = i === detectedInOrder.length - 1;
-
-        const isComplete = ps.status === 'complete';
-        const dotColor = isComplete ? COLORS.green : COLORS.orange;
-        const dotBg = isComplete ? COLORS.greenBg : COLORS.orangeBg;
-        const lineColor = isComplete ? COLORS.green : COLORS.orange;
-        const dotIcon = isComplete ? '&#10003;' : '!';
-
-        // Badge text
-        const badgeText = ps.waitingCount > 0
-          ? `${ps.detectedCount} platform${ps.detectedCount !== 1 ? 's' : ''} &middot; ${ps.waitingCount} waiting`
-          : `${ps.detectedCount} platform${ps.detectedCount !== 1 ? 's' : ''}`;
-        const badgeColor = isComplete ? COLORS.green : COLORS.orange;
-        const badgeBg = isComplete ? COLORS.greenBg : COLORS.orangeBg;
-
-        return `
-          <div style="display: flex; gap: 10px; position: relative; animation: tpFadeIn 0.3s ease;">
-            <!-- Timeline column -->
-            <div style="display: flex; flex-direction: column; align-items: center; width: 20px; flex-shrink: 0;">
-              <div style="
-                width: 16px; height: 16px; border-radius: 50%;
-                background: ${dotColor}; flex-shrink: 0;
-                display: flex; align-items: center; justify-content: center;
-                font-size: 8px; font-weight: 700; color: white;
-              ">${dotIcon}</div>
-              ${!isLast ? `<div style="width: 2px; flex: 1; min-height: 24px; background: ${lineColor}; opacity: 0.4;"></div>` : ''}
-            </div>
-            <!-- Content column -->
-            <div style="flex: 1; padding-bottom: ${isLast ? '0' : '8px'}; min-width: 0;">
-              <div data-funnel-toggle="${fe.key}" style="cursor: pointer;">
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
-                  <span style="color: var(--tp-text); font-size: 12px; font-weight: 600;">${fe.label}</span>
-                  <span style="
-                    font-size: 9px; font-weight: 600; color: ${badgeColor};
-                    background: ${badgeBg}; padding: 1px 6px; border-radius: 8px;
-                    white-space: nowrap;
-                  ">${badgeText}</span>
-                </div>
-                <div style="display: flex; align-items: center; gap: 3px;">
-                  ${renderPlatformIconsRow(ps.detectedPlatforms, ps.waitingPlatforms, 14)}
-                </div>
-              </div>
-              <!-- Expandable detail -->
-              <div data-funnel-detail="${fe.key}" style="display: none; margin-top: 6px; padding: 6px 0;">
-                ${(det.detections || []).map((d) => `
-                  <div style="
-                    display: flex; align-items: center; gap: 8px;
-                    padding: 3px 0; font-size: 11px;
-                    border-bottom: 1px solid var(--tp-border);
-                  ">
-                    <div style="display: flex; align-items: center; gap: 4px; min-width: 60px;">
-                      ${platformIconHtml(d.platform, 12)}
-                      <span style="color: var(--tp-text); font-weight: 500;">${PLATFORM_LABELS[d.platform] || d.platform}</span>
-                    </div>
-                    <span style="color: var(--tp-text-muted); font-family: 'JetBrains Mono', monospace; font-size: 10px;">${d.eventName}</span>
-                    <span style="
-                      margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 6px;
-                      color: ${d.source === 'network' ? COLORS.teal : COLORS.primary};
-                      background: ${d.source === 'network' ? 'rgba(0,206,201,0.1)' : 'rgba(0,109,119,0.1)'};
-                    ">${sourceLabel(d.source)}</span>
-                  </div>
-                `).join('')}
-                ${ps.waitingPlatforms.map((p) => `
-                  <div style="
-                    display: flex; align-items: center; gap: 8px;
-                    padding: 3px 0; font-size: 11px;
-                    border-bottom: 1px solid var(--tp-border); opacity: 0.5;
-                  ">
-                    <div style="display: flex; align-items: center; gap: 4px; min-width: 60px;">
-                      ${platformIconHtml(p, 12, 'opacity: 0.4; filter: grayscale(100%);')}
-                      <span style="color: var(--tp-text-muted); font-weight: 500;">${PLATFORM_LABELS[p] || p}</span>
-                    </div>
-                    <span style="color: var(--tp-text-muted); font-family: 'JetBrains Mono', monospace; font-size: 10px;">${fe.events[p] || '—'}</span>
-                    <span style="
-                      margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 6px;
-                      color: ${COLORS.orange}; background: ${COLORS.orangeBg};
-                    ">Waiting</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('')
-    : `
+function _buildTimelineHtml(detectedInOrder, detected, relevant, filteredExpected) {
+  if (detectedInOrder.length === 0) {
+    return `
       <div style="
         color: var(--tp-text-muted); font-size: 12px; text-align: center;
         padding: 20px 16px; line-height: 1.5;
@@ -747,23 +729,174 @@ function renderRecordingState(container, funnelSession, capabilities, state, act
         <span style="font-size: 11px; color: var(--tp-text-muted);">Events will appear here as they're detected.</span>
       </div>
     `;
+  }
 
-  // Pages visited (compact row)
-  const pagesHtml = steps.length > 0 ? steps.map((step) => {
+  return detectedInOrder.map((fe, i) => {
+    const det = detected[fe.key];
+    const ps = getEventPlatformStatus(fe, det, relevant);
+    const isLast = i === detectedInOrder.length - 1;
+
+    const isComplete = ps.status === 'complete';
+    const dotColor = isComplete ? COLORS.green : COLORS.orange;
+    const lineColor = isComplete ? COLORS.green : COLORS.orange;
+    const dotIcon = isComplete ? '&#10003;' : '!';
+    const badgeText = ps.waitingCount > 0
+      ? `${ps.detectedCount} platform${ps.detectedCount !== 1 ? 's' : ''} &middot; ${ps.waitingCount} waiting`
+      : `${ps.detectedCount} platform${ps.detectedCount !== 1 ? 's' : ''}`;
+    const badgeColor = isComplete ? COLORS.green : COLORS.orange;
+    const badgeBg = isComplete ? COLORS.greenBg : COLORS.orangeBg;
+
+    return `
+      <div style="display: flex; gap: 10px; position: relative;">
+        <div style="display: flex; flex-direction: column; align-items: center; width: 20px; flex-shrink: 0;">
+          <div style="
+            width: 16px; height: 16px; border-radius: 50%;
+            background: ${dotColor}; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 8px; font-weight: 700; color: white;
+          ">${dotIcon}</div>
+          ${!isLast ? `<div style="width: 2px; flex: 1; min-height: 24px; background: ${lineColor}; opacity: 0.4;"></div>` : ''}
+        </div>
+        <div style="flex: 1; padding-bottom: ${isLast ? '0' : '8px'}; min-width: 0;">
+          <div data-funnel-toggle="${fe.key}" style="cursor: pointer;">
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+              <span style="color: var(--tp-text); font-size: 12px; font-weight: 600;">${fe.label}</span>
+              <span style="
+                font-size: 9px; font-weight: 600; color: ${badgeColor};
+                background: ${badgeBg}; padding: 1px 6px; border-radius: 8px;
+                white-space: nowrap;
+              ">${badgeText}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 3px;">
+              ${renderPlatformIconsRow(ps.detectedPlatforms, ps.waitingPlatforms, 14)}
+            </div>
+          </div>
+          <div data-funnel-detail="${fe.key}" style="display: none; margin-top: 6px; padding: 6px 0;">
+            ${(det.detections || []).map((d) => `
+              <div style="display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 11px; border-bottom: 1px solid var(--tp-border);">
+                <div style="display: flex; align-items: center; gap: 4px; min-width: 60px;">
+                  ${platformIconHtml(d.platform, 12)}
+                  <span style="color: var(--tp-text); font-weight: 500;">${PLATFORM_LABELS[d.platform] || d.platform}</span>
+                </div>
+                <span style="color: var(--tp-text-muted); font-family: 'JetBrains Mono', monospace; font-size: 10px;">${d.eventName}</span>
+                <span style="
+                  margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 6px;
+                  color: ${d.source === 'network' ? COLORS.teal : COLORS.primary};
+                  background: ${d.source === 'network' ? 'rgba(0,206,201,0.1)' : 'rgba(0,109,119,0.1)'};
+                ">${sourceLabel(d.source)}</span>
+              </div>
+            `).join('')}
+            ${ps.waitingPlatforms.map((p) => `
+              <div style="display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 11px; border-bottom: 1px solid var(--tp-border); opacity: 0.5;">
+                <div style="display: flex; align-items: center; gap: 4px; min-width: 60px;">
+                  ${platformIconHtml(p, 12, 'opacity: 0.4; filter: grayscale(100%);')}
+                  <span style="color: var(--tp-text-muted); font-weight: 500;">${PLATFORM_LABELS[p] || p}</span>
+                </div>
+                <span style="color: var(--tp-text-muted); font-family: 'JetBrains Mono', monospace; font-size: 10px;">${fe.events[p] || '—'}</span>
+                <span style="margin-left: auto; font-size: 9px; padding: 1px 5px; border-radius: 6px; color: ${COLORS.orange}; background: ${COLORS.orangeBg};">Waiting</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function _buildPagesHtml(steps) {
+  if (steps.length === 0) return '';
+  return steps.map((step) => {
     let pathname = '';
     try { pathname = new URL(step.url).pathname; } catch (e) { pathname = step.url; }
     const label = PAGE_TYPE_LABELS[step.pageType] || step.pageType;
     return `
-      <div style="
-        display: flex; align-items: center; gap: 8px;
-        padding: 4px 8px; font-size: 11px;
-        border-left: 2px solid ${COLORS.primary}; margin-bottom: 2px;
-      ">
+      <div style="display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 11px; border-left: 2px solid ${COLORS.primary}; margin-bottom: 2px;">
         <span style="color: var(--tp-text); font-weight: 500;">${label}</span>
         <span style="color: var(--tp-text-muted); font-family: 'JetBrains Mono', monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${pathname}</span>
       </div>
     `;
-  }).join('') : '';
+  }).join('');
+}
+
+function _wireFunnelToggles(container) {
+  container.querySelectorAll('[data-funnel-toggle]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const key = el.getAttribute('data-funnel-toggle');
+      const detail = container.querySelector(`[data-funnel-detail="${key}"]`);
+      if (detail) {
+        detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
+      }
+    });
+  });
+}
+
+// Track previous render fingerprint to avoid unnecessary full rebuilds
+let _lastFunnelRenderFingerprint = null;
+
+function renderRecordingState(container, funnelSession, capabilities, state, actions) {
+  const steps = funnelSession.steps || [];
+  const detected = funnelSession.detectedEvents || {};
+  const detectedKeys = Object.keys(detected);
+  const elapsed = funnelSession.startTime ? Date.now() - funnelSession.startTime : 0;
+
+  // Compute relevant platforms from accumulated seenPlatforms (respecting excluded platforms)
+  const relevant = getRelevantFunnelPlatforms(funnelSession.seenPlatforms, state?.funnelExcludedPlatforms);
+  const filteredExpected = EXPECTED_FUNNEL_EVENTS.filter(fe => Object.keys(fe.events).some(p => relevant.has(p)));
+  const detectedCount = detectedKeys.filter(k => filteredExpected.some(fe => fe.key === k)).length;
+  const expectedTotal = filteredExpected.length;
+
+  // Incremental update: if the container already has the funnel skeleton,
+  // only update the dynamic parts to avoid a full DOM rebuild (flash).
+  // Include totalDetections and excludedCount so toggling a platform triggers a re-render.
+  const totalDetections = Object.values(detected).reduce((sum, ev) => sum + (ev.detections?.length || 0), 0);
+  const excludedCount = state?.funnelExcludedPlatforms?.size || 0;
+  const fingerprint = JSON.stringify({ detectedKeys: detectedKeys.sort(), steps: steps.length, expectedTotal, totalDetections, excludedCount });
+  const existingTimeline = container.querySelector('#funnel-timeline');
+  const existingProgress = container.querySelector('#funnel-progress-text');
+  const hasSkeleton = !!existingTimeline && !!existingProgress;
+
+  if (hasSkeleton && _lastFunnelRenderFingerprint === fingerprint) {
+    // Nothing changed — only update elapsed time
+    const elapsedEl = container.querySelector('#funnel-elapsed');
+    if (elapsedEl) elapsedEl.textContent = formatDuration(elapsed);
+    return;
+  }
+  _lastFunnelRenderFingerprint = fingerprint;
+
+  // Build progressive timeline — only detected events, in funnel order
+  const detectedInOrder = filteredExpected.filter((fe) => detected[fe.key]);
+
+  // If skeleton exists, do an incremental DOM update instead of full rebuild
+  if (hasSkeleton) {
+    // Update progress
+    existingProgress.textContent = `${detectedCount} of ${expectedTotal} events detected`;
+    const progressBar = container.querySelector('#funnel-progress-bar');
+    if (progressBar) progressBar.style.width = `${Math.min(100, (detectedCount / expectedTotal) * 100)}%`;
+    const elapsedEl = container.querySelector('#funnel-elapsed');
+    if (elapsedEl) elapsedEl.textContent = formatDuration(elapsed);
+
+    // Rebuild timeline content only
+    const timelineContent = _buildTimelineHtml(detectedInOrder, detected, relevant, filteredExpected);
+    existingTimeline.innerHTML = timelineContent;
+
+    // Rebuild pages section
+    const pagesContainer = container.querySelector('#funnel-pages');
+    if (pagesContainer) {
+      pagesContainer.innerHTML = steps.length > 0 ? `
+        <div style="color: var(--tp-text); font-size: 12px; font-weight: 600; margin-top: 14px; margin-bottom: 6px;">
+          Pages Visited <span style="color: var(--tp-text-muted); font-weight: 400;">(${steps.length})</span>
+        </div>
+        ${_buildPagesHtml(steps)}
+      ` : '';
+    }
+
+    // Re-wire toggles
+    _wireFunnelToggles(container);
+    return;
+  }
+
+  const timelineHtml = _buildTimelineHtml(detectedInOrder, detected, relevant, filteredExpected);
+  const pagesHtml = _buildPagesHtml(steps);
 
   container.innerHTML = `
     <style>
@@ -779,16 +912,16 @@ function renderRecordingState(container, funnelSession, capabilities, state, act
           <div style="width: 8px; height: 8px; background: ${COLORS.red}; border-radius: 50%; animation: pulse-custom 1s infinite;"></div>
           <span style="color: var(--tp-text); font-size: 14px; font-weight: 700;">Funnel Recording</span>
         </div>
-        <span style="color: var(--tp-text-muted); font-size: 10px;">${formatDuration(elapsed)}</span>
+        <span id="funnel-elapsed" style="color: var(--tp-text-muted); font-size: 10px;">${formatDuration(elapsed)}</span>
       </div>
 
       <!-- Progress bar -->
       <div style="margin-bottom: 14px;">
         <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-          <span style="color: var(--tp-text-secondary); font-size: 10px;">${detectedCount} of ${expectedTotal} events detected</span>
+          <span id="funnel-progress-text" style="color: var(--tp-text-secondary); font-size: 10px;">${detectedCount} of ${expectedTotal} events detected</span>
         </div>
         <div style="height: 4px; background: ${COLORS.pendingGray}; border-radius: 4px; overflow: hidden;">
-          <div style="height: 100%; width: ${Math.min(100, (detectedCount / expectedTotal) * 100)}%; background: ${COLORS.primary}; border-radius: 4px; transition: width 0.3s;"></div>
+          <div id="funnel-progress-bar" style="height: 100%; width: ${Math.min(100, (detectedCount / expectedTotal) * 100)}%; background: ${COLORS.primary}; border-radius: 4px; transition: width 0.3s;"></div>
         </div>
       </div>
 
@@ -801,33 +934,38 @@ function renderRecordingState(container, funnelSession, capabilities, state, act
       </div>
 
       <!-- Pages visited -->
+      <div id="funnel-pages">
       ${steps.length > 0 ? `
         <div style="color: var(--tp-text); font-size: 12px; font-weight: 600; margin-top: 14px; margin-bottom: 6px;">
           Pages Visited <span style="color: var(--tp-text-muted); font-weight: 400;">(${steps.length})</span>
         </div>
         ${pagesHtml}
       ` : ''}
+      </div>
 
-      <!-- Stop button -->
-      <button id="funnel-stop-btn" style="
-        background: ${COLORS.red}; color: white; border: none; border-color: ${COLORS.red};
-        padding: 8px 0; border-radius: 6px; width: 100%;
-        font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 16px;
-        transition: all 0.2s;
-      ">&#9209; Stop &amp; Analyze Funnel</button>
+      <!-- Stop button + settings -->
+      <div style="display: flex; gap: 6px; margin-top: 16px; position: relative;">
+        <button id="funnel-stop-btn" style="
+          background: ${COLORS.red}; color: white; border: none; border-color: ${COLORS.red};
+          padding: 8px 0; border-radius: 6px; flex: 1;
+          font-size: 12px; font-weight: 600; cursor: pointer;
+          transition: all 0.2s;
+        ">&#9209; Stop &amp; Analyze Funnel</button>
+        <button id="funnel-settings-btn" style="
+          width: 34px; height: 34px; flex-shrink: 0;
+          border: 1px solid var(--tp-border); border-radius: 6px;
+          background: var(--tp-surface); color: var(--tp-text-muted);
+          cursor: pointer; display: flex; align-items: center; justify-content: center;
+        " title="Filter platforms">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+        </button>
+        <div id="funnel-platform-popover" style="display: none;"></div>
+      </div>
     </div>
   `;
 
   // Wire toggles
-  container.querySelectorAll('[data-funnel-toggle]').forEach((el) => {
-    el.addEventListener('click', () => {
-      const key = el.getAttribute('data-funnel-toggle');
-      const detail = container.querySelector(`[data-funnel-detail="${key}"]`);
-      if (detail) {
-        detail.style.display = detail.style.display === 'none' ? 'block' : 'none';
-      }
-    });
-  });
+  _wireFunnelToggles(container);
 
   container.querySelector('#funnel-stop-btn').addEventListener('click', async () => {
     const report = await funnelSession.stop(relevant);
@@ -839,6 +977,9 @@ function renderRecordingState(container, funnelSession, capabilities, state, act
     if (state) state.funnelReport = report;
     renderFunnelReport(container, report, funnelSession, capabilities, state, actions);
   });
+
+  // Wire platform filter settings button
+  _wirePlatformFilterButton(container, state, actions);
 
   // Quick-push bar for checkout / thank_you pages
   const pageType = state?.pageType?.pageType;
@@ -869,6 +1010,124 @@ function renderRecordingState(container, funnelSession, capabilities, state, act
       });
     });
   }
+}
+
+// ---- Platform Filter Popover ----
+
+function _wirePlatformFilterButton(container, state, actions) {
+  const btn = container.querySelector('#funnel-settings-btn');
+  const popover = container.querySelector('#funnel-platform-popover');
+  if (!btn || !popover) return;
+
+  // Gather all detected funnel platforms (unfiltered)
+  const allPlatforms = new Set();
+  if (state?.detectedPlatforms) {
+    for (const p of state.detectedPlatforms) {
+      const mapped = PIXEL_TO_FUNNEL_PLATFORM[p];
+      if (mapped) allPlatforms.add(mapped);
+    }
+  }
+  if (allPlatforms.size === 0) allPlatforms.add('ga4');
+
+  const excluded = state?.funnelExcludedPlatforms || new Set();
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isVisible = popover.style.display !== 'none';
+    if (isVisible) {
+      popover.style.display = 'none';
+      return;
+    }
+
+    popover.style.cssText = `
+      display: block; position: absolute; right: 0; top: 100%; margin-top: 6px;
+      background: var(--tp-surface); border: 1px solid var(--tp-border);
+      border-radius: 8px; padding: 10px 12px; z-index: 100;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12); min-width: 180px;
+    `;
+
+    const platformsArr = [...allPlatforms].sort((a, b) => {
+      if (a === 'ga4') return -1;
+      if (b === 'ga4') return 1;
+      return (PLATFORM_LABELS[a] || a).localeCompare(PLATFORM_LABELS[b] || b);
+    });
+
+    popover.innerHTML = `
+      <div style="font-size: 11px; font-weight: 600; color: var(--tp-text); margin-bottom: 8px;">Filter Platforms</div>
+      ${platformsArr.map(p => {
+        const isGa4 = p === 'ga4';
+        const isEnabled = isGa4 || !excluded.has(p);
+        return `
+          <label data-platform="${p}" style="
+            display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: ${isGa4 ? 'default' : 'pointer'};
+            ${isGa4 ? 'opacity: 0.6;' : ''}
+          ">
+            <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0;">
+              ${platformIconHtml(p, 14)}
+              <span style="font-size: 11px; color: var(--tp-text);">${PLATFORM_LABELS[p] || p}</span>
+            </div>
+            <div class="tp-switch${isEnabled ? ' active' : ''}" style="
+              width: 28px; height: 16px; border-radius: 8px; position: relative;
+              background: ${isEnabled ? COLORS.primary : '#ccc'}; transition: background 0.2s;
+              flex-shrink: 0; ${isGa4 ? 'pointer-events: none;' : ''}
+            ">
+              <div style="
+                width: 12px; height: 12px; border-radius: 50%; background: white;
+                position: absolute; top: 2px; transition: left 0.2s;
+                left: ${isEnabled ? '14px' : '2px'};
+              "></div>
+            </div>
+          </label>
+        `;
+      }).join('')}
+    `;
+
+    // Wire toggle clicks — update switch visually, defer re-render to popover close
+    let _pendingRerender = false;
+    popover.querySelectorAll('label[data-platform]').forEach(label => {
+      const platform = label.getAttribute('data-platform');
+      if (platform === 'ga4') return;
+      label.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        // Toggle the excluded set directly (same logic as actions.toggleFunnelPlatform)
+        const excl = state.funnelExcludedPlatforms || new Set();
+        if (excl.has(platform)) {
+          excl.delete(platform);
+        } else {
+          excl.add(platform);
+        }
+        chrome.storage.local.set({ tp_funnel_excluded_platforms: [...excl] });
+        _pendingRerender = true;
+
+        // Update switch visually in-place
+        const switchEl = label.querySelector('.tp-switch');
+        const knob = switchEl?.querySelector('div');
+        if (switchEl && knob) {
+          const nowEnabled = !excl.has(platform);
+          switchEl.style.background = nowEnabled ? COLORS.primary : '#ccc';
+          switchEl.classList.toggle('active', nowEnabled);
+          knob.style.left = nowEnabled ? '14px' : '2px';
+        }
+      });
+    });
+
+  });
+
+  // Close popover on click outside — trigger re-render if changes were made
+  const closeHandler = (e) => {
+    if (!btn.contains(e.target) && !popover.contains(e.target)) {
+      popover.style.display = 'none';
+      if (_pendingRerender && actions?.renderActiveTab) {
+        actions.renderActiveTab();
+      } else if (_pendingRerender) {
+        // Fallback: re-render funnel via tab content update
+        renderFunnelMode(container.closest('#tab-content') || container, funnelSession, state.capabilities, null, state, actions);
+      }
+    }
+  };
+  document.addEventListener('click', closeHandler);
 }
 
 // ---- Funnel Report ----
@@ -1098,7 +1357,7 @@ function renderFunnelReport(container, report, funnelSession, capabilities, stat
 
       <!-- Buttons -->
       <div style="display: flex; gap: 8px; margin-top: 16px;">
-        ${capabilities.canExportPDF ? `
+        ${capabilities?.canExportPDF ? `
         <button id="funnel-export-btn" style="
           background: ${COLORS.primary}; color: white; border: none; border-color: ${COLORS.primary};
           padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; flex: 1;

@@ -115,11 +115,11 @@ export function renderDataLayerLive(container, state, actions) {
     </div>
   `;
 
-  // Bind filter
+  // Bind filter — only update entries list + counter, not the whole DOM (avoids losing focus)
   const filterInput = container.querySelector('#dl-filter');
   filterInput?.addEventListener('input', (e) => {
     filterText = e.target.value;
-    renderDataLayerLive(container, state, actions);
+    updateFilteredEntries(container, state);
   });
 
   // Bind ecom only toggle
@@ -148,6 +148,58 @@ export function renderDataLayerLive(container, state, actions) {
 
   // Bind entry expand/collapse
   bindEntryClicks(container);
+}
+
+/**
+ * Re-render only the entries list and counter (preserves filter input focus).
+ */
+function updateFilteredEntries(container, state) {
+  const dlStream = state.dataLayerStream || [];
+  const netStream = state.networkRequests || [];
+
+  let merged = dlStream.map((e) => ({ ...e, _isNetwork: false }));
+  if (showNetwork) {
+    merged = merged.concat(netStream.map((e) => ({ ...e, _isNetwork: true })));
+    merged.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  const filtered = merged.filter((entry) => {
+    if (ecomOnly && !entry._isNetwork) {
+      const data = extractData(entry);
+      const info = classifyEvent(data);
+      if (info.category !== 'ecommerce') return false;
+    }
+    if (filterText) {
+      const str = JSON.stringify(entry._isNetwork ? entry : entry.data).toLowerCase();
+      if (!str.includes(filterText.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  const totalCount = showNetwork ? dlStream.length + netStream.length : dlStream.length;
+
+  // Update counter
+  const counterEl = container.querySelector('#dl-counter');
+  if (counterEl) {
+    counterEl.textContent = `${filtered.length}${filtered.length !== totalCount ? '/' + totalCount : ''}`;
+  }
+
+  // Update entries list
+  const entriesEl = container.querySelector('#dl-entries');
+  if (entriesEl) {
+    entriesEl.innerHTML = filtered.length === 0
+      ? `<div class="tp-empty">
+          <div class="tp-empty-icon">&#128225;</div>
+          <p>${totalCount === 0 ? 'Waiting for dataLayer events...' : 'No matching events'}</p>
+          <p class="text-[11px] mt-1">${totalCount === 0 ? 'Events will appear here as they fire' : `${totalCount} total events captured`}</p>
+        </div>`
+      : filtered.map((entry, i) =>
+          entry._isNetwork
+            ? renderNetworkStreamEntry(entry, filtered.length - i)
+            : renderStreamEntry(entry, filtered.length - i)
+        ).join('');
+    bindEntryClicks(container);
+  }
 }
 
 /**

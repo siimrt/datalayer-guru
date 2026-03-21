@@ -6,6 +6,7 @@ import { renderPlanBadge } from './PlanBadge.js';
 import { PLAN_CONFIG } from '../../shared/plans.js';
 import { trackEvent } from '../../shared/analytics.js';
 import { CANONICAL_EVENTS, CANONICAL_EVENTS_LEADGEN } from '../../shared/canonical-audit.js';
+import { platformIconHtml } from '../../shared/platform-icons.js';
 
 // Dev/admin mode: show debug info only when extension is loaded unpacked (no update_url)
 function isDevMode() {
@@ -39,6 +40,15 @@ function getEventsForPlatform(platformKey) {
   }
   return events;
 }
+
+const GADS_FUNNEL_EVENTS = [
+  { key: 'view_item', label: 'Product View' },
+  { key: 'add_to_cart', label: 'Add to Cart' },
+  { key: 'begin_checkout', label: 'Checkout' },
+  { key: 'add_shipping_info', label: 'Shipping' },
+  { key: 'add_payment_info', label: 'Payment' },
+  { key: 'purchase', label: 'Purchase' },
+];
 
 // Track which CAPI platform sub-accordions are expanded (persists within session)
 const expandedCapiPlatforms = new Set();
@@ -161,7 +171,8 @@ export function renderSettingsPanel(container, state, actions) {
         </div>
       </div>
 
-      <!-- Server-Side (CAPI) Patterns -->
+      <!-- Server-Side (CAPI) Patterns — Pro only -->
+      ${capabilities?.canCapiConfig ? `
       <div style="margin-bottom: 24px;">
         <div style="background: var(--tp-surface); border-radius: 8px; padding: 12px; border: 1px solid var(--tp-border);">
           <div id="capi-accordion-toggle" style="
@@ -188,6 +199,72 @@ export function renderSettingsPanel(container, state, actions) {
           <div id="capi-accordion-content" style="display: none; margin-top: 12px;">
             <div style="display: grid; gap: 8px;">
               ${renderCapiPatternRows(state.capiPatterns, state.capiOverrides)}
+            </div>
+          </div>
+        </div>
+      </div>
+      ` : `
+      <div style="margin-bottom: 24px;">
+        <div style="
+          background: var(--tp-surface); border-radius: 8px; padding: 12px;
+          border: 1px dashed rgba(0, 109, 119, 0.3);
+        ">
+          <div style="display: flex; align-items: center; gap: 8px; color: var(--tp-text-muted); font-size: 14px;">
+            <span style="font-size: 10px; width: 10px;">&#9656;</span>
+            <h3 style="margin: 0; font-size: 14px; color: var(--tp-text-muted);">Server-Side (CAPI) Patterns</h3>
+            <span style="
+              font-size: 8px; font-weight: 800; letter-spacing: 0.5px;
+              background: var(--tp-primary); color: white;
+              padding: 1px 5px; border-radius: 4px;
+            ">PRO</span>
+          </div>
+        </div>
+      </div>
+      `}
+
+      <!-- Google Ads Conversion Labels -->
+      <div style="margin-bottom: 24px;">
+        <div style="background: var(--tp-surface); border-radius: 8px; padding: 12px; border: 1px solid var(--tp-border);">
+          <div id="gads-accordion-toggle" style="
+            display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+            color: var(--tp-text); font-size: 14px;
+          ">
+            <span id="gads-arrow" style="font-size: 10px; width: 10px;">&#9656;</span>
+            ${platformIconHtml('google_ads', 16)}
+            <h3 style="margin: 0; font-size: 14px;">Google Ads Conversion Labels</h3>
+            <span id="gads-tooltip-wrapper" style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+              <span id="gads-tooltip-trigger" style="
+                font-size: 12px; color: var(--tp-text-muted); cursor: help;
+                border: 1px solid var(--tp-border); border-radius: 50%; width: 16px; height: 16px;
+                display: inline-flex; align-items: center; justify-content: center;
+              ">i</span>
+              <div class="tp-gads-tooltip" style="
+                display: none; position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+                background: var(--tp-surface-hover); color: var(--tp-text); border: 1px solid var(--tp-border);
+                border-radius: 8px; padding: 10px 12px; font-size: 11px; line-height: 1.5;
+                width: 280px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                pointer-events: none;
+              ">Map your Google Ads conversion labels to funnel events. This lets Traacky match conversion pings to the correct funnel step (e.g. purchase, add_to_cart).</div>
+            </span>
+          </div>
+          <div id="gads-accordion-content" style="display: none; margin-top: 12px;">
+            <div style="display: grid; gap: 6px;">
+              ${GADS_FUNNEL_EVENTS.map(fe => `
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <span style="color: var(--tp-text-secondary); font-size: 11px; min-width: 100px; flex-shrink: 0;">${fe.label}</span>
+                  <input type="text" data-gads-label="${fe.key}" value="" placeholder="e.g. AbCdEfGh" style="
+                    background: var(--tp-surface-hover); color: var(--tp-text); border: 1px solid var(--tp-border);
+                    border-radius: 6px; padding: 3px 6px; font-size: 11px; font-family: monospace; flex: 1; min-width: 0;
+                  " />
+                </div>
+              `).join('')}
+            </div>
+            <div style="text-align: right; margin-top: 8px;">
+              <button id="gads-labels-save" style="
+                background: var(--tp-primary); color: white; border: none;
+                border-radius: 6px; padding: 6px 16px; font-size: 12px; font-weight: 600;
+                cursor: pointer; transition: all 0.2s;
+              ">Save</button>
             </div>
           </div>
         </div>
@@ -250,7 +327,7 @@ export function renderSettingsPanel(container, state, actions) {
         </div>
       </div>
 
-      <!-- Usage Stats (Starter+) -->
+      <!-- Usage Stats (Pro) -->
       ${plan !== 'free' ? `
       <div style="margin-bottom: 24px;">
         <h3 style="color: var(--tp-text); font-size: 14px; margin-bottom: 12px;">Usage This Month</h3>
@@ -285,6 +362,10 @@ export function renderSettingsPanel(container, state, actions) {
           margin-top: 8px; background: var(--tp-surface-hover); color: var(--tp-text-secondary); border: 1px solid var(--tp-border);
           padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
         ">&#8635; Debug: Force Refresh Plan</button>
+        <button id="settings-simulate-free" style="
+          margin-top: 4px; margin-left: 4px; background: var(--tp-surface-hover); color: var(--tp-text-secondary); border: 1px solid var(--tp-border);
+          padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer;
+        ">&#127919; Toggle Simulate Free</button>
       </div>
       ` : ''}
 
@@ -541,6 +622,65 @@ export function renderSettingsPanel(container, state, actions) {
     });
   });
 
+  // Google Ads accordion toggle
+  const gadsToggle = container.querySelector('#gads-accordion-toggle');
+  const gadsContent = container.querySelector('#gads-accordion-content');
+  const gadsArrow = container.querySelector('#gads-arrow');
+  if (gadsToggle && gadsContent) {
+    gadsToggle.addEventListener('click', (e) => {
+      if (e.target.id === 'gads-tooltip-trigger' || e.target.closest('#gads-tooltip-wrapper')) return;
+      const isHidden = gadsContent.style.display === 'none';
+      gadsContent.style.display = isHidden ? 'block' : 'none';
+      if (gadsArrow) gadsArrow.innerHTML = isHidden ? '&#9662;' : '&#9656;';
+    });
+  }
+
+  // Google Ads tooltip hover
+  const gadsTooltipWrapper = container.querySelector('#gads-tooltip-wrapper');
+  const gadsTooltipDiv = container.querySelector('.tp-gads-tooltip');
+  if (gadsTooltipWrapper && gadsTooltipDiv) {
+    gadsTooltipWrapper.addEventListener('mouseenter', () => { gadsTooltipDiv.style.display = 'block'; });
+    gadsTooltipWrapper.addEventListener('mouseleave', () => { gadsTooltipDiv.style.display = 'none'; });
+  }
+
+  // Google Ads labels save button
+  const gadsSaveBtn = container.querySelector('#gads-labels-save');
+  if (gadsSaveBtn) {
+    gadsSaveBtn.addEventListener('click', () => {
+      const labels = {};
+      container.querySelectorAll('[data-gads-label]').forEach(input => {
+        const key = input.dataset.gadsLabel;
+        const val = input.value.trim();
+        if (val) labels[key] = val;
+      });
+      try {
+        chrome.storage.local.set({ tp_gads_labels: labels }, () => {
+          gadsSaveBtn.textContent = 'Saved!';
+          gadsSaveBtn.style.background = 'var(--tp-success, #22c55e)';
+          setTimeout(() => {
+            gadsSaveBtn.textContent = 'Save';
+            gadsSaveBtn.style.background = 'var(--tp-primary)';
+          }, 1200);
+        });
+      } catch (err) {
+        console.warn('[Traacky] Failed to save Google Ads labels:', err);
+      }
+    });
+  }
+
+  // Load existing Google Ads labels from storage (async, after initial render)
+  try {
+    chrome.storage.local.get('tp_gads_labels', (result) => {
+      const labels = result?.tp_gads_labels || {};
+      container.querySelectorAll('[data-gads-label]').forEach(input => {
+        const key = input.dataset.gadsLabel;
+        if (labels[key]) input.value = labels[key];
+      });
+    });
+  } catch (err) {
+    console.warn('[Traacky] Failed to load Google Ads labels:', err);
+  }
+
   // Support & Roadmap hover effects + external link handling
   const supportBtn = container.querySelector('#settings-support-btn');
   if (supportBtn) {
@@ -571,6 +711,24 @@ export function renderSettingsPanel(container, state, actions) {
     });
   }
 
+  // Simulate Free toggle (dev mode only)
+  const simFreeBtn = container.querySelector('#settings-simulate-free');
+  if (simFreeBtn) {
+    // Check current state
+    chrome.storage.local.get('tp_simulate_free', (data) => {
+      const isSimulating = !!data.tp_simulate_free;
+      simFreeBtn.textContent = isSimulating ? '🟢 Simulating Free — click to stop' : '🎯 Simulate Free Plan';
+      if (isSimulating) simFreeBtn.style.borderColor = 'var(--tp-success)';
+    });
+    simFreeBtn.addEventListener('click', () => {
+      simFreeBtn.textContent = 'Toggling...';
+      simFreeBtn.disabled = true;
+      chrome.runtime.sendMessage({ type: 'TRACKPULSE_TOGGLE_SIMULATE_FREE' }, () => {
+        window.location.reload();
+      });
+    });
+  }
+
   // Load usage stats
   if (plan !== 'free') {
     loadAndRenderUsageStats(container, capabilities);
@@ -584,38 +742,26 @@ async function loadAndRenderUsageStats(container, capabilities) {
   const usage = await chrome.storage.local.get('tp_usage');
   const stats = usage.tp_usage || { domains: [], pdfReportsCount: 0, funnelAuditsCount: 0 };
 
-  const domainLimit = capabilities?.domainLimit;
-  const pdfLimit = capabilities?.pdfLimit;
   const domainCount = stats.domains?.length || 0;
   const pdfCount = stats.pdfReportsCount || 0;
+  const isPro = capabilities?.plan === 'pro';
 
   let html = '<div style="display: grid; gap: 8px;">';
 
-  if (domainLimit !== null && domainLimit !== undefined) {
-    const pct = Math.min(100, (domainCount / domainLimit) * 100);
-    const barClass = pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : '';
-    html += `
-      <div style="display: flex; justify-content: space-between;">
-        <span style="color: var(--tp-text-secondary); font-size: 12px;">Domains</span>
-        <span style="color: var(--tp-text); font-size: 12px;">${domainCount} / ${domainLimit}</span>
-      </div>
-      <div class="usage-bar">
-        <div class="usage-bar-fill ${barClass}" style="width: ${pct}%;"></div>
-      </div>
-    `;
-  }
+  html += `
+    <div style="display: flex; justify-content: space-between;">
+      <span style="color: var(--tp-text-secondary); font-size: 12px;">Domains analysed</span>
+      <span style="color: var(--tp-text); font-size: 12px;">${domainCount}</span>
+    </div>
+  `;
 
-  if (pdfLimit !== null && pdfLimit !== undefined) {
+  if (isPro) {
     html += `
       <div style="display: flex; justify-content: space-between; margin-top: 4px;">
         <span style="color: var(--tp-text-secondary); font-size: 12px;">PDF Reports</span>
-        <span style="color: var(--tp-text); font-size: 12px;">${pdfCount} / ${pdfLimit}</span>
+        <span style="color: var(--tp-text); font-size: 12px;">${pdfCount}</span>
       </div>
     `;
-  }
-
-  if ((domainLimit === null || domainLimit === undefined) && (pdfLimit === null || pdfLimit === undefined)) {
-    html += '<div style="color: var(--tp-success); font-size: 12px;">&#10003; All usage unlimited on your plan</div>';
   }
 
   html += '</div>';

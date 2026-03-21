@@ -88,15 +88,34 @@ export class SiteTypeDetector {
       signals.push('dataLayer:leadgen_events(+30)');
     }
 
-    // --- Structured data scoring ---
-    if (pageContext.hasProductSchema) {
+    // --- Structured data scoring (from pageContext + direct DOM fallback) ---
+    const schemaFlags = this._getSchemaFlags(pageContext);
+    if (schemaFlags.hasProductSchema) {
       ecomScore += 25;
       signals.push('schema:Product(+25)');
     }
-    if (pageContext.hasServiceSchema || pageContext.hasLocalBusinessSchema) {
+    if (schemaFlags.hasOfferSchema) {
+      ecomScore += 15;
+      signals.push('schema:Offer(+15)');
+    }
+    if (schemaFlags.hasOgProduct) {
+      ecomScore += 15;
+      signals.push('og:product(+15)');
+    }
+    if (schemaFlags.hasServiceSchema || schemaFlags.hasLocalBusinessSchema) {
       leadgenScore += 15;
       signals.push('schema:Service/LocalBusiness(+15)');
     }
+
+    // --- DOM-based e-commerce signals ---
+    const domEcomSignals = this._detectDomEcomSignals();
+    ecomScore += domEcomSignals.score;
+    signals.push(...domEcomSignals.signals);
+
+    // --- URL-based e-commerce signals ---
+    const urlEcomSignals = this._detectUrlEcomSignals();
+    ecomScore += urlEcomSignals.score;
+    signals.push(...urlEcomSignals.signals);
 
     // --- Forms scoring (from page context) ---
     if (pageContext.formCount > 0 && !hasEcomEvents) {
@@ -129,5 +148,115 @@ export class SiteTypeDetector {
       leadgenScore,
       signals,
     };
+  }
+
+  /**
+   * Detect e-commerce signals from DOM elements.
+   */
+  _detectDomEcomSignals() {
+    let score = 0;
+    const signals = [];
+
+    try {
+      // Cart links/icons
+      if (document.querySelector('a[href*="/cart"], a[href*="/panier"], a[href*="/basket"], a[href*="/bag"], .cart-icon, [data-cart], .mini-cart, [class*="minicart"], [class*="mini-cart"], [class*="shopping-bag"], [class*="header-cart"]')) {
+        score += 15;
+        signals.push('dom:cart(+15)');
+      }
+
+      // Add-to-cart buttons
+      if (document.querySelector('[class*="add-to-cart"], [class*="add_to_cart"], [data-action="add-to-cart"], [class*="addtocart"], button[class*="add-cart"], [class*="btn-cart"]')) {
+        score += 20;
+        signals.push('dom:add-to-cart(+20)');
+      }
+
+      // Price elements
+      if (document.querySelector('.price, [class*="product-price"], [class*="price-"], [class*="-price"], .money, [data-price], [class*="amount"], [class*="regular-price"], [class*="sale-price"]')) {
+        score += 10;
+        signals.push('dom:price(+10)');
+      }
+
+      // Product grids / product cards / product listings
+      if (document.querySelector('.product-grid, [class*="product-card"], .products-grid, [class*="product-list"], [class*="product-item"], [class*="product-tile"], [data-product-id], [data-product], [class*="product_card"], [class*="plp-"], [class*="catalog"]')) {
+        score += 10;
+        signals.push('dom:product-grid(+10)');
+      }
+
+      // Payment scripts
+      if (document.querySelector('script[src*="js.stripe.com"], script[src*="paypal.com/sdk"], script[src*="adyen.com"], script[src*="checkout.com"], script[src*="klarna.com"], script[src*="afterpay"]')) {
+        score += 20;
+        signals.push('dom:payment-script(+20)');
+      }
+
+      // E-commerce navigation links (categories, brands, collections patterns in menus)
+      const navLinks = document.querySelectorAll('nav a, [class*="menu"] a, header a');
+      let ecomNavCount = 0;
+      const ecomNavPatterns = /\/(homme|femme|women|men|kids|enfant|collection|catalog|categor|marque|brand|shop|boutique|product|article|accessoire|chaussure|vetement|clothing|shoes)/i;
+      for (let i = 0; i < Math.min(navLinks.length, 150); i++) {
+        if (ecomNavPatterns.test(navLinks[i].href || '')) {
+          ecomNavCount++;
+          if (ecomNavCount >= 3) break;
+        }
+      }
+      if (ecomNavCount >= 3) {
+        score += 15;
+        signals.push('dom:ecom-nav(+15)');
+      }
+    } catch (e) {}
+
+    return { score, signals };
+  }
+
+  /**
+   * Get structured data flags — uses pageContext if available, falls back to direct DOM scan.
+   */
+  _getSchemaFlags(pageContext) {
+    const flags = {
+      hasProductSchema: pageContext.hasProductSchema || false,
+      hasServiceSchema: pageContext.hasServiceSchema || false,
+      hasLocalBusinessSchema: pageContext.hasLocalBusinessSchema || false,
+      hasOfferSchema: pageContext.hasOfferSchema || false,
+      hasOgProduct: pageContext.hasOgProduct || false,
+    };
+
+    // If nothing was passed from pageContext, scan DOM directly (fallback)
+    if (!flags.hasProductSchema && !flags.hasOfferSchema && !flags.hasOgProduct) {
+      try {
+        const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+        for (const script of ldScripts) {
+          const text = script.textContent || '';
+          if (text.includes('"Product"')) flags.hasProductSchema = true;
+          if (text.includes('"Service"')) flags.hasServiceSchema = true;
+          if (text.includes('"LocalBusiness"') || text.includes('"Store"') || text.includes('"Restaurant"')) flags.hasLocalBusinessSchema = true;
+          if (text.includes('"Offer"') || text.includes('"AggregateOffer"')) flags.hasOfferSchema = true;
+        }
+        const ogType = document.querySelector('meta[property="og:type"]');
+        if (ogType && ogType.content === 'product') flags.hasOgProduct = true;
+      } catch (e) {}
+    }
+
+    return flags;
+  }
+
+  /**
+   * Detect e-commerce signals from URL paths.
+   */
+  _detectUrlEcomSignals() {
+    let score = 0;
+    const signals = [];
+
+    try {
+      const path = window.location.pathname.toLowerCase();
+      const ecomPaths = ['/shop', '/store', '/products', '/cart', '/checkout', '/boutique', '/panier', '/catalogue', '/collection', '/homme', '/femme', '/women', '/men', '/kids'];
+      for (const p of ecomPaths) {
+        if (path.startsWith(p) || path.includes(p + '/') || path.includes(p + '?')) {
+          score += 10;
+          signals.push(`url:${p}(+10)`);
+          break;
+        }
+      }
+    } catch (e) {}
+
+    return { score, signals };
   }
 }

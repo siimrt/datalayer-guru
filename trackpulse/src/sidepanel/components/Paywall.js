@@ -1,9 +1,8 @@
 /**
- * PAYWALL OVERLAY COMPONENTS
+ * PAYWALL COMPONENTS
  *
- * Applied to event code blocks on Free plan.
- * Shows first 3 lines clearly, then blurs the rest.
- * Also used for gated features (Audit tab, Push button, etc.)
+ * V2.1: Simplified — only gates actions (Copy, Push, Funnel, PDF, CAPI).
+ * No more CMS gating, no more platform gating, no more code blur.
  */
 
 import { PLAN_PRICING } from '../../shared/plans.js';
@@ -12,49 +11,78 @@ import { trackEvent } from '../../shared/analytics.js';
 // === Message helpers ===
 
 const PAYWALL_MESSAGES = {
-  eventCopy: 'Unlock copy-to-clipboard for all generated events.',
+  eventCopy: 'Copy events to clipboard — available in Pro.',
   eventPush: 'Push events directly to the dataLayer for testing.',
-  eventGeneration: 'See the full generated tracking code.',
-  auditDiff: "Compare your expected events with what's actually firing on the page.",
   funnelMode: 'Audit entire purchase funnels across multiple pages.',
   pdfExport: 'Generate professional PDF audit reports for your clients.',
-  pdfWhiteLabel: 'Add your agency logo and branding to PDF reports.',
-  platformMeta: 'Generate Meta/Facebook Pixel events.',
-  platformTikTok: 'Generate TikTok Pixel events.',
-  platformPinterest: 'Generate Pinterest Tag events.',
-  cmsPrestaShop: 'PrestaShop support is available from Starter.',
-  cmsMagento: 'Magento/Adobe Commerce support is available in Pro.',
-  cmsWebflow: 'Webflow Commerce support is available in Pro.',
-  debugSnippets: 'Access ready-made debug snippets for force-triggering events.',
-  domainLimit: "You've reached the domain limit for your plan.",
+  capiConfig: 'Customise CAPI event names for server-side tracking.',
 };
 
 const PAYWALL_TITLES = {
-  auditDiff: 'Tracking Audit & Diff',
   funnelMode: 'Funnel Mode',
   pdfExport: 'PDF Reports',
-  pdfWhiteLabel: 'White-Label Reports',
-  debugSnippets: 'Debug Snippet Library',
+  capiConfig: 'CAPI Configuration',
 };
 
 const PAYWALL_ICONS = {
-  auditDiff: '&#128269;',
   funnelMode: '&#128279;',
   pdfExport: '&#128196;',
-  pdfWhiteLabel: '&#127991;',
-  debugSnippets: '&#129514;',
+  capiConfig: '&#9881;',
 };
 
 function getPaywallMessage(feature) {
-  return PAYWALL_MESSAGES[feature] || 'This feature is available on a paid plan.';
+  return PAYWALL_MESSAGES[feature] || 'This feature is available in Pro.';
 }
 
 function getPaywallTitle(feature) {
-  return PAYWALL_TITLES[feature] || 'Premium Feature';
+  return PAYWALL_TITLES[feature] || 'Pro Feature';
 }
 
 function getPaywallIcon(feature) {
   return PAYWALL_ICONS[feature] || '&#11088;';
+}
+
+/**
+ * Mini visual preview of Funnel Mode for the paywall.
+ */
+function renderFunnelPreview() {
+  const steps = [
+    { label: 'Product', icon: '&#128230;', status: 'ok' },
+    { label: 'Cart', icon: '&#128722;', status: 'ok' },
+    { label: 'Checkout', icon: '&#128179;', status: 'warn' },
+    { label: 'Purchase', icon: '&#9989;', status: 'miss' },
+  ];
+  const stepHtml = steps.map((s, i) => {
+    const color = s.status === 'ok' ? 'var(--tp-success)' : s.status === 'warn' ? '#F59E0B' : 'var(--tp-error)';
+    const connector = i < steps.length - 1 ? `<div style="width: 20px; height: 2px; background: var(--tp-border); margin: 0 -2px;"></div>` : '';
+    return `
+      <div style="display: flex; align-items: center;">
+        <div style="
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+        ">
+          <div style="
+            width: 32px; height: 32px; border-radius: 8px;
+            background: rgba(0,0,0,0.04); display: flex; align-items: center;
+            justify-content: center; font-size: 16px;
+            border: 2px solid ${color};
+          ">${s.icon}</div>
+          <span style="font-size: 9px; color: var(--tp-text-muted);">${s.label}</span>
+        </div>
+        ${connector}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div style="
+      display: flex; align-items: center; justify-content: center;
+      gap: 4px; margin-bottom: 16px; opacity: 0.7;
+      padding: 12px; background: var(--tp-surface); border-radius: 10px;
+      border: 1px dashed var(--tp-border);
+    ">
+      ${stepHtml}
+    </div>
+  `;
 }
 
 // Module-level upgrade handler — set from main.js to navigate to pricing page
@@ -83,102 +111,28 @@ function triggerUpgrade(feature, targetPlan) {
   trackEvent('paywall_upgrade_clicked', {
     feature: feature || 'unknown',
     currentPlan: _currentPlan,
-    targetPlan: targetPlan || 'unknown',
+    targetPlan: targetPlan || 'pro',
   });
   _upgradeHandler();
 }
 
 /**
- * Wrap an event code block with a paywall blur.
- * @param {HTMLElement} codeBlock - The code container element
- * @param {string} feature - Which feature is gated
- * @param {string} upgradePlan - Which plan to suggest
- */
-export function applyCodePaywall(codeBlock, feature, upgradePlan) {
-  if (!_paywallShownThisSession.has(feature)) {
-    _paywallShownThisSession.add(feature);
-    trackEvent('paywall_shown', { feature, currentPlan: _currentPlan, requiredPlan: upgradePlan });
-  }
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'paywall-wrapper';
-
-  codeBlock.parentNode.insertBefore(wrapper, codeBlock);
-  wrapper.appendChild(codeBlock);
-
-  // Dynamic gradient based on theme
-  const isDark = document.documentElement.classList.contains('dark');
-  const rgb = isDark ? '15, 15, 16' : '250, 250, 250';
-
-  // Blur gradient overlay (shows top ~3 lines clearly)
-  const overlay = document.createElement('div');
-  overlay.className = 'paywall-overlay';
-  overlay.style.cssText = `
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: linear-gradient(
-      to bottom,
-      transparent 0%,
-      transparent 25%,
-      rgba(${rgb}, 0.7) 40%,
-      rgba(${rgb}, 0.95) 60%,
-      rgba(${rgb}, 1) 80%
-    );
-    backdrop-filter: blur(3px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding-top: 40px;
-    z-index: 10;
-    pointer-events: auto;
-  `;
-
-  const planPrice = PLAN_PRICING[upgradePlan] || PLAN_PRICING.pro;
-
-  overlay.innerHTML = `
-    <div style="text-align: center; padding: 16px; max-width: 280px;">
-      <div style="font-size: 13px; color: var(--tp-text); margin-bottom: 12px; line-height: 1.4;">
-        &#128274; ${getPaywallMessage(feature)}
-      </div>
-      <button class="paywall-upgrade-btn" style="
-        background: var(--tp-primary); color: white; border: none;
-        padding: 8px 20px; border-radius: 6px; font-size: 13px;
-        font-weight: 600; cursor: pointer; transition: all 0.2s; width: 100%;
-      ">
-        Unlock ${upgradePlan.charAt(0).toUpperCase() + upgradePlan.slice(1)} (${planPrice})
-      </button>
-      <div style="font-size: 11px; color: var(--tp-text-muted); margin-top: 8px;">
-        30-day money-back guarantee
-      </div>
-    </div>
-  `;
-
-  wrapper.appendChild(overlay);
-
-  const btn = overlay.querySelector('.paywall-upgrade-btn');
-  btn.addEventListener('click', () => triggerUpgrade(feature, upgradePlan));
-  btn.addEventListener('mouseenter', () => { btn.style.background = '#005a63'; });
-  btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--tp-primary)'; });
-}
-
-/**
- * Render a full-section paywall (for Audit tab, Funnel Mode, etc.)
+ * Render a full-section paywall (for Funnel Mode, PDF export, etc.)
  */
 export function renderSectionPaywall(container, feature, upgradePlan) {
   if (!_paywallShownThisSession.has(feature)) {
     _paywallShownThisSession.add(feature);
-    trackEvent('paywall_shown', { feature, currentPlan: _currentPlan, requiredPlan: upgradePlan });
+    trackEvent('paywall_shown', { feature, currentPlan: _currentPlan, requiredPlan: upgradePlan || 'pro' });
   }
 
-  const planPrice = PLAN_PRICING[upgradePlan] || PLAN_PRICING.pro;
-  const planLabel = upgradePlan.charAt(0).toUpperCase() + upgradePlan.slice(1);
+  const planPrice = PLAN_PRICING.pro;
 
   container.innerHTML = `
     <div style="
       display: flex; flex-direction: column; align-items: center;
       justify-content: center; min-height: 200px; padding: 32px 24px; text-align: center;
     ">
-      <div style="font-size: 40px; margin-bottom: 16px;">${getPaywallIcon(feature)}</div>
+      ${feature === 'funnelMode' ? renderFunnelPreview() : `<div style="font-size: 40px; margin-bottom: 16px;">${getPaywallIcon(feature)}</div>`}
       <div style="font-size: 15px; font-weight: 600; color: var(--tp-text); margin-bottom: 8px;">
         ${getPaywallTitle(feature)}
       </div>
@@ -190,7 +144,7 @@ export function renderSectionPaywall(container, feature, upgradePlan) {
         padding: 10px 24px; border-radius: 8px; font-size: 14px;
         font-weight: 600; cursor: pointer; transition: all 0.2s;
       ">
-        Upgrade to ${planLabel} (${planPrice}) &rarr;
+        Upgrade to Pro (${planPrice}) &rarr;
       </button>
       <div style="font-size: 11px; color: var(--tp-text-muted); margin-top: 12px;">
         &#10003; Cancel anytime &middot; &#10003; 30-day guarantee
@@ -199,7 +153,7 @@ export function renderSectionPaywall(container, feature, upgradePlan) {
   `;
 
   const btn = container.querySelector('.section-paywall-btn');
-  btn.addEventListener('click', () => triggerUpgrade(feature, upgradePlan));
+  btn.addEventListener('click', () => triggerUpgrade(feature, 'pro'));
   btn.addEventListener('mouseenter', () => {
     btn.style.background = '#005a63';
     btn.style.transform = 'scale(1.02)';
@@ -221,7 +175,7 @@ export function renderLockedButton(container, label, feature, upgradePlan) {
 
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
-    triggerUpgrade(feature, upgradePlan);
+    triggerUpgrade(feature, upgradePlan || 'pro');
   });
   btn.addEventListener('mouseenter', () => {
     btn.style.borderColor = 'var(--tp-primary)';
@@ -234,42 +188,4 @@ export function renderLockedButton(container, label, feature, upgradePlan) {
 
   container.appendChild(btn);
   return btn;
-}
-
-/**
- * Render a CMS gate banner when detected CMS is not supported by current plan.
- */
-export function renderCMSGateBanner(container, detectedCMS, supportedCMS) {
-  if (supportedCMS.includes(detectedCMS)) return false;
-
-  const planNeeded = {
-    prestashop: 'Starter',
-    magento: 'Pro',
-    webflow: 'Pro',
-  };
-  const cmsLabel = detectedCMS.charAt(0).toUpperCase() + detectedCMS.slice(1);
-  const needed = planNeeded[detectedCMS] || 'Pro';
-
-  const banner = document.createElement('div');
-  banner.style.cssText = `
-    background: var(--tp-surface);
-    border: 1px solid var(--tp-primary); border-radius: 8px;
-    padding: 16px; margin: 12px; text-align: center;
-  `;
-  banner.innerHTML = `
-    <div style="font-size: 14px; color: var(--tp-text); margin-bottom: 4px;">
-      ${cmsLabel} detected
-    </div>
-    <div style="font-size: 12px; color: var(--tp-text-secondary); margin-bottom: 12px;">
-      ${cmsLabel} support requires ${needed} plan
-    </div>
-    <button class="cms-gate-upgrade-btn" style="
-      background: var(--tp-primary); color: white; border: none; padding: 8px 16px;
-      border-radius: 6px; font-size: 12px; cursor: pointer;
-    ">Upgrade to ${needed}</button>
-  `;
-
-  banner.querySelector('.cms-gate-upgrade-btn').addEventListener('click', () => triggerUpgrade('cmsGate', needed.toLowerCase()));
-  container.appendChild(banner);
-  return true;
 }

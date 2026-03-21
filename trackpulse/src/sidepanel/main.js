@@ -65,7 +65,7 @@ if (IS_POPUP) {
 // Apply saved theme before first paint to avoid flash
 (async function initTheme() {
   try {
-    const data = await chrome.storage.local.get(['tp_theme', 'tp_auto_switch_tab', 'tp_auto_reload', 'tp_capi_patterns', 'tp_capi_overrides']);
+    const data = await chrome.storage.local.get(['tp_theme', 'tp_auto_switch_tab', 'tp_auto_reload', 'tp_capi_patterns', 'tp_capi_overrides', 'tp_funnel_excluded_platforms', 'tp_fc']);
     if ((data.tp_theme || 'light') === 'dark') {
       document.documentElement.classList.add('dark');
     }
@@ -77,6 +77,11 @@ if (IS_POPUP) {
     };
     state.capiPatterns = data.tp_capi_patterns || defaultCapiPatterns;
     state.capiOverrides = data.tp_capi_overrides || {};
+    if (Array.isArray(data.tp_funnel_excluded_platforms)) {
+      state.funnelExcludedPlatforms = new Set(data.tp_funnel_excluded_platforms);
+    }
+    // Load free copy counter
+    state.freeCopiesRemaining = Math.max(0, 3 - (data.tp_fc || 0));
   } catch (e) {}
 })();
 
@@ -182,6 +187,9 @@ const state = {
   // Detected platforms (computed from pixels + network requests)
   detectedPlatforms: new Set(['ga4']),
 
+  // Funnel platform filter (excluded platforms)
+  funnelExcludedPlatforms: new Set(),
+
   // V2 Custom pixel frame monitoring
   monitoredFrames: new Set(),  // frameIds where monitoring has been injected
 
@@ -196,6 +204,9 @@ const state = {
   // Page load state detection
   pageAlreadyLoaded: false,
   showMissedEventsBanner: false,
+
+  // Free trial copies remaining (3 max for free users)
+  freeCopiesRemaining: 3,
 };
 
 /** Recompute detectedPlatforms from pixels + networkRequests and sync activePlatforms */
@@ -257,9 +268,61 @@ const actions = {
   },
 
   async copyCode(code) {
-    // Check plan access
+    // Check plan access — Pro users get unlimited copies
     if (!state.capabilities?.canCopyEvents) {
-      actions.navigateToPricing();
+      // Free users get 3 trial copies to experience the value
+      const usage = await chrome.storage.local.get('tp_fc');
+      const freeCopies = usage.tp_fc || 0;
+      const FREE_COPY_LIMIT = 3;
+
+      if (freeCopies >= FREE_COPY_LIMIT) {
+        // All trial copies used — show contextual nudge then pricing
+        const eventCount = Object.values(state.generatedEvents || {}).flat().length;
+        const cmsName = state.cms?.cms && state.cms.cms !== 'unknown' ? state.cms.cms : null;
+        const context = eventCount > 0
+          ? `${eventCount} events ready${cmsName ? ` for ${cmsName}` : ''}`
+          : 'Your events are ready';
+        showToast(`${context} — unlock unlimited Copy with Pro`, 'info');
+        trackEvent('paywall_copy_limit_hit', { freeCopiesUsed: freeCopies, eventCount });
+        setTimeout(() => actions.navigateToPricing(), 1500);
+        return;
+      }
+
+      // Allow the copy, increment counter, show remaining
+      await chrome.storage.local.set({ tp_fc: freeCopies + 1 });
+      const remaining = FREE_COPY_LIMIT - freeCopies - 1;
+      state.freeCopiesRemaining = remaining;
+      trackEvent('free_copy_used', { copyNumber: freeCopies + 1, remaining });
+
+      // Actually copy the code (fall through to copy logic below)
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = code;
+        const decoded = textarea.value;
+        await navigator.clipboard.writeText(decoded);
+        if (remaining > 0) {
+          showToast(`Copied! ${remaining} free cop${remaining === 1 ? 'y' : 'ies'} remaining`, 'success');
+        } else {
+          showToast('Copied! That was your last free copy — upgrade to Pro for unlimited', 'info');
+        }
+      } catch (e) {
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.innerHTML = code;
+          textarea.value = textarea.value;
+          document.body.appendChild(textarea);
+          textarea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (remaining > 0) {
+            showToast(`Copied! ${remaining} free cop${remaining === 1 ? 'y' : 'ies'} remaining`, 'success');
+          } else {
+            showToast('Copied! That was your last free copy — upgrade to Pro for unlimited', 'info');
+          }
+        } catch (e2) {
+          showToast('Failed to copy', 'error');
+        }
+      }
       return;
     }
 
@@ -350,21 +413,13 @@ const actions = {
       return;
     }
 
-    // Track usage
-    const { trackPDFExport } = await import('../licensing/usage-tracker.js');
-    const result = await trackPDFExport(state.capabilities.pdfLimit);
-    if (!result.allowed) {
-      showToast(`PDF limit reached (${result.count}/${result.limit} this month)`, 'error');
-      return;
-    }
-
     trackEvent('pdf_exported');
     try {
       // Dynamic import for PDF generation
       const { generateAuditReport } = await import('../export/pdf-report.js');
       await generateAuditReport(
         { ...state, networkRequests: state.networkRequests },
-        { whiteLabelLogo: state.capabilities.canWhiteLabel ? null : null }
+        {}
       );
       showToast('PDF downloaded', 'success');
     } catch (e) {
@@ -517,6 +572,30 @@ const actions = {
     state.siteTypeOverride = siteType || null;
     trackEvent('site_type_override', { siteType: siteType || 'auto' });
     render();
+  },
+
+  toggleFunnelPlatform(platform) {
+    if (platform === 'ga4') return; // GA4 cannot be excluded
+    if (state.funnelExcludedPlatforms.has(platform)) {
+      state.funnelExcludedPlatforms.delete(platform);
+    } else {
+      state.funnelExcludedPlatforms.add(platform);
+    }
+    chrome.storage.local.set({ tp_funnel_excluded_platforms: [...state.funnelExcludedPlatforms] });
+    renderActiveTab();
+  },
+
+  renderActiveTab() {
+    renderActiveTab();
+  },
+
+  getFunnelGadsLabels() {
+    return funnelSession.gadsLabels || {};
+  },
+
+  async saveFunnelGadsLabels(labels) {
+    await funnelSession.saveGadsLabels(labels);
+    renderActiveTab();
   },
 };
 
@@ -754,21 +833,8 @@ chrome.runtime.onMessage.addListener((msg) => {
         state.dataLayerStream = state.dataLayerStream.slice(0, 200);
       }
 
-      // If funnel recording is active, check for funnel events in the push
-      if (funnelSession.isRecording) {
-        const dlData = payload.data;
-        // Extract event name from dataLayer push (can be {event: 'xxx'} or array-wrapped)
-        let eventName = null;
-        if (dlData && typeof dlData === 'object') {
-          eventName = dlData.event || (Array.isArray(dlData) && dlData[0]?.event);
-        }
-        if (eventName) {
-          const isNew = funnelSession.recordEvent(eventName, 'datalayer_push', 'ga4');
-          if (isNew && state.activeTab === 'funnel') {
-            renderActiveTab();
-          }
-        }
-      }
+      // GA4 funnel events are detected via network requests only (not dataLayer pushes)
+      // to ensure the hit was actually sent (consistent with other platforms).
 
       // If we're on the datalayer tab, append without full re-render
       if (state.activeTab === 'datalayer') {
@@ -858,7 +924,8 @@ chrome.runtime.onMessage.addListener((msg) => {
 
       // If funnel recording is active, check for funnel events in network request
       if (funnelSession.isRecording && netEntry.eventName) {
-        const isNew = funnelSession.recordEvent(netEntry.eventName, 'network', netEntry.platform);
+        const currentPageType = state.pageType?.pageType || 'unknown';
+        const isNew = funnelSession.recordEvent(netEntry.eventName, 'network', netEntry.platform, currentPageType);
         if (isNew && state.activeTab === 'funnel') {
           renderActiveTab();
         }

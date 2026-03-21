@@ -1,13 +1,13 @@
 /**
  * EventGenerator Component — Shows generated events grouped by platform.
- * V2: Plan-gated features — blurred code on Free, locked Copy/Push buttons.
+ * V2.1: All platforms visible for all users. Only Copy/Push are gated (Pro).
  * Quick Push: Expandable code preview cards below event cards.
  */
 
 import { syntaxHighlight, escapeHtml } from '../../shared/utils.js';
 import { platformIconHtml } from '../../shared/platform-icons.js';
 import { renderDataExtracted } from './DataExtracted.js';
-import { applyCodePaywall, renderLockedButton, renderCMSGateBanner } from './Paywall.js';
+import { renderLockedButton } from './Paywall.js';
 import { trackEvent } from '../../shared/analytics.js';
 import { getSyntheticEvents } from '../../content/generators/synthetic-events.js';
 import { PLATFORM_LABELS as _PLAT_LABELS } from '../../shared/constants.js';
@@ -25,74 +25,32 @@ export function resetEventGeneratorState() {
 const PLATFORM_COLORS = {
   ga4: '#4285F4',
   meta: '#1877F2',
-  tiktok: '#1A1A1A',
+  tiktok: '#69C9D0',
   pinterest: '#E60023',
   snapchat: '#FFFC00',
   linkedin: '#0A66C2',
   twitter: '#1DA1F2',
 };
 
-/**
- * Generate mock/placeholder code for gated platforms.
- * Looks structurally correct but contains redacted values.
- * This is what free-tier users see in the DOM — real code never touches the DOM.
- */
-function generateMockCode(platform, eventName) {
-  const mock = {
-    content_type: 'product',
-    content_ids: ['XXXXX', 'XXXXX'],
-    content_name: '••••••••••',
-    currency: '•••',
-    value: 0.00,
-    num_items: 0,
-  };
-
-  switch (platform) {
-    case 'meta':
-      return `fbq('track', '${eventName}', ${JSON.stringify(mock, null, 2)});`;
-    case 'tiktok':
-      return `ttq.track('${eventName}', ${JSON.stringify(mock, null, 2)});`;
-    case 'pinterest':
-      return `pintrk('track', '${eventName}', ${JSON.stringify(mock, null, 2)});`;
-    default:
-      return `// ${eventName} — upgrade to view full code`;
-  }
-}
-
 export function renderEventGenerator(container, state, actions) {
   const events = state.generatedEvents || {};
   const detectedPlatforms = state.detectedPlatforms || new Set(['ga4']);
   const activePlatforms = state.activePlatforms || [...detectedPlatforms];
   const capabilities = state.capabilities;
-  const supportedPlatforms = capabilities?.supportedPlatforms || ['ga4'];
-  const detectedCMS = state.cms?.cms || 'unknown';
 
-  // Check CMS support
-  const cmsSupported = !capabilities || capabilities.supportedCMS.includes(detectedCMS) || detectedCMS === 'unknown';
-
-  // Platforms that get a blurred preview in free (not fully locked)
-  const isFreeUser = capabilities?.plan === 'free';
-  const previewPlatforms = ['meta']; // Meta: visible but blurred in free
-
-  // Render platform toggles — only show detected platforms, mark unsupported ones
-  // Meta is NOT locked for free users (shown as preview), only TikTok/Pinterest are locked
+  // Render platform toggles — all platforms visible, no locking
   const toggles = Object.keys(PLATFORM_LABELS)
     .filter((platform) => detectedPlatforms.has(platform))
     .map((platform) => {
       const isActive = activePlatforms.includes(platform);
-      const isSupported = supportedPlatforms.includes(platform);
-      const isPreview = isFreeUser && previewPlatforms.includes(platform);
-      const isLocked = !isSupported && !isPreview;
       return `
       <button
-        class="tp-platform-toggle ${isActive && (isSupported || isPreview) ? 'active' : ''} ${isLocked ? 'locked' : ''}"
+        class="tp-platform-toggle ${isActive ? 'active' : ''}"
         data-platform="${platform}"
-        data-locked="${isLocked}"
-        style="${isLocked ? 'opacity: 0.5; cursor: pointer;' : ''}"
-        title="${isLocked ? `${PLATFORM_LABELS[platform]} — requires upgrade` : PLATFORM_LABELS[platform]}"
+        title="${PLATFORM_LABELS[platform]}"
       >
         ${platformIconHtml(platform, 14)}
-        ${isLocked ? '&#128274; ' : ''}${PLATFORM_LABELS[platform]}
+        ${PLATFORM_LABELS[platform]}
       </button>
     `;
     })
@@ -104,24 +62,12 @@ export function renderEventGenerator(container, state, actions) {
     state.pageType?.pageType
   );
 
-  // Collect all events for active + supported platforms
-  // Meta in free: goes into allEvents (blurred preview, not locked card)
-  // TikTok/Pinterest in free: stay in lockedPlatformEvents (opaque locked cards)
+  // Collect all events for active platforms (all visible now)
   const allEvents = [];
-  const lockedPlatformEvents = [];
-
   for (const platform of activePlatforms) {
     const platformEvents = events[platform] || [];
-    const isPreviewPlatform = isFreeUser && previewPlatforms.includes(platform);
-    if (supportedPlatforms.includes(platform) || isPreviewPlatform) {
-      for (const event of platformEvents) {
-        allEvents.push(event);
-      }
-    } else {
-      // Show locked cards for unsupported platforms (TikTok, Pinterest)
-      for (const event of platformEvents) {
-        lockedPlatformEvents.push(event);
-      }
+    for (const event of platformEvents) {
+      allEvents.push(event);
     }
   }
 
@@ -133,11 +79,11 @@ export function renderEventGenerator(container, state, actions) {
   const hasFrames = (state.customPixelFrames || []).length > 0;
   const quickPushTarget = state.quickPushTarget || 'top';
 
-  // Build Quick Push section HTML (now placed BELOW event cards)
+  // Build Quick Push section HTML
   let quickPushHtml = '';
   if (syntheticEvents.length > 0) {
     if (!capabilities?.canPushEvents) {
-      // Locked state for non-Pro users
+      // Locked state for Free users
       quickPushHtml = `
         <div class="tp-quick-push-section locked" style="margin-top: 4px;">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
@@ -232,7 +178,7 @@ export function renderEventGenerator(container, state, actions) {
   // Build events HTML
   let eventsHtml = '';
 
-  if (allEvents.length === 0 && lockedPlatformEvents.length === 0) {
+  if (allEvents.length === 0) {
     eventsHtml = `
       <div class="tp-empty">
         <div class="tp-empty-icon">&#128269;</div>
@@ -242,32 +188,31 @@ export function renderEventGenerator(container, state, actions) {
     `;
   }
 
-  // Layout: Platform toggles → Data Summary → CMS Gate → Event Cards → Quick Push (moved below)
+  // Intro hint for new/free users with events
+  const showIntroHint = capabilities?.plan === 'free' && allEvents.length > 0;
+  const introHintHtml = showIntroHint ? `
+    <div style="
+      padding: 8px 12px; margin: 0 12px 4px; border-radius: 8px;
+      background: rgba(0, 109, 119, 0.06); font-size: 11px;
+      color: var(--tp-text-secondary); line-height: 1.4;
+    ">
+      Ready-to-use tracking events for your site. Copy them into Google Tag Manager or your tag management system.
+    </div>
+  ` : '';
+
+  // Layout: Platform toggles → Intro → Data Summary → Event Cards → Quick Push
   container.innerHTML = `
     <div class="p-3 flex gap-2 flex-wrap border-b border-tp-border">
       ${toggles}
     </div>
+    ${introHintHtml}
     ${dataSummary}
-    <div id="cms-gate-banner"></div>
     <div id="event-cards-container">
       ${eventsHtml}
     </div>
     ${quickPushHtml}
     <div class="h-4"></div>
   `;
-
-  // Show CMS gate banner if needed
-  if (!cmsSupported) {
-    const bannerEl = container.querySelector('#cms-gate-banner');
-    const bannerShown = renderCMSGateBanner(bannerEl, detectedCMS, capabilities.supportedCMS);
-    if (bannerShown) {
-      trackEvent('cms_gate_shown', {
-        cms: detectedCMS,
-        currentPlan: capabilities.plan,
-        requiredPlan: detectedCMS === 'prestashop' ? 'starter' : 'pro',
-      });
-    }
-  }
 
   // Bind Quick Push expandable card interactions
   if (syntheticEvents.length > 0 && capabilities?.canPushEvents) {
@@ -348,35 +293,24 @@ export function renderEventGenerator(container, state, actions) {
     }
   }
 
-  // Render event cards with plan gating (DOM-based for paywall overlay)
+  // Render event cards (all visible, Copy/Push gated)
   const cardsContainer = container.querySelector('#event-cards-container');
 
-  // Render supported platform events
   allEvents.forEach((event, index) => {
     const card = createEventCard(event, index, index > 0, capabilities, actions);
     cardsContainer.appendChild(card);
   });
 
-  // Render locked platform events
-  lockedPlatformEvents.forEach((event) => {
-    const card = createLockedPlatformCard(event, actions);
-    cardsContainer.appendChild(card);
-  });
-
-  // Bind platform toggles
+  // Bind platform toggles — all clickable now, no locked state
   container.querySelectorAll('.tp-platform-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
-      if (btn.dataset.locked === 'true') {
-        if (actions.navigateToPricing) actions.navigateToPricing();
-      } else {
-        const platform = btn.dataset.platform;
-        const willBeEnabled = !state.activePlatforms.includes(platform);
-        trackEvent('platform_toggled', {
-          platform,
-          enabled: willBeEnabled,
-        });
-        actions.togglePlatform(platform);
-      }
+      const platform = btn.dataset.platform;
+      const willBeEnabled = !state.activePlatforms.includes(platform);
+      trackEvent('platform_toggled', {
+        platform,
+        enabled: willBeEnabled,
+      });
+      actions.togglePlatform(platform);
     });
   });
 }
@@ -389,15 +323,10 @@ function createEventCard(event, index, _collapsed, capabilities, actions) {
 
   const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
   const platformColor = PLATFORM_COLORS[event.platform] || '#006d77';
-  const isFree = capabilities?.plan === 'free';
-  const isGatedPlatform = isFree && event.platform !== 'ga4';
 
-  // For gated platforms: render mock code in DOM, never expose real code
-  const displayCode = isGatedPlatform
-    ? generateMockCode(event.platform, event.eventName)
-    : event.code;
-  const highlighted = syntaxHighlight(displayCode);
-  const escapedCode = escapeHtml(displayCode);
+  // All code is visible — no mock code, no blur
+  const highlighted = syntaxHighlight(event.code);
+  const escapedCode = escapeHtml(event.code);
 
   // Create card element
   const card = document.createElement('div');
@@ -425,40 +354,43 @@ function createEventCard(event, index, _collapsed, capabilities, actions) {
   body.className = 'tp-event-body';
   body.style.display = collapsed ? 'none' : 'block';
 
-  // Code block
+  // Code block — visible to all users
   const codeBlock = document.createElement('div');
   codeBlock.className = 'code-block';
-  codeBlock.style.userSelect = 'none';
-  codeBlock.style.webkitUserSelect = 'none';
+  // Code is readable by all — the paywall is the Copy button, not text selection
   codeBlock.innerHTML = highlighted;
   body.appendChild(codeBlock);
-
-  // If FREE plan + gated platform: apply blur paywall over mock code
-  // Real code is never in the DOM — the blur is purely a visual indicator
-  if (isGatedPlatform) {
-    applyCodePaywall(codeBlock, 'eventGeneration', 'starter');
-  }
 
   // Action buttons
   const actionsDiv = document.createElement('div');
   actionsDiv.className = 'tp-event-actions';
 
-  // COPY button
-  if (capabilities?.canCopyEvents) {
+  // COPY button — Pro users get unlimited, Free users get trial copies
+  const hasFreeCopies = !capabilities?.canCopyEvents && (capabilities?.plan === 'free') && (state.freeCopiesRemaining > 0);
+  if (capabilities?.canCopyEvents || hasFreeCopies) {
     const copyBtn = document.createElement('button');
     copyBtn.className = 'tp-btn tp-btn-sm';
     copyBtn.dataset.action = 'copy';
+    const trialLabel = hasFreeCopies ? ` (${state.freeCopiesRemaining} left)` : '';
     copyBtn.innerHTML = `
       <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 5V3.5A1.5 1.5 0 009.5 2h-6A1.5 1.5 0 002 3.5v6A1.5 1.5 0 003.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg>
-      Copy
+      Copy${trialLabel}
     `;
     copyBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      const originalHtml = copyBtn.innerHTML;
       actions.copyCode(escapedCode);
+      // Visual feedback
+      copyBtn.classList.add('copy-success');
+      copyBtn.innerHTML = '&#10003; Copied!';
+      setTimeout(() => {
+        copyBtn.classList.remove('copy-success');
+        copyBtn.innerHTML = originalHtml;
+      }, 1200);
     });
     actionsDiv.appendChild(copyBtn);
   } else {
-    renderLockedButton(actionsDiv, 'Copy', 'eventCopy', 'starter');
+    renderLockedButton(actionsDiv, 'Copy', 'eventCopy', 'pro');
   }
 
   // PUSH button (GA4 only)
@@ -500,33 +432,6 @@ function createEventCard(event, index, _collapsed, capabilities, actions) {
     } else {
       expandedCards.delete(cardKey);
     }
-  });
-
-  return card;
-}
-
-function createLockedPlatformCard(event, actions) {
-  const platformLabel = PLATFORM_LABELS[event.platform] || event.platform;
-  const platformColor = PLATFORM_COLORS[event.platform] || '#006d77';
-
-  const card = document.createElement('div');
-  card.className = 'tp-event-card animate-slide-in';
-  card.style.cursor = 'pointer';
-  card.style.opacity = '0.6';
-  const lockedIcon = platformIconHtml(event.platform, 14, 'opacity: 0.5;');
-  card.innerHTML = `
-    <div class="tp-event-header" style="opacity: 0.7;">
-      <div class="flex items-center gap-2">
-        ${lockedIcon}
-        <span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ${platformColor};">${platformLabel}</span>
-        <span class="text-[12px] font-medium text-tp-text">${event.eventName}</span>
-      </div>
-      <span style="font-size: 12px;">&#128274;</span>
-    </div>
-  `;
-
-  card.addEventListener('click', () => {
-    if (actions?.navigateToPricing) actions.navigateToPricing();
   });
 
   return card;

@@ -112,6 +112,8 @@ async function runPipeline(pageContext) {
         hasProductSchema: pageContext.hasProductSchema || false,
         hasServiceSchema: pageContext.hasServiceSchema || false,
         hasLocalBusinessSchema: pageContext.hasLocalBusinessSchema || false,
+        hasOfferSchema: pageContext.hasOfferSchema || false,
+        hasOgProduct: pageContext.hasOgProduct || false,
         formCount: forms.length,
       },
     });

@@ -245,7 +245,7 @@ export function showOnboarding(container, onComplete) {
           <span class="tp-ob-hero-suffix">h / year</span>
         </div>
         <p class="tp-ob-hero-eur">≈ <span class="tp-ob-hero-eur-num">0</span> €/year <span class="tp-ob-hero-eur-note">(based on €35/h)</span></p>
-        <p class="tp-ob-social-proof">Tracking devs save an average of ${socialProofH}h/month with Traacky</p>
+        <p class="tp-ob-social-proof">Trusted by tracking professionals at agencies and e-commerce brands</p>
         <div class="tp-ob-cards-row">
           <div class="tp-ob-card-sm tp-ob-card-0">
             <span class="tp-ob-card-label">Weekly</span>

@@ -29,11 +29,11 @@ function getSiteTypeIcon(siteType) {
 
 function getSiteTypeStyle(siteType) {
   const styles = {
-    ecommerce: 'background:#F0FDF4;color:#166534;border:none;padding:4px 10px',
-    leadgen: 'background:#EEF2FF;color:#3730A3;border:none;padding:4px 10px',
-    hybrid: 'background:#FAF5FF;color:#6B21A8;border:none;padding:4px 10px',
+    ecommerce: 'background:rgba(0,184,148,0.12);color:var(--tp-success);border:none;padding:4px 10px',
+    leadgen: 'background:rgba(0,109,119,0.12);color:var(--tp-primary);border:none;padding:4px 10px',
+    hybrid: 'background:rgba(131,197,190,0.12);color:#83c5be;border:none;padding:4px 10px',
   };
-  return styles[siteType] || 'background:#F1F5F9;color:#334155;border:none;padding:4px 10px';
+  return styles[siteType] || 'background:var(--tp-surface-hover);color:var(--tp-text-secondary);border:none;padding:4px 10px';
 }
 
 export function renderHeader(container, state, onRefresh, onUpgrade, onReopenCMP) {
@@ -63,8 +63,8 @@ export function renderHeader(container, state, onRefresh, onUpgrade, onReopenCMP
         <div class="tp-header-tags">
           <div class="tp-cms-logo">${CMS_LOGOS[cms] || CMS_LOGOS.unknown}</div>
           <span class="tp-badge tp-badge-cms">
-            ${cmsInfo.name}
-            <span class="text-tp-text-muted text-[10px]">(${confidence}%)</span>
+            ${cmsInfo.name}${cms !== 'unknown' && cms !== 'custom' ? `
+            <span class="text-tp-text-muted text-[10px]">(${confidence}%)</span>` : ''}
           </span>
           <span class="tp-badge tp-badge-page">${getPageTypeIcon(pageType)}${pageLabel}</span>
           <span class="tp-badge tp-badge-site-type" style="${getSiteTypeStyle(effectiveSiteType)}" id="site-type-badge" title="Site type: ${siteTypeInfo.name}${state.siteTypeOverride ? ' (override)' : ''}">${getSiteTypeIcon(effectiveSiteType)}${siteTypeInfo.name}${state.siteTypeOverride ? ' *' : ''}</span>

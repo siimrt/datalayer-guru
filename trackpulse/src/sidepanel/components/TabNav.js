@@ -1,5 +1,6 @@
 /**
- * TabNav Component — Tab navigation with V2 additions (Funnel, Settings).
+ * TabNav Component — Tab navigation.
+ * V2.1: Audit tab is now free (no lock). Only Funnel is gated.
  */
 
 const TABS = [
@@ -16,14 +17,13 @@ export function renderTabNav(container, activeTab, onTabChange, capabilities) {
       ${TABS.map((tab) => {
         const isActive = tab.id === activeTab;
         const isLocked = tab.id === 'funnel' && capabilities && !capabilities.canFunnelMode;
-        const isAuditLocked = tab.id === 'audit' && capabilities && !capabilities.canAudit;
         return `
         <button
           class="tp-tab ${isActive ? 'active' : ''}"
           data-tab="${tab.id}"
-          title="${isLocked || isAuditLocked ? 'Pro feature' : tab.label}"
+          title="${isLocked ? 'Pro feature' : tab.label}"
         >
-          ${tab.label}${isLocked || isAuditLocked ? ' <span style="font-size: 10px;">&#128274;</span>' : ''}
+          ${tab.label}${isLocked ? ' <span style="font-size: 10px;">&#128274;</span>' : ''}
         </button>
       `;
       }).join('')}

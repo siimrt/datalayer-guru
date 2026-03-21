@@ -11,21 +11,21 @@ import { enhanceAuditWithNetworkData, findNetworkMatchForEvent } from '../sidepa
 // ─── Canonical Events ────────────────────────────────────────────────────────
 
 export const CANONICAL_EVENTS = {
-  view_item: { label: 'Product View', platforms: { ga4: 'view_item', google_ads: 'conversion', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit', snapchat: 'VIEW_CONTENT' } },
-  add_to_cart: { label: 'Add to Cart', platforms: { ga4: 'add_to_cart', google_ads: 'conversion', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart', snapchat: 'ADD_CART' } },
-  view_item_list: { label: 'Collection View', platforms: { ga4: 'view_item_list', meta: 'ViewCategory', tiktok: 'ViewContent', pinterest: 'viewcategory', snapchat: 'LIST_VIEW' } },
-  view_cart: { label: 'View Cart', platforms: { ga4: 'view_cart', meta: 'ViewCart', tiktok: 'ViewCart' } },
-  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', google_ads: 'conversion', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout', snapchat: 'START_CHECKOUT' } },
-  add_shipping_info: { label: 'Add Shipping Info', platforms: { ga4: 'add_shipping_info' } },
-  add_payment_info: { label: 'Add Payment Info', platforms: { ga4: 'add_payment_info', snapchat: 'ADD_BILLING' } },
-  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', google_ads: 'conversion', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout', snapchat: 'PURCHASE' } },
+  view_item: { label: 'Product View', platforms: { ga4: 'view_item', google_ads: 'conversion', meta: 'ViewContent', tiktok: 'ViewContent', pinterest: 'pagevisit', snapchat: 'VIEW_CONTENT', linkedin: 'view_item' } },
+  add_to_cart: { label: 'Add to Cart', platforms: { ga4: 'add_to_cart', google_ads: 'conversion', meta: 'AddToCart', tiktok: 'AddToCart', pinterest: 'addtocart', snapchat: 'ADD_CART', linkedin: 'add_to_cart' } },
+  view_item_list: { label: 'Collection View', platforms: { ga4: 'view_item_list', google_ads: 'conversion', meta: 'ViewCategory', tiktok: 'ViewContent', pinterest: 'viewcategory', snapchat: 'LIST_VIEW', linkedin: 'view_item_list' } },
+  view_cart: { label: 'View Cart', platforms: { ga4: 'view_cart', google_ads: 'conversion', meta: 'ViewCart', tiktok: 'ViewCart', snapchat: 'VIEW_CART', linkedin: 'view_cart' } },
+  begin_checkout: { label: 'Begin Checkout', platforms: { ga4: 'begin_checkout', google_ads: 'conversion', meta: 'InitiateCheckout', tiktok: 'InitiateCheckout', snapchat: 'START_CHECKOUT', linkedin: 'begin_checkout' } },
+  add_shipping_info: { label: 'Add Shipping Info', platforms: { ga4: 'add_shipping_info', google_ads: 'conversion', meta: 'AddShippingInfo', tiktok: 'AddShippingInfo', linkedin: 'add_shipping_info' } },
+  add_payment_info: { label: 'Add Payment Info', platforms: { ga4: 'add_payment_info', google_ads: 'conversion', meta: 'AddPaymentInfo', tiktok: 'AddPaymentInfo', snapchat: 'ADD_BILLING', linkedin: 'add_payment_info' } },
+  purchase: { label: 'Purchase', platforms: { ga4: 'purchase', google_ads: 'conversion', meta: 'Purchase', tiktok: 'PlaceAnOrder', pinterest: 'checkout', snapchat: 'PURCHASE', linkedin: 'purchase' } },
   search: { label: 'Search', platforms: { ga4: 'search', meta: 'Search', tiktok: 'Search', pinterest: 'search', snapchat: 'SEARCH' } },
 };
 
 export const CANONICAL_EVENTS_LEADGEN = {
-  generate_lead: { label: 'Lead Generated', platforms: { ga4: 'generate_lead', meta: 'Lead', tiktok: 'SubmitForm', pinterest: 'lead', snapchat: 'SIGN_UP' } },
-  contact: { label: 'Contact', platforms: { ga4: 'generate_lead', meta: 'Contact', tiktok: 'Contact' } },
-  sign_up: { label: 'Sign Up', platforms: { ga4: 'sign_up', meta: 'CompleteRegistration', tiktok: 'CompleteRegistration', pinterest: 'signup', snapchat: 'SIGN_UP' } },
+  generate_lead: { label: 'Lead Generated', platforms: { ga4: 'generate_lead', meta: 'Lead', tiktok: 'SubmitForm', pinterest: 'lead', snapchat: 'SIGN_UP', linkedin: 'generate_lead' } },
+  contact: { label: 'Contact', platforms: { ga4: 'generate_lead', meta: 'Contact', tiktok: 'Contact', linkedin: 'contact' } },
+  sign_up: { label: 'Sign Up', platforms: { ga4: 'sign_up', meta: 'CompleteRegistration', tiktok: 'CompleteRegistration', pinterest: 'signup', snapchat: 'SIGN_UP', linkedin: 'sign_up' } },
   schedule: { label: 'Schedule / Demo', platforms: { ga4: 'schedule', meta: 'Schedule' } },
 };
 
@@ -35,7 +35,7 @@ export const EXPECTED_EVENTS_BY_PAGE = {
   product: ['view_item', 'add_to_cart'],
   collection: ['view_item_list'],
   cart: ['view_cart'],
-  checkout: ['begin_checkout', 'add_shipping_info', 'add_payment_info'],
+  checkout: ['begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase'],
   thank_you: ['purchase'],
   search: ['search'],
 };
@@ -49,6 +49,33 @@ export const EXPECTED_EVENTS_BY_PAGE_LEADGEN = {
   confirmation: ['generate_lead', 'sign_up'],
   services: ['generate_lead'],
 };
+
+// ─── Funnel Sequences (ordered) ──────────────────────────────────────────────
+
+export const ECOM_FUNNEL_SEQUENCE = ['view_item', 'add_to_cart', 'begin_checkout', 'add_shipping_info', 'add_payment_info', 'purchase'];
+
+// Funnel-only events (not expected per-page, but part of the funnel journey)
+const FUNNEL_ONLY_EVENTS = {
+  page_view: { label: 'Landing Page View', platforms: { ga4: 'page_view', meta: 'PageView', snapchat: 'PAGE_VIEW' } },
+  form_start: { label: 'Form Interaction', platforms: { ga4: 'form_start' } },
+};
+
+export const LEADGEN_FUNNEL_SEQUENCE = ['page_view', 'form_start', 'generate_lead', 'sign_up'];
+
+/**
+ * Build funnel events array from canonical + funnel-only events.
+ * Returns [{ key, label, events: { platform: eventName } }]
+ */
+export function buildFunnelEvents(sequence, isLeadgen = false) {
+  const source = isLeadgen
+    ? { ...FUNNEL_ONLY_EVENTS, ...CANONICAL_EVENTS_LEADGEN }
+    : CANONICAL_EVENTS;
+  return sequence.map(key => {
+    const def = source[key];
+    if (!def) return null;
+    return { key, label: def.label, events: { ...def.platforms } };
+  }).filter(Boolean);
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

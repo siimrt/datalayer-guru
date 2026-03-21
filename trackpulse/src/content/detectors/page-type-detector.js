@@ -178,6 +178,101 @@ const PAGE_TYPE_RULES = {
     },
   },
 
+  [CMS.NUXTJS]: {
+    home: {
+      jsCheck: (ctx) =>
+        ctx.nuxtRoute?.name === 'index' ||
+        ctx.nuxtRoute?.name === 'index___default',
+      urlPattern: /^\/$/,
+    },
+    product: {
+      jsCheck: (ctx) => {
+        const name = ctx.nuxtRoute?.name || '';
+        return /product/i.test(name) || /item/i.test(name) || /pdp/i.test(name);
+      },
+      urlPattern: /\/(product|item|p|pdp)\//i,
+    },
+    collection: {
+      jsCheck: (ctx) => {
+        const name = ctx.nuxtRoute?.name || '';
+        return /categor/i.test(name) || /collection/i.test(name) || /listing/i.test(name);
+      },
+      urlPattern: /\/(category|collection|catalog|shop|collections)\//i,
+    },
+    cart: {
+      jsCheck: (ctx) => /cart/i.test(ctx.nuxtRoute?.name || ''),
+      urlPattern: /\/cart\/?$/i,
+    },
+    checkout: {
+      jsCheck: (ctx) => /checkout/i.test(ctx.nuxtRoute?.name || '') && !/thank/i.test(ctx.nuxtRoute?.name || ''),
+      urlPattern: /\/checkout/i,
+    },
+    thank_you: {
+      jsCheck: (ctx) => /thank/i.test(ctx.nuxtRoute?.name || '') || /order.?confirm/i.test(ctx.nuxtRoute?.name || ''),
+      urlPattern: /\/thank[-_]?you|order[-_]?(confirm|success)/i,
+    },
+    search: {
+      urlPattern: /[?&](q|s|query|search)=/i,
+    },
+    blog: {
+      jsCheck: (ctx) => ctx.nuxtRoute?.name === 'blog',
+      urlPattern: /\/blog\/?$/i,
+    },
+    article: {
+      jsCheck: (ctx) => {
+        const name = ctx.nuxtRoute?.name || '';
+        return /article/i.test(name) || /blog-slug/i.test(name) || /post/i.test(name);
+      },
+      urlPattern: /\/blog\/.+/i,
+    },
+  },
+
+  [CMS.NEXTJS]: {
+    home: {
+      jsCheck: (ctx) => ctx.nextData?.page === '/' || ctx.nextData?.page === '/index',
+      urlPattern: /^\/$/,
+    },
+    product: {
+      jsCheck: (ctx) => {
+        const page = ctx.nextData?.page || '';
+        return /product/i.test(page) || /item/i.test(page) || ctx.nextData?.props?.hasProduct;
+      },
+      urlPattern: /\/(product|item|p|pdp)\//i,
+    },
+    collection: {
+      jsCheck: (ctx) => {
+        const page = ctx.nextData?.page || '';
+        return /categor/i.test(page) || /collection/i.test(page) || ctx.nextData?.props?.hasCollection;
+      },
+      urlPattern: /\/(category|collection|catalog|shop|collections)\//i,
+    },
+    cart: {
+      jsCheck: (ctx) => /cart/i.test(ctx.nextData?.page || '') || ctx.nextData?.props?.hasCart,
+      urlPattern: /\/cart\/?$/i,
+    },
+    checkout: {
+      jsCheck: (ctx) => /checkout/i.test(ctx.nextData?.page || '') && !/thank/i.test(ctx.nextData?.page || ''),
+      urlPattern: /\/checkout/i,
+    },
+    thank_you: {
+      jsCheck: (ctx) => {
+        const page = ctx.nextData?.page || '';
+        return /thank/i.test(page) || /order.?confirm/i.test(page) || ctx.nextData?.props?.hasOrder;
+      },
+      urlPattern: /\/thank[-_]?you|order[-_]?(confirm|success)/i,
+    },
+    search: {
+      urlPattern: /[?&](q|s|query|search)=/i,
+    },
+    blog: {
+      urlPattern: /\/blog\/?$/i,
+    },
+    article: {
+      jsCheck: (ctx) => /blog/i.test(ctx.nextData?.page || '') && ctx.nextData?.page !== '/blog',
+      urlPattern: /\/blog\/.+/i,
+    },
+  },
+
   [CMS.WEBFLOW]: {
     home: {
       urlPattern: /^\/$/,
@@ -268,7 +363,52 @@ export function detectPageType(cms, pageContext = {}) {
 function fallbackDetection(pageContext) {
   const pathname = window.location.pathname;
 
-  // Check JSON-LD for Product type
+  // Fast path: dataLayer event names are a strong page-type signal
+  // (e.g. view_item_list → collection, view_item → product)
+  if (Array.isArray(pageContext.dataLayer)) {
+    const dlEvents = new Set();
+    for (const entry of pageContext.dataLayer) {
+      if (entry && typeof entry === 'object' && entry.event) dlEvents.add(entry.event);
+    }
+    // Order matters: more specific events first
+    if (dlEvents.has('purchase')) {
+      return { pageType: PAGE_TYPES.THANK_YOU, confidence: 75, method: 'dataLayer' };
+    }
+    if (dlEvents.has('begin_checkout')) {
+      return { pageType: PAGE_TYPES.CHECKOUT, confidence: 75, method: 'dataLayer' };
+    }
+    if (dlEvents.has('view_item_list')) {
+      return { pageType: PAGE_TYPES.COLLECTION, confidence: 75, method: 'dataLayer' };
+    }
+    if (dlEvents.has('view_item') && !dlEvents.has('view_item_list')) {
+      return { pageType: PAGE_TYPES.PRODUCT, confidence: 75, method: 'dataLayer' };
+    }
+    if (dlEvents.has('view_cart')) {
+      return { pageType: PAGE_TYPES.CART, confidence: 75, method: 'dataLayer' };
+    }
+    if (dlEvents.has('view_search_results') || dlEvents.has('search')) {
+      return { pageType: PAGE_TYPES.SEARCH, confidence: 70, method: 'dataLayer' };
+    }
+  }
+
+  // Fast path: use pre-collected structured data flags from page-context-script
+  // (avoids re-parsing JSON-LD scripts)
+  if (pageContext.hasProductSchema || pageContext.hasOgProduct) {
+    return {
+      pageType: PAGE_TYPES.PRODUCT,
+      confidence: 70,
+      method: 'fallback',
+    };
+  }
+  if (pageContext.hasServiceSchema || pageContext.hasLocalBusinessSchema) {
+    return {
+      pageType: PAGE_TYPES.SERVICES,
+      confidence: 60,
+      method: 'fallback',
+    };
+  }
+
+  // Slower path: parse JSON-LD scripts if flags weren't available
   const jsonldScripts = document.querySelectorAll(
     'script[type="application/ld+json"]'
   );
@@ -301,16 +441,6 @@ function fallbackDetection(pageContext) {
             method: 'fallback',
           };
         }
-      }
-    } catch (e) {}
-  }
-
-  // JSON-LD: Service / LocalBusiness → services page
-  for (const script of jsonldScripts) {
-    try {
-      const data = JSON.parse(script.textContent);
-      const items = Array.isArray(data) ? data : [data];
-      for (const item of items) {
         if (item['@type'] === 'Service' || item['@type'] === 'LocalBusiness' || item['@type'] === 'ProfessionalService') {
           return {
             pageType: PAGE_TYPES.SERVICES,

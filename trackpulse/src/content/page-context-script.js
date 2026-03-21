@@ -296,6 +296,59 @@
       }
     } catch (e) {}
 
+    // --- Nuxt.js ---
+    try {
+      // Nuxt 2: window.$nuxt.$route
+      if (window.$nuxt && window.$nuxt.$route) {
+        context.nuxtRoute = {
+          name: window.$nuxt.$route.name || null,
+          path: window.$nuxt.$route.path || null,
+          params: window.$nuxt.$route.params
+            ? JSON.parse(JSON.stringify(window.$nuxt.$route.params))
+            : null,
+        };
+      }
+      // Nuxt 3: access via #__nuxt Vue app
+      if (!context.nuxtRoute) {
+        var nuxtEl = document.querySelector('#__nuxt');
+        if (nuxtEl && nuxtEl.__vue_app__) {
+          var router = nuxtEl.__vue_app__.config?.globalProperties?.$router;
+          var route = router?.currentRoute?.value;
+          if (route) {
+            context.nuxtRoute = {
+              name: route.name || null,
+              path: route.path || null,
+              params: route.params
+                ? JSON.parse(JSON.stringify(route.params))
+                : null,
+            };
+          }
+        }
+      }
+    } catch (e) {}
+
+    // --- Next.js ---
+    try {
+      if (window.__NEXT_DATA__) {
+        context.nextData = {
+          page: window.__NEXT_DATA__.page || null,
+          props: null,
+        };
+        // Extract pageProps keys for page type hints (product id, slug, etc.)
+        try {
+          var pp = window.__NEXT_DATA__.props?.pageProps;
+          if (pp) {
+            context.nextData.props = {
+              hasProduct: !!(pp.product || pp.productData || pp.item),
+              hasCollection: !!(pp.collection || pp.category || pp.products),
+              hasCart: !!pp.cart,
+              hasOrder: !!(pp.order || pp.checkout),
+            };
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+
     // --- dataLayer ---
     try {
       if (window.dataLayer && Array.isArray(window.dataLayer)) {
@@ -399,7 +452,33 @@
         Mage: typeof window.Mage !== 'undefined',
         mageUrl: typeof window.mageUrl !== 'undefined',
         Webflow: typeof window.Webflow !== 'undefined',
+        // Framework globals (for stack detection fallback)
+        __NEXT_DATA__: typeof window.__NEXT_DATA__ !== 'undefined',
+        __NUXT__: typeof window.__NUXT__ !== 'undefined',
+        __nuxt: typeof window.__nuxt !== 'undefined',
+        __remixContext: typeof window.__remixContext !== 'undefined',
+        ___gatsby: typeof window.___gatsby !== 'undefined',
       };
+    } catch (e) {}
+
+    // --- Structured data flags ---
+    try {
+      context.hasProductSchema = false;
+      context.hasServiceSchema = false;
+      context.hasLocalBusinessSchema = false;
+      context.hasOfferSchema = false;
+      context.hasOgProduct = false;
+
+      const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+      for (const script of ldScripts) {
+        const text = script.textContent;
+        if (text.includes('"Product"')) context.hasProductSchema = true;
+        if (text.includes('"Service"')) context.hasServiceSchema = true;
+        if (text.includes('"LocalBusiness"') || text.includes('"Store"') || text.includes('"Restaurant"')) context.hasLocalBusinessSchema = true;
+        if (text.includes('"Offer"') || text.includes('"AggregateOffer"')) context.hasOfferSchema = true;
+      }
+      const ogType = document.querySelector('meta[property="og:type"]');
+      if (ogType && ogType.content === 'product') context.hasOgProduct = true;
     } catch (e) {}
 
     return context;
